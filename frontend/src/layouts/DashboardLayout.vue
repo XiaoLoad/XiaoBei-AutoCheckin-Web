@@ -153,6 +153,8 @@ const navGroups = computed(() => {
       ]
     })
   } else {
+    // 普通用户：在"运营管理"中提供 B 平台账号管理入口
+    groups[1].items.push({ name: '账号管理', to: '/accounts', icon: 'authorize' })
     groups.push({
       title: '系统',
       items: [{ name: '个人设置', to: '/settings', icon: 'settings' }]

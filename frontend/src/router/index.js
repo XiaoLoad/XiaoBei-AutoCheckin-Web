@@ -25,8 +25,8 @@ const routes = [
   {
     path: '/accounts',
     name: 'accounts',
-    component: () => import('@/views/PlaceholderView.vue'),
-    meta: { title: '账号授权', requiresAuth: true, roles: ['admin', 'user'] }
+    component: () => import('@/views/AccountManagementView.vue'),
+    meta: { title: '账号管理', requiresAuth: true, roles: ['admin', 'user'] }
   },
   {
     path: '/members',

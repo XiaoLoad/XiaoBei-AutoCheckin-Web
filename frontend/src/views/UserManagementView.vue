@@ -59,48 +59,45 @@
       </div>
     </div>
 
-    <!-- 用户表：卡片分区，表头固定，仅行区域在容器内滚动，页面主体高度固定 -->
-    <div class="dash-card flex min-h-[280px] flex-1 flex-col overflow-hidden sm:min-h-0">
-      <div class="min-h-0 flex-1 overflow-auto">
-        <table class="w-full min-w-[880px] table-fixed text-left text-sm">
+    <!-- 用户列表：桌面用表格（表头固定、列对齐），移动端用卡片，页面主体高度固定 -->
+    <div class="dash-card flex min-h-[260px] flex-1 flex-col overflow-hidden sm:min-h-0">
+      <!-- 加载中 -->
+      <div v-if="loading" class="flex flex-1 items-center justify-center text-sm text-ink-muted">加载中…</div>
+      <!-- 空状态 -->
+      <div v-else-if="rows.length === 0" class="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center text-ink-muted">
+        <Icon name="users" :size="28" class="opacity-50" />
+        <span>暂无用户，调整筛选条件或点击「新增用户」。</span>
+      </div>
+      <template v-else>
+        <!-- 桌面表格（≥1024px）：表头固定、列宽对齐 -->
+        <div class="xb-scroll hidden min-h-0 flex-1 overflow-auto lg:block">
+          <table class="w-full table-fixed text-left text-sm">
           <colgroup>
             <col class="w-[15%]" />
             <col class="w-[12%]" />
             <col class="w-[11%]" />
-            <col class="w-[24%]" />
-            <col class="w-[22%]" />
+            <col class="w-[28%]" />
+            <col class="w-[18%]" />
             <col class="w-[16%]" />
           </colgroup>
           <thead>
             <tr class="border-b border-ink/10 text-ink-muted">
-              <th class="sticky top-0 z-10 bg-white px-3 py-2 align-middle font-medium whitespace-nowrap">用户</th>
-              <th class="sticky top-0 z-10 bg-white px-3 py-2 align-middle font-medium whitespace-nowrap">角色</th>
-              <th class="sticky top-0 z-10 bg-white px-3 py-2 align-middle font-medium whitespace-nowrap">状态</th>
-              <th class="sticky top-0 z-10 bg-white px-3 py-2 align-middle font-medium whitespace-nowrap">额度（已用 / 总额）</th>
-              <th class="sticky top-0 z-10 bg-white px-3 py-2 align-middle font-medium whitespace-nowrap">创建时间</th>
-              <th class="sticky top-0 z-10 bg-white px-3 py-2 text-right align-middle font-medium whitespace-nowrap">操作</th>
+              <th class="sticky top-0 z-10 bg-white px-3 py-2.5 align-middle font-medium whitespace-nowrap">用户</th>
+              <th class="sticky top-0 z-10 bg-white px-3 py-2.5 align-middle font-medium whitespace-nowrap">角色</th>
+              <th class="sticky top-0 z-10 bg-white px-3 py-2.5 align-middle font-medium whitespace-nowrap">状态</th>
+              <th class="sticky top-0 z-10 bg-white px-3 py-2.5 align-middle font-medium whitespace-nowrap">额度（已用 / 总额）</th>
+              <th class="sticky top-0 z-10 bg-white px-3 py-2.5 align-middle font-medium whitespace-nowrap">创建时间</th>
+              <th class="sticky top-0 z-10 bg-white px-3 py-2.5 align-middle text-center font-medium whitespace-nowrap">操作</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-if="loading" class="border-b border-ink/5">
-              <td colspan="6" class="px-4 py-12 text-center text-ink-muted">加载中…</td>
-            </tr>
-            <tr v-else-if="rows.length === 0" class="border-b border-ink/5">
-              <td colspan="6" class="px-4 py-16 text-center">
-                <div class="flex flex-col items-center gap-2 text-ink-muted">
-                  <Icon name="users" :size="28" class="opacity-50" />
-                  <span>暂无用户，调整筛选条件或点击「新增用户」。</span>
-                </div>
-              </td>
-            </tr>
             <tr
               v-for="item in rows"
-              v-else
               :key="item.user_id"
               class="border-b border-ink/5 transition last:border-0 hover:bg-cloud/40"
             >
               <!-- 用户 -->
-              <td class="px-3 py-2 align-middle">
+              <td class="px-3 py-2.5 align-middle">
                 <div class="flex items-center gap-3">
                   <span class="grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-semibold" :class="avatarClass(item.username)">
                     {{ initial(item.username) }}
@@ -109,21 +106,21 @@
                 </div>
               </td>
               <!-- 角色 -->
-              <td class="px-3 py-2 align-middle">
-                <span class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium" :class="item.role === 'admin' ? 'bg-brand/10 text-brand' : 'bg-ink/5 text-ink-soft'">
+              <td class="px-3 py-2.5 align-middle">
+                <span class="inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium" :class="item.role === 'admin' ? 'bg-brand/10 text-brand' : 'bg-ink/5 text-ink-soft'">
                   <Icon :name="item.role === 'admin' ? 'shield' : 'user'" :size="13" />
                   {{ item.role === 'admin' ? '管理员' : '普通用户' }}
                 </span>
               </td>
               <!-- 状态 -->
-              <td class="px-3 py-2 align-middle">
-                <span class="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium" :class="item.enabled ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'">
+              <td class="px-3 py-2.5 align-middle">
+                <span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium" :class="item.enabled ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'">
                   <span class="h-1.5 w-1.5 rounded-full" :class="item.enabled ? 'bg-success' : 'bg-danger'" />
                   {{ item.enabled ? '启用' : '禁用' }}
                 </span>
               </td>
               <!-- 额度 -->
-              <td class="px-3 py-2 align-middle whitespace-nowrap">
+              <td class="px-3 py-2.5 align-middle whitespace-nowrap">
                 <div class="w-full">
                   <div class="mb-1 flex items-center justify-between text-xs text-ink-muted">
                     <span class="tabular-nums">{{ item.used_quota }} / {{ item.quota }}</span>
@@ -134,9 +131,9 @@
                   </div>
                 </div>
               </td>
-              <td class="px-3 py-2 align-middle whitespace-nowrap text-ink-muted tabular-nums">{{ item.created_at }}</td>
+              <td class="px-3 py-2.5 align-middle whitespace-nowrap text-ink-muted tabular-nums">{{ item.created_at }}</td>
               <!-- 操作 -->
-              <td class="px-3 py-2 align-middle whitespace-nowrap">
+              <td class="px-3 py-2.5 align-middle whitespace-nowrap">
                 <div class="flex items-center justify-end gap-1">
                   <button
                     type="button"
@@ -173,8 +170,54 @@
         </table>
       </div>
 
+      <!-- 移动端卡片列表（<1024px）：无横向溢出、操作便捷 -->
+      <div class="xb-scroll min-h-0 flex-1 overflow-auto lg:hidden">
+        <div class="space-y-3 p-3">
+          <div
+            v-for="item in rows"
+            :key="item.user_id"
+            class="rounded-xl border border-ink/10 bg-white p-3"
+          >
+            <div class="flex items-center gap-3">
+              <span class="grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-semibold" :class="avatarClass(item.username)">
+                {{ initial(item.username) }}
+              </span>
+              <span class="min-w-0 flex-1 truncate font-medium text-ink">{{ item.username }}</span>
+              <span class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium" :class="item.enabled ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'">
+                <span class="h-1.5 w-1.5 rounded-full" :class="item.enabled ? 'bg-success' : 'bg-danger'" />
+                {{ item.enabled ? '启用' : '禁用' }}
+              </span>
+            </div>
+            <div class="mt-2.5 flex items-center gap-2 text-xs text-ink-soft">
+              <span class="inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-1 font-medium" :class="item.role === 'admin' ? 'bg-brand/10 text-brand' : 'bg-ink/5 text-ink-soft'">
+                <Icon :name="item.role === 'admin' ? 'shield' : 'user'" :size="13" />
+                {{ item.role === 'admin' ? '管理员' : '普通用户' }}
+              </span>
+              <span class="tabular-nums text-ink-muted">额度 {{ item.used_quota }} / {{ item.quota }}</span>
+              <span class="ml-auto font-medium tabular-nums" :class="quotaTextClass(item)">{{ usagePercent(item) }}%</span>
+            </div>
+            <div class="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-ink/10">
+              <div class="h-full rounded-full transition-all duration-500" :class="quotaBarClass(item)" :style="{ width: usagePercent(item) + '%' }" />
+            </div>
+            <div class="mt-2 text-xs text-ink-muted tabular-nums">创建于 {{ item.created_at }}</div>
+            <div class="mt-3 flex gap-2 border-t border-ink/5 pt-3">
+              <button type="button" class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-ink/10 py-2 text-sm font-medium text-ink-soft transition hover:bg-cloud hover:text-brand" @click="openEdit(item)">
+                <Icon name="edit" :size="16" /> 编辑
+              </button>
+              <button type="button" class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-ink/10 py-2 text-sm font-medium transition" :class="item.enabled ? 'text-ink-soft hover:bg-cloud hover:text-warning' : 'text-ink-soft hover:bg-cloud hover:text-success'" @click="toggleStatus(item)">
+                <Icon :name="item.enabled ? 'x-circle' : 'check-circle'" :size="16" /> {{ item.enabled ? '禁用' : '启用' }}
+              </button>
+              <button type="button" class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-ink/10 py-2 text-sm font-medium text-ink-soft transition hover:bg-danger/10 hover:text-danger" @click="openDelete(item)">
+                <Icon name="trash" :size="16" /> 删除
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      </template>
+
       <!-- 分页 -->
-      <div v-if="!loading && rows.length" class="border-t border-ink/5 px-3 py-2 align-middle">
+      <div v-if="!loading && rows.length" class="shrink-0 border-t border-ink/5 px-3 py-2">
         <Pagination
           :page="page"
           :page-size="pageSize"
@@ -216,7 +259,7 @@
       <Transition name="toast">
         <div
           v-if="toast.show"
-          class="fixed bottom-6 right-6 z-[1100] flex items-center gap-2 rounded-xl bg-ink px-3 py-2 align-middle text-sm font-medium text-white shadow-2xl"
+          class="fixed bottom-6 right-6 z-[1100] flex items-center gap-2 rounded-xl bg-ink px-3 py-2.5 align-middle text-sm font-medium text-white shadow-2xl"
         >
           <Icon :name="toast.type === 'error' ? 'alert' : 'check'" :size="16" :class="toast.type === 'error' ? 'text-danger' : 'text-success'" />
           {{ toast.message }}
@@ -430,6 +473,8 @@ onMounted(fetchUsers)
 </script>
 
 <style scoped>
+/* 纵向滚动时预留滚动条宽度，避免 thead 与 tbody 右列因滚动条占位而错位 */
+.xb-scroll { scrollbar-gutter: stable; }
 /* 仅让刷新图标旋转，按钮容器与其它元素保持静止 */
 .spin-refresh { animation: xb-spin 0.8s linear infinite; }
 @keyframes xb-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }

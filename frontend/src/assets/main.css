@@ -1,0 +1,51 @@
+/* 全局样式：引入 Tailwind 基础/组件/工具类 */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 自定义基础样式（可选） */
+@layer base {
+  html,
+  body,
+  #app {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-800 antialiased;
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  }
+}
+
+/* 登录卡片：干净白卡 + 柔和投影，替代毛玻璃渐变 */
+@layer components {
+  .login-card {
+    @apply rounded-[28px] bg-white shadow-[0_30px_80px_-40px_rgba(20,33,61,0.5)] ring-1 ring-ink/5;
+  }
+  .login-input {
+    @apply w-full rounded-xl border border-ink/10 bg-cloud/70 px-4 py-3 text-[15px] text-ink
+           placeholder:text-ink/35 transition duration-200
+           focus:border-brand focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand/15;
+  }
+  .brand-panel {
+    @apply bg-ink text-white relative overflow-hidden;
+  }
+}
+
+/* 环境微动：循环动画，组件卸载后自动停止 */
+@keyframes brandFloatA { 0%,100% { transform: translate(0,0); } 50% { transform: translate(22px,-26px); } }
+@keyframes brandFloatB { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-24px,18px); } }
+@keyframes brandSpin { to { transform: rotate(360deg); } }
+@keyframes brandPulse { 0%,100% { opacity: .5; transform: scale(1); } 50% { opacity: 1; transform: scale(1.18); } }
+
+.brand-glow-a { animation: brandFloatA 15s ease-in-out infinite; }
+.brand-glow-b { animation: brandFloatB 19s ease-in-out infinite; }
+.brand-ring { transform-box: fill-box; transform-origin: center; animation: brandSpin 64s linear infinite; }
+.brand-dot { transform-box: fill-box; transform-origin: center; animation: brandPulse 3.6s ease-in-out infinite; }
+.brand-check { stroke-dasharray: 1; }
+
+/* 尊重减弱动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .brand-glow-a, .brand-glow-b, .brand-ring, .brand-dot { animation: none !important; }
+}

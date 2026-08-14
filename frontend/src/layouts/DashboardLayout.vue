@@ -67,6 +67,20 @@
       <div v-if="open" class="fixed inset-0 z-30 bg-ink/40 lg:hidden" @click="open = false" />
     </Transition>
 
+    <!-- 退出登录二次确认弹窗（通用组件，可复用于其它危险操作） -->
+    <ConfirmModal
+      v-model="showLogoutConfirm"
+      title="退出登录"
+      message="确定要退出当前账号吗？退出后需要重新登录才能继续使用。"
+      icon="logout"
+      confirm-text="退出登录"
+      cancel-text="取消"
+      danger
+      :confirming="auth.loggingOut"
+      @confirm="confirmLogout"
+      @cancel="cancelLogout"
+    />
+
     <!-- 主区域 -->
     <div class="flex-1 flex flex-col min-w-0">
       <!-- 顶栏 -->
@@ -95,9 +109,10 @@
         <span class="hidden sm:grid place-items-center w-9 h-9 rounded-full bg-brand/15 text-brand font-semibold text-sm">管</span>
       </header>
 
-      <!-- 内容 -->
+      <!-- 内容：布局自行持有唯一 RouterView 出口；App 已按 $route.path 为布局加 key，
+           切换路由时布局重建、此处随之渲染正确的路由组件。 -->
       <main class="flex-1 overflow-y-auto p-4 sm:p-6 content-scroll">
-        <slot />
+        <RouterView />
       </main>
     </div>
   </div>
@@ -105,15 +120,19 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { useRoute, useRouter, RouterLink } from 'vue-router'
+import { useRoute, useRouter, RouterLink, RouterView } from 'vue-router'
 import { useAuthStore } from '@/store/modules/auth'
 import Icon from '@/components/Icon.vue'
+import ConfirmModal from '@/components/ConfirmModal.vue'
 
 const route = useRoute()
 const router = useRouter()
 const open = ref(false)
 const auth = useAuthStore()
 const pageTitle = computed(() => route.meta?.title || '概览')
+
+// 退出登录二次确认弹窗状态
+const showLogoutConfirm = ref(false)
 
 // [权限判断] 按角色渲染菜单：管理员可见全部；普通用户仅见本人相关与"个人设置"
 const roleLabel = computed(() => (auth.isAdmin ? '管理员' : '普通用户'))
@@ -147,13 +166,23 @@ const navGroups = computed(() => {
   return groups
 })
 
-async function handleLogout() {
+// 点击退出按钮：先弹二次确认，不直接登出
+function handleLogout() {
+  showLogoutConfirm.value = true
+}
+
+// 弹窗确认：清理会话（服务端吊销 + 本地清除 + 兜底），再跳转登录页
+async function confirmLogout() {
   try {
-    // 清理会话（服务端吊销 + 本地清除 + 兜底），再由路由守卫保证受保护页不可达
     await auth.logout()
   } finally {
+    showLogoutConfirm.value = false
     router.replace('/login')
   }
+}
+
+function cancelLogout() {
+  showLogoutConfirm.value = false
 }
 </script>
 

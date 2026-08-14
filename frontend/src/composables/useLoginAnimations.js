@@ -37,6 +37,10 @@ export function useLoginAnimations(rootRef) {
     if (!rootRef.value) return
     try {
       ctx = gsap.context(() => {
+        // 捕获根节点引用：onUnmounted 时 rootRef.value 会被 Vue 置空，
+        // 若清理闭包里直接读 rootRef.value 会触发 "Cannot read properties of null"，
+        // 故在此处把当前 DOM 节点存到局部变量，后续增删监听都用它。
+        const rootEl = rootRef.value
         const cleanup = []
 
         if (reduceMotion) {
@@ -53,13 +57,17 @@ export function useLoginAnimations(rootRef) {
           onComplete: ensureVisible,
           onInterrupt: ensureVisible
         })
-        tl.from(rootRef.value, { autoAlpha: 0, duration: 0.4 })
+        tl.from(rootEl, { autoAlpha: 0, duration: 0.4 })
           .from('.brand-panel', { autoAlpha: 0, x: -44, duration: 0.65 }, 0)
           .from('.brand-mark', { scale: 0.84, autoAlpha: 0, duration: 0.8, ease: 'back.out(1.5)' }, 0.15)
           .from('.brand-line', { y: 18, autoAlpha: 0, stagger: 0.08, duration: 0.6 }, 0.28)
           .fromTo('.brand-check', { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 1.0, ease: 'power2.inOut' }, 0.55)
           .from('.login-card', { y: 28, autoAlpha: 0, duration: 0.7 }, 0.2)
-          .from('.login-field', { y: 16, autoAlpha: 0, stagger: 0.09, duration: 0.6 }, 0.45)
+          // 表单字段错峰入场；按钮单独抽出（见下），此处用 :not() 排除以免重复动画
+          .from('.login-field:not(.login-submit)', { y: 16, autoAlpha: 0, stagger: 0.09, duration: 0.6 }, 0.45)
+          // 登录按钮：更快的入场节奏（duration 0.32，短于字段 0.6），
+          // 且位置 0.62 晚于字段起始 0.45，保证「不早于其它元素」又提升整体进场速度
+          .from('.login-submit', { y: 14, autoAlpha: 0, scale: 0.98, duration: 0.32, ease: 'power2.out' }, 0.62)
 
         // —— 输入框聚焦微动效 ——
         const onFocusIn = (e) => {
@@ -70,11 +78,11 @@ export function useLoginAnimations(rootRef) {
           const field = e.target.closest('.login-field')
           if (field) gsap.to(field, { y: 0, duration: 0.35, ease: 'power2.out' })
         }
-        rootRef.value.addEventListener('focusin', onFocusIn)
-        rootRef.value.addEventListener('focusout', onFocusOut)
+        rootEl.addEventListener('focusin', onFocusIn)
+        rootEl.addEventListener('focusout', onFocusOut)
         cleanup.push(() => {
-          rootRef.value.removeEventListener('focusin', onFocusIn)
-          rootRef.value.removeEventListener('focusout', onFocusOut)
+          rootEl.removeEventListener('focusin', onFocusIn)
+          rootEl.removeEventListener('focusout', onFocusOut)
         })
 
         // —— 登录按钮 hover 微交互 ——

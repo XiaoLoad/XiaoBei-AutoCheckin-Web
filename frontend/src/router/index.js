@@ -48,10 +48,18 @@ const routes = [
     meta: { title: '登录', layout: 'blank' }
   },
   {
+    path: '/register',
+    name: 'register',
+    component: () => import('@/views/RegisterView.vue'),
+    // 注册页与登录页同为独立全屏页，不挂载应用框架（侧边栏/顶栏）
+    meta: { title: '注册', layout: 'blank' }
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     component: () => import('@/views/NotFoundView.vue'),
-    meta: { title: '页面不存在' }
+    // [布局] 404 必须是完全独立的全屏页，不渲染任何应用框架组件
+    meta: { title: '页面不存在', layout: 'blank' }
   }
 ]
 
@@ -80,8 +88,8 @@ router.beforeEach((to, from, next) => {
     }
   }
 
-  // 已登录还访问登录页 → 直接进入仪表盘
-  if (to.name === 'login' && auth.isAuthenticated) {
+  // 已登录还访问登录页/注册页 → 直接进入仪表盘
+  if ((to.name === 'login' || to.name === 'register') && auth.isAuthenticated) {
     return next('/')
   }
 

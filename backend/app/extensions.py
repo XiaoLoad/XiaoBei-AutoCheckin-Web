@@ -1,2 +1,5 @@
-# 扩展层：集中初始化第三方扩展（便于后续接入数据库等）
-# 当前基础框架未引入数据库，预留此文件作为扩展挂载点。
+# 扩展层：集中初始化第三方扩展
+from flask_sqlalchemy import SQLAlchemy
+
+# 全局数据库实例（在应用工厂中通过 db.init_app(app) 绑定）
+db = SQLAlchemy()

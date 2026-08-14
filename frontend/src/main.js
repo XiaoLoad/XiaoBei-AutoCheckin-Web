@@ -7,7 +7,8 @@ import './assets/main.css'
 
 const app = createApp(App)
 
-app.use(router)
+// 必须先把 Pinia 装好，路由守卫中才能使用 auth store
 app.use(pinia)
+app.use(router)
 
 app.mount('#app')

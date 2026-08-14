@@ -10,6 +10,7 @@ venv/
 __pycache__/
 *.py[cod]
 instance/
+.idea/
 
 # 环境变量（保留示例）
 .env

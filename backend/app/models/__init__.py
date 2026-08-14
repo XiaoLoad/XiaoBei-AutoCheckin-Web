@@ -1,2 +1,6 @@
-# models 包：数据模型定义（基础框架预留）
-# 后续接入数据库（如 SQLAlchemy / Flask-SQLAlchemy）时，将模型类放置于此。
+# 模型聚合层：统一暴露 db 与各模型，便于工厂 / 脚本引用
+from app.extensions import db
+from app.models.user import User
+from app.models.token_blacklist import TokenBlacklist
+
+__all__ = ['db', 'User', 'TokenBlacklist']

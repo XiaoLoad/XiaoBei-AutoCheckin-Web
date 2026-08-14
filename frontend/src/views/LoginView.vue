@@ -171,13 +171,18 @@
 
 <script setup>
 import { reactive, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { useRouter, useRoute, RouterLink } from 'vue-router'
+import { useAuthStore } from '@/store/modules/auth'
 import { useLoginAnimations } from '@/composables/useLoginAnimations'
 import BaseCheckbox from '@/components/BaseCheckbox.vue'
 
 const root = ref(null)
 const loading = ref(false)
 const showPassword = ref(false)
+
+const router = useRouter()
+const route = useRoute()
+const authStore = useAuthStore()
 
 const features = [
   '自动抓包解析平台打卡协议',
@@ -200,10 +205,21 @@ async function handleLogin() {
     return
   }
   loading.value = true
-  // 当前仅静态展示，后端对接时替换为 /api/auth/login 调用
-  setTimeout(() => {
+  try {
+    // 调用后端 /api/auth/login，store 内写入 token 与用户信息
+    const res = await authStore.login({
+      account: form.account.trim(),
+      password: form.password
+    })
+    // 登录成功：按后端返回的角色跳转对应仪表盘
+    // DashboardView 内部也已按角色分发管理员 / 普通用户两套页面
+    const redirect = route.query.redirect
+    router.replace(typeof redirect === 'string' ? redirect : '/')
+  } catch (e) {
+    // 后端已返回清晰错误（账号不存在 / 密码错误 / 账号已禁用）
+    alert(e.message || '登录失败')
+  } finally {
     loading.value = false
-    alert(`登录成功（演示）\n账号：${form.account}`)
-  }, 800)
+  }
 }
 </script>

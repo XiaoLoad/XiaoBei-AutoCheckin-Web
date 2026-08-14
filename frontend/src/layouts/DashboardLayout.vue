@@ -41,13 +41,23 @@
 
       <!-- 用户区 -->
       <div class="border-t border-white/10 p-3">
-        <div class="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-white/5 transition-colors cursor-pointer">
-          <span class="grid place-items-center w-9 h-9 rounded-full bg-brand/20 text-brand font-semibold">管</span>
+        <div class="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-white/5 transition-colors">
+          <span class="grid place-items-center w-9 h-9 rounded-full bg-brand/20 text-brand font-semibold">
+            {{ (auth.username || 'U').charAt(0).toUpperCase() }}
+          </span>
           <div class="leading-tight flex-1 min-w-0">
-            <p class="text-sm font-medium text-white truncate">管理员</p>
-            <p class="text-[11px] text-white/45 truncate">admin@xiaobei.cn</p>
+            <p class="text-sm font-medium text-white truncate">{{ auth.username || '未登录' }}</p>
+            <p class="text-[11px] text-white/45 truncate">{{ roleLabel }}</p>
           </div>
-          <Icon name="logout" :size="18" class="text-white/40" />
+          <button
+            class="grid place-items-center w-8 h-8 rounded-lg hover:bg-white/10 text-white/40 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            :disabled="auth.loggingOut"
+            aria-label="退出登录"
+            @click="handleLogout"
+          >
+            <Icon v-if="!auth.loggingOut" name="logout" :size="18" />
+            <span v-else class="block w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+          </button>
         </div>
       </div>
     </aside>
@@ -95,31 +105,56 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { useRoute, RouterLink } from 'vue-router'
+import { useRoute, useRouter, RouterLink } from 'vue-router'
+import { useAuthStore } from '@/store/modules/auth'
 import Icon from '@/components/Icon.vue'
 
 const route = useRoute()
+const router = useRouter()
 const open = ref(false)
+const auth = useAuthStore()
 const pageTitle = computed(() => route.meta?.title || '概览')
 
-const navGroups = [
-  { title: '概览', items: [{ name: '概览', to: '/', icon: 'dashboard' }] },
-  {
-    title: '运营管理',
-    items: [
-      { name: '打卡任务', to: '/tasks', icon: 'tasks' },
-      { name: '打卡记录', to: '/records', icon: 'records' },
-      { name: '账号授权', to: '/accounts', icon: 'authorize' }
-    ]
-  },
-  {
-    title: '系统',
-    items: [
-      { name: '寝室成员', to: '/members', icon: 'members' },
-      { name: '系统设置', to: '/settings', icon: 'settings' }
-    ]
+// [权限判断] 按角色渲染菜单：管理员可见全部；普通用户仅见本人相关与"个人设置"
+const roleLabel = computed(() => (auth.isAdmin ? '管理员' : '普通用户'))
+
+const navGroups = computed(() => {
+  const groups = [
+    { title: '概览', items: [{ name: '概览', to: '/', icon: 'dashboard' }] },
+    {
+      title: '运营管理',
+      items: [
+        { name: '打卡任务', to: '/tasks', icon: 'tasks' },
+        { name: '打卡记录', to: '/records', icon: 'records' },
+        { name: '账号授权', to: '/accounts', icon: 'authorize' }
+      ]
+    }
+  ]
+  if (auth.isAdmin) {
+    groups.push({
+      title: '系统',
+      items: [
+        { name: '寝室成员', to: '/members', icon: 'members' },
+        { name: '系统设置', to: '/settings', icon: 'settings' }
+      ]
+    })
+  } else {
+    groups.push({
+      title: '系统',
+      items: [{ name: '个人设置', to: '/settings', icon: 'settings' }]
+    })
   }
-]
+  return groups
+})
+
+async function handleLogout() {
+  try {
+    // 清理会话（服务端吊销 + 本地清除 + 兜底），再由路由守卫保证受保护页不可达
+    await auth.logout()
+  } finally {
+    router.replace('/login')
+  }
+}
 </script>
 
 <style scoped>

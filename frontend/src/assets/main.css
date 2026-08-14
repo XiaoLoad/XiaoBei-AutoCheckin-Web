@@ -33,6 +33,26 @@
   }
 }
 
+/* 后台管理框架：卡片 / 入场 / 图表动画 */
+@layer components {
+  .dash-card {
+    @apply rounded-2xl bg-white border border-ink/5;
+    box-shadow: 0 1px 2px rgba(20, 33, 61, 0.04), 0 10px 28px -16px rgba(20, 33, 61, 0.18);
+  }
+}
+
+@keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.fade-up { animation: fadeUp 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+.delay-1 { animation-delay: 0.04s; }
+.delay-2 { animation-delay: 0.1s; }
+.delay-3 { animation-delay: 0.16s; }
+.delay-4 { animation-delay: 0.22s; }
+.delay-5 { animation-delay: 0.28s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-up { animation: none !important; opacity: 1 !important; transform: none !important; }
+}
+
 /* 环境微动：循环动画，组件卸载后自动停止 */
 @keyframes brandFloatA { 0%,100% { transform: translate(0,0); } 50% { transform: translate(22px,-26px); } }
 @keyframes brandFloatB { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-24px,18px); } }

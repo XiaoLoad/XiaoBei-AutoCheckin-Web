@@ -34,7 +34,11 @@ export default {
           DEFAULT: '#F2A65A',
           soft: '#F8C58A'
         },
-        cloud: '#EEF2F9'
+        cloud: '#EEF2F9',
+        success: { DEFAULT: '#16a34a', soft: '#dcfce7' },
+        warning: { DEFAULT: '#d97706', soft: '#fef3c7' },
+        danger: { DEFAULT: '#dc2626', soft: '#fee2e2' },
+        info: { DEFAULT: '#0ea5e9', soft: '#e0f2fe' }
       }
     }
   },

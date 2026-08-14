@@ -1,19 +1,43 @@
-// 路由配置：按页面（views）划分路由
+// 路由配置：按功能模块划分（后台管理框架）
 import { createRouter, createWebHistory } from 'vue-router'
 
 // 路由懒加载，按功能模块组织
 const routes = [
   {
     path: '/',
-    name: 'home',
-    component: () => import('@/views/HomeView.vue'),
-    meta: { title: '首页' }
+    name: 'dashboard',
+    component: () => import('@/views/DashboardView.vue'),
+    meta: { title: '概览' }
   },
   {
-    path: '/about',
-    name: 'about',
-    component: () => import('@/views/AboutView.vue'),
-    meta: { title: '关于' }
+    path: '/tasks',
+    name: 'tasks',
+    component: () => import('@/views/PlaceholderView.vue'),
+    meta: { title: '打卡任务' }
+  },
+  {
+    path: '/records',
+    name: 'records',
+    component: () => import('@/views/PlaceholderView.vue'),
+    meta: { title: '打卡记录' }
+  },
+  {
+    path: '/accounts',
+    name: 'accounts',
+    component: () => import('@/views/PlaceholderView.vue'),
+    meta: { title: '账号授权' }
+  },
+  {
+    path: '/members',
+    name: 'members',
+    component: () => import('@/views/PlaceholderView.vue'),
+    meta: { title: '寝室成员' }
+  },
+  {
+    path: '/settings',
+    name: 'settings',
+    component: () => import('@/views/PlaceholderView.vue'),
+    meta: { title: '系统设置' }
   },
   {
     path: '/login',

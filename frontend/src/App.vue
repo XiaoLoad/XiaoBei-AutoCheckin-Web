@@ -7,11 +7,11 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, RouterView } from 'vue-router'
-import DefaultLayout from '@/layouts/DefaultLayout.vue'
+import DashboardLayout from '@/layouts/DashboardLayout.vue'
 import BlankLayout from '@/layouts/BlankLayout.vue'
 
 const route = useRoute()
 const layout = computed(() => {
-  return route.meta?.layout === 'blank' ? BlankLayout : DefaultLayout
+  return route.meta?.layout === 'blank' ? BlankLayout : DashboardLayout
 })
 </script>

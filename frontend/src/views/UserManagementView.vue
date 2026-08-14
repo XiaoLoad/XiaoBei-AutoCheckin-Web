@@ -87,7 +87,7 @@
               <th class="sticky top-0 z-10 bg-white px-3 py-2.5 align-middle font-medium whitespace-nowrap">状态</th>
               <th class="sticky top-0 z-10 bg-white px-3 py-2.5 align-middle font-medium whitespace-nowrap">额度（已用 / 总额）</th>
               <th class="sticky top-0 z-10 bg-white px-3 py-2.5 align-middle font-medium whitespace-nowrap">创建时间</th>
-              <th class="sticky top-0 z-10 bg-white px-3 py-2.5 align-middle text-center font-medium whitespace-nowrap">操作</th>
+              <th class="sticky top-0 z-10 bg-white pl-5 pr-3 py-2.5 align-middle text-left font-medium whitespace-nowrap">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -132,36 +132,30 @@
                 </div>
               </td>
               <td class="px-3 py-2.5 align-middle whitespace-nowrap text-ink-muted tabular-nums">{{ item.created_at }}</td>
-              <!-- 操作 -->
+              <!-- 操作：图标 + 文字，与账号管理页保持一致，左对齐 -->
               <td class="px-3 py-2.5 align-middle whitespace-nowrap">
-                <div class="flex items-center justify-end gap-1">
+                <div class="flex flex-nowrap items-center justify-start gap-1">
                   <button
                     type="button"
-                    class="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-ink-muted transition hover:bg-cloud hover:text-brand"
-                    title="编辑"
-                    aria-label="编辑"
+                    class="inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1.5 text-[13px] font-medium text-brand transition hover:bg-brand/10"
                     @click="openEdit(item)"
                   >
-                    <Icon name="edit" :size="17" />
+                    <Icon name="edit" :size="14" />编辑
                   </button>
                   <button
                     type="button"
-                    class="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-ink-muted transition hover:bg-cloud"
+                    class="inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1.5 text-[13px] font-medium text-ink-muted transition hover:bg-cloud"
                     :class="item.enabled ? 'hover:text-warning' : 'hover:text-success'"
-                    :title="item.enabled ? '禁用' : '启用'"
-                    :aria-label="item.enabled ? '禁用' : '启用'"
                     @click="toggleStatus(item)"
                   >
-                    <Icon :name="item.enabled ? 'x-circle' : 'check-circle'" :size="17" />
+                    <Icon :name="item.enabled ? 'x-circle' : 'check-circle'" :size="14" />{{ item.enabled ? '禁用' : '启用' }}
                   </button>
                   <button
                     type="button"
-                    class="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-ink-muted transition hover:bg-danger/10 hover:text-danger"
-                    title="删除"
-                    aria-label="删除"
+                    class="inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1.5 text-[13px] font-medium text-danger transition hover:bg-danger/10"
                     @click="openDelete(item)"
                   >
-                    <Icon name="trash" :size="17" />
+                    <Icon name="trash" :size="14" />删除
                   </button>
                 </div>
               </td>

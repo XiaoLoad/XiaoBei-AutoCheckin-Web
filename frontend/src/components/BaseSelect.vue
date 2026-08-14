@@ -12,7 +12,7 @@
       <span class="min-w-0 flex-1 truncate" :class="selectedLabel ? 'text-ink' : 'text-ink-muted'">
         {{ selectedLabel || placeholder }}
       </span>
-      <Icon name="chevron" :size="16" class="shrink-0 text-ink-muted transition-transform duration-200" :class="open && 'rotate-180'" />
+      <Icon name="chevron-down" :size="16" class="shrink-0 text-ink-muted transition-transform duration-200" :class="open && 'rotate-180'" />
     </button>
 
     <!-- 下拉面板 -->
@@ -40,7 +40,7 @@
           <li
             v-for="(opt, i) in filteredOptions"
             :key="String(opt.value)"
-            class="xb-select-option flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-sm transition"
+            class="xb-select-option flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-sm transition"
             :class="[
               i === highlightedIndex ? 'bg-cloud' : '',
               isSelected(opt) ? 'font-medium text-brand' : 'text-ink-soft'

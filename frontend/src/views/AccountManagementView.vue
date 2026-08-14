@@ -4,9 +4,9 @@
     <!-- 统一操作栏：搜索 + 筛选 + 刷新 + 重置 + 新增，合并为一卡，简约单行布局。
          relative z-30 提升堆叠层级，确保内部下拉面板不被下方列表卡片遮挡。 -->
     <div class="dash-card fade-up relative z-30 shrink-0 p-3 sm:p-4">
-      <div class="flex flex-wrap items-center gap-2 sm:gap-3">
-        <!-- 搜索框：缩小占比，不再占满整行 -->
-        <div class="relative w-full sm:w-52">
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <!-- 搜索框：进一步加宽，提升输入体验与整体美观 -->
+        <div class="relative w-full sm:w-80">
           <Icon name="search" :size="16" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
           <input
             v-model="keyword"
@@ -16,15 +16,29 @@
           />
         </div>
 
-        <!-- 筛选：以占位符代替列标签，视觉更轻量 -->
-        <div class="w-full sm:w-36">
-          <BaseSelect v-model="typeFilter" :options="typeOptions" placeholder="签到类型" />
-        </div>
-        <div class="w-full sm:w-36">
-          <BaseSelect v-model="signFilter" :options="signOptions" placeholder="签到状态" />
-        </div>
-        <div class="w-full sm:w-32">
-          <BaseSelect v-model="enabledFilter" :options="enabledOptions" placeholder="启用状态" />
+        <!-- 分隔线：区分搜索区与筛选区 -->
+        <span class="hidden h-6 w-px bg-ink/10 sm:block" />
+
+        <!-- 筛选组：标签改为醒目文字、下拉框采用紧凑尺寸，比例协调 -->
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div class="flex items-center gap-2">
+            <span class="shrink-0 text-sm font-medium text-ink-soft">签到类型</span>
+            <div class="w-28">
+              <BaseSelect v-model="typeFilter" :options="typeOptions" placeholder="全部" size="sm" />
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="shrink-0 text-sm font-medium text-ink-soft">签到状态</span>
+            <div class="w-28">
+              <BaseSelect v-model="signFilter" :options="signOptions" placeholder="全部" size="sm" />
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="shrink-0 text-sm font-medium text-ink-soft">启用状态</span>
+            <div class="w-24">
+              <BaseSelect v-model="enabledFilter" :options="enabledOptions" placeholder="全部" size="sm" />
+            </div>
+          </div>
         </div>
 
         <!-- 右侧操作：刷新 / 重置（有筛选时显示）/ 新增 -->
@@ -79,7 +93,7 @@
               <th class="sticky top-0 z-10 bg-white px-3 py-2.5 font-medium align-middle whitespace-nowrap">签到类型</th>
               <th class="sticky top-0 z-10 bg-white px-3 py-2.5 font-medium align-middle whitespace-nowrap">上一次签到</th>
               <th class="sticky top-0 z-10 bg-white px-3 py-2.5 font-medium align-middle whitespace-nowrap">启用状态</th>
-              <th class="sticky top-0 z-10 bg-white px-3 py-2.5 text-left font-medium align-middle whitespace-nowrap">操作</th>
+              <th class="sticky top-0 z-10 bg-white pl-5 pr-3 py-2.5 text-left font-medium align-middle whitespace-nowrap">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -288,20 +302,20 @@ const pageSize = ref(10)
 
 // 自定义下拉选项（通用数据：{ label, value }）
 const typeOptions = [
-  { label: '全部类型', value: '' },
+  { label: '全部', value: '' },
   { label: '寝室', value: 'dorm' },
   { label: '活动', value: 'activity' },
   { label: '通用', value: 'general' }
 ]
 const signOptions = [
-  { label: '全部状态', value: '' },
+  { label: '全部', value: '' },
   { label: '成功', value: 'success' },
   { label: '失败', value: 'fail' },
   { label: '跳过', value: 'skip' },
   { label: '从未签到', value: 'never' }
 ]
 const enabledOptions = [
-  { label: '全部状态', value: '' },
+  { label: '全部', value: '' },
   { label: '启用', value: 'true' },
   { label: '禁用', value: 'false' }
 ]

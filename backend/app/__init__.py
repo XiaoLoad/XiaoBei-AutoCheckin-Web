@@ -8,6 +8,7 @@ from app.models import User  # noqa: F401  确保模型被加载
 from app.utils.response import api_bp  # 健康检查蓝图（统一返回格式演示）
 from app.routes.example import bp as example_bp
 from app.routes.auth import bp as auth_bp
+from app.routes.users import bp as users_bp
 
 
 def create_app(env_name=None):
@@ -29,13 +30,44 @@ def create_app(env_name=None):
     app.register_blueprint(api_bp)          # /api/health
     app.register_blueprint(example_bp)       # /api/example
     app.register_blueprint(auth_bp)          # /api/auth
+    app.register_blueprint(users_bp)         # /api/users
 
     # 启动时自动建表（开发/联调便捷；生产环境建议改用迁移工具）。
     # 兜底捕获：数据库不可用时不影响应用启动，相关接口会在被调用时返回错误。
     try:
         with app.app_context():
             db.create_all()
+            _ensure_user_columns(app)
     except Exception:
         pass
 
     return app
+
+
+def _ensure_user_columns(app):
+    """
+    幂等补齐 users 表新增列（quota / used_quota）。
+    项目以 db.create_all() 初始化、未引入迁移工具，已存在的表不会被自动 ALTER，
+    故在启动时对缺失列做一次补齐；数据库不可用时静默跳过，不阻断启动。
+    """
+    needed = {
+        'quota': 'INT NOT NULL DEFAULT 100',
+        'used_quota': 'INT NOT NULL DEFAULT 0',
+    }
+    try:
+        from sqlalchemy import inspect as sa_inspect, text
+
+        with app.app_context():
+            insp = sa_inspect(db.engine)
+            if not insp.has_table('users'):
+                return
+            existing = {c['name'] for c in insp.get_columns('users')}
+            for col, ddl in needed.items():
+                if col not in existing:
+                    db.session.execute(text(f'ALTER TABLE users ADD COLUMN {col} {ddl}'))
+            db.session.commit()
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass

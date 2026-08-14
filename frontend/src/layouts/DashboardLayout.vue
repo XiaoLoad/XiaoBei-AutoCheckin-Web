@@ -83,35 +83,30 @@
 
     <!-- 主区域 -->
     <div class="flex-1 flex flex-col min-w-0">
-      <!-- 顶栏 -->
-      <header class="sticky top-0 z-20 flex items-center gap-3 h-16 px-4 sm:px-6 bg-white/80 backdrop-blur border-b border-ink/5">
-        <button class="lg:hidden grid place-items-center w-9 h-9 rounded-lg hover:bg-cloud text-ink-muted" @click="open = true" aria-label="打开菜单">
-          <Icon name="menu" :size="20" />
-        </button>
-        <h1 class="text-base sm:text-lg font-semibold text-ink">{{ pageTitle }}</h1>
-
-        <div class="hidden md:flex items-center gap-2 ml-4 flex-1 max-w-md">
-          <div class="relative w-full">
-            <Icon name="search" :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
-            <input
-              type="text"
-              placeholder="搜索成员、任务或记录…"
-              class="w-full rounded-xl border border-ink/10 bg-cloud/60 pl-9 pr-3 py-2 text-sm text-ink placeholder:text-ink-muted/70 focus:border-brand focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand/10"
-            />
-          </div>
+      <!-- 顶栏：两端对齐（justify-between）。左侧为移动端菜单按钮 + 标题，
+           右侧为消息图标 + 管理员头像；已移除搜索框元素。 -->
+      <header class="sticky top-0 z-20 flex items-center justify-between h-16 px-4 sm:px-6 bg-white/80 backdrop-blur border-b border-ink/5">
+        <!-- 左侧：移动端菜单按钮 + 标题 -->
+        <div class="flex items-center gap-3 min-w-0">
+          <button class="lg:hidden grid place-items-center w-9 h-9 rounded-lg hover:bg-cloud text-ink-muted shrink-0" @click="open = true" aria-label="打开菜单">
+            <Icon name="menu" :size="20" />
+          </button>
+          <h1 class="text-base sm:text-lg font-semibold text-ink truncate">{{ pageTitle }}</h1>
         </div>
 
-        <div class="flex-1 md:flex-none" />
-        <button class="relative grid place-items-center w-9 h-9 rounded-lg hover:bg-cloud text-ink-muted" aria-label="通知">
-          <Icon name="bell" :size="20" />
-          <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-danger ring-2 ring-white" />
-        </button>
-        <span class="hidden sm:grid place-items-center w-9 h-9 rounded-full bg-brand/15 text-brand font-semibold text-sm">管</span>
+        <!-- 右侧：消息图标 + 管理员头像 -->
+        <div class="flex items-center gap-3 shrink-0">
+          <button class="relative grid place-items-center w-9 h-9 rounded-lg hover:bg-cloud text-ink-muted" aria-label="通知">
+            <Icon name="bell" :size="20" />
+            <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-danger ring-2 ring-white" />
+          </button>
+          <span class="hidden sm:grid place-items-center w-9 h-9 rounded-full bg-brand/15 text-brand font-semibold text-sm">管</span>
+        </div>
       </header>
 
       <!-- 内容：布局自行持有唯一 RouterView 出口；App 已按 $route.path 为布局加 key，
            切换路由时布局重建、此处随之渲染正确的路由组件。 -->
-      <main class="flex-1 overflow-y-auto p-4 sm:p-6 content-scroll">
+      <main class="flex-1 flex flex-col overflow-y-auto p-4 sm:p-6 content-scroll">
         <RouterView />
       </main>
     </div>
@@ -144,8 +139,7 @@ const navGroups = computed(() => {
       title: '运营管理',
       items: [
         { name: '打卡任务', to: '/tasks', icon: 'tasks' },
-        { name: '打卡记录', to: '/records', icon: 'records' },
-        { name: '账号授权', to: '/accounts', icon: 'authorize' }
+        { name: '打卡记录', to: '/records', icon: 'records' }
       ]
     }
   ]
@@ -153,7 +147,8 @@ const navGroups = computed(() => {
     groups.push({
       title: '系统',
       items: [
-        { name: '寝室成员', to: '/members', icon: 'members' },
+        // 用户管理（查看/新增/编辑/删除/权限管理）仅管理员可见
+        { name: '用户管理', to: '/users', icon: 'users' },
         { name: '系统设置', to: '/settings', icon: 'settings' }
       ]
     })

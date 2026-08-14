@@ -36,6 +36,13 @@ const routes = [
     meta: { title: '寝室成员', requiresAuth: true, roles: ['admin'] }
   },
   {
+    path: '/users',
+    name: 'users',
+    component: () => import('@/views/UserManagementView.vue'),
+    // [权限判断] 用户管理（含权限管理）仅管理员可访问
+    meta: { title: '用户管理', requiresAuth: true, roles: ['admin'] }
+  },
+  {
     path: '/settings',
     name: 'settings',
     component: () => import('@/views/PlaceholderView.vue'),
@@ -76,9 +83,16 @@ router.beforeEach((to, from, next) => {
   }
   const auth = useAuthStore()
 
+  // 会话是否有效 = 本地存在 token 且未过期（比对 JWT exp）。
+  // 仅判断 isAuthenticated 会在 token 过期时先放行、等接口 401 才跳转，
+  // 造成"先渲染受保护页框架再跳登录"的闪烁，故此处一并校验有效性。
+  const valid = auth.isAuthenticated && auth.isSessionValid()
+
   // 需要登录的页面
   if (to.meta?.requiresAuth) {
-    if (!auth.isAuthenticated) {
+    if (!valid) {
+      // 清理已失效的本地会话，避免后续请求带着无效 token 空跑
+      if (auth.isAuthenticated) auth.clearSession()
       return next({ name: 'login', query: { redirect: to.fullPath } })
     }
     // 角色不匹配（如普通用户访问管理员专属页面）→ 回到自己的仪表盘
@@ -89,7 +103,7 @@ router.beforeEach((to, from, next) => {
   }
 
   // 已登录还访问登录页/注册页 → 直接进入仪表盘
-  if ((to.name === 'login' || to.name === 'register') && auth.isAuthenticated) {
+  if ((to.name === 'login' || to.name === 'register') && valid) {
     return next('/')
   }
 

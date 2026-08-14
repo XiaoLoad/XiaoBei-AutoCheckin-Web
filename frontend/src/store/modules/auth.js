@@ -19,8 +19,23 @@ export const useAuthStore = defineStore('auth', () => {
   const isAdmin = computed(() => role.value === 'admin')
   const username = computed(() => user.value?.username || '')
 
-  function persist() {
-    if (token.value) localStorage.setItem(TOKEN_KEY, token.value)
+  // 校验当前 token 是否仍有效：除本地存在外，还需未过期（比对 JWT 的 exp 声明）。
+  // 仅判断 isAuthenticated 不足以拦截过期 token —— 否则会先渲染受保护页面，
+  // 再由接口 401 兜底跳转，造成"先闪框架再跳登录"的体验问题。
+  function isSessionValid() {
+    const raw = token.value
+    if (!raw) return false
+    try {
+      const payload = decodeJwt(raw)
+      if (!payload) return false
+      if (payload.exp && payload.exp * 1000 <= Date.now()) return false
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  function persist() {    if (token.value) localStorage.setItem(TOKEN_KEY, token.value)
     else localStorage.removeItem(TOKEN_KEY)
     if (user.value) localStorage.setItem(USER_KEY, JSON.stringify(user.value))
     else localStorage.removeItem(USER_KEY)
@@ -71,14 +86,41 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     user,
     isAuthenticated,
+    isSessionValid,
     role,
     isAdmin,
     username,
     login,
     logout,
+    clearSession,
     loggingOut,
   }
 })
+
+// 仅做本地解码读取 payload（用于校验 exp），不做签名验证（签名由后端负责）。
+// 解析失败返回 null，交由调用方按"无效"处理。
+function decodeJwt(raw) {
+  try {
+    const seg = raw.split('.')[1]
+    if (!seg) return null
+    const b64 = seg.replace(/-/g, '+').replace(/_/g, '/')
+    const json = decodeURIComponent(
+      atob(b64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    )
+    return JSON.parse(json)
+  } catch {
+    return null
+  }
+}
+
+// 仅清理本地会话（内存态 + 持久化），用于路由守卫发现无效 token 时直接拦截重定向，
+// 不发起退出登录的网络请求（token 已不可用）。
+function clearSession() {
+  _clearSession()
+}
 
 function parseUser(raw) {
   if (!raw) return null

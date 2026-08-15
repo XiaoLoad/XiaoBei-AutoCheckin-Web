@@ -18,8 +18,6 @@
           </div>
         </div>
 
-        <span class="hidden h-6 w-px bg-ink/10 md:block" />
-
         <!-- 签到类型切换：全部 / 寝室签到 / 活动签到，靠右对齐 -->
         <div class="ml-auto inline-flex items-center rounded-xl bg-cloud p-1">
           <button
@@ -78,7 +76,16 @@
       <div v-if="viewMode === 'list'" class="dash-card fade-up flex min-h-[500px] flex-col rounded-2xl">
         <div class="flex shrink-0 items-center justify-between gap-3 border-b border-ink/10 px-4 py-2.5 sm:px-5">
           <h3 class="text-sm font-semibold text-ink">签到记录</h3>
-          <div class="inline-flex items-center rounded-xl bg-cloud p-1">
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ink/10 px-3 text-sm font-medium text-ink-soft transition hover:bg-cloud disabled:opacity-40 disabled:cursor-not-allowed"
+              :disabled="loadingRecords"
+              @click="store.loadRecords"
+            >
+              <Icon name="refresh" :size="14" />刷新
+            </button>
+            <div class="inline-flex items-center rounded-xl bg-cloud p-1">
             <button
               type="button"
               class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition"
@@ -95,6 +102,7 @@
             >
               <Icon name="calendar" :size="15" />日历
             </button>
+          </div>
           </div>
         </div>
         <div class="xb-scroll flex-1 min-h-0 overflow-auto px-4 sm:px-5">

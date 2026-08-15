@@ -106,7 +106,10 @@
 
       <!-- 内容：布局自行持有唯一 RouterView 出口；App 已按 $route.path 为布局加 key，
            切换路由时布局重建、此处随之渲染正确的路由组件。 -->
-      <main class="flex-1 flex flex-col overflow-y-auto p-4 sm:p-6 content-scroll">
+      <!-- 内容滚动容器：保留 flex 列布局，使各页面根容器（flex-1）的高度分配与改动前一致，
+           用户/账号管理等页的列表卡片固定高度与内部滚动不受影响。
+           底部间距收归各页面根容器末尾的真实占位块（非滚动容器自身 padding，滚动时不被折叠），全站统一 24px。 -->
+      <main class="flex-1 flex flex-col overflow-y-auto p-4 sm:px-6 sm:pt-6 content-scroll">
         <RouterView />
       </main>
     </div>
@@ -138,8 +141,7 @@ const navGroups = computed(() => {
     {
       title: '运营管理',
       items: [
-        { name: '打卡任务', to: '/tasks', icon: 'tasks' },
-        { name: '打卡记录', to: '/records', icon: 'records' }
+        { name: '签到记录', to: '/sign-records', icon: 'calendar' }
       ]
     }
   ]

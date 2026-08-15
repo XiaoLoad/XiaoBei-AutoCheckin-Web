@@ -101,7 +101,7 @@
     <section class="dash-card p-5 fade-up delay-3">
       <div class="flex items-center justify-between mb-4">
         <h3 class="font-semibold text-ink">我的最近打卡日志</h3>
-        <RouterLink to="/records" class="text-sm font-medium text-brand hover:underline">查看全部</RouterLink>
+        <RouterLink to="/sign-records" class="text-sm font-medium text-brand hover:underline">查看全部</RouterLink>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">

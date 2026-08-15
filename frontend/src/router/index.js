@@ -11,16 +11,10 @@ const routes = [
     meta: { title: '概览', requiresAuth: true, roles: ['admin', 'user'] }
   },
   {
-    path: '/tasks',
-    name: 'tasks',
-    component: () => import('@/views/PlaceholderView.vue'),
-    meta: { title: '打卡任务', requiresAuth: true, roles: ['admin', 'user'] }
-  },
-  {
-    path: '/records',
-    name: 'records',
-    component: () => import('@/views/PlaceholderView.vue'),
-    meta: { title: '打卡记录', requiresAuth: true, roles: ['admin', 'user'] }
+    path: '/sign-records',
+    name: 'sign-records',
+    component: () => import('@/views/SignRecordsView.vue'),
+    meta: { title: '签到记录', requiresAuth: true, roles: ['admin', 'user'] }
   },
   {
     path: '/accounts',

@@ -270,6 +270,10 @@
       @confirm="store.confirmDelete"
       @cancel="store.closeDelete"
     />
+
+    <!-- 底部间距占位：真实在流子元素，盒高计入 scrollHeight，不受滚动容器末端 padding/margin 折叠影响；
+         -mt-6 抵消根容器 gap-6，确保底部间距精确 24px、与其它页面一致 -->
+    <div class="h-6 shrink-0 -mt-6" aria-hidden="true"></div>
   </div>
 </template>
 

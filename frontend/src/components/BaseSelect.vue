@@ -19,7 +19,9 @@
     <transition name="xb-pop">
       <div
         v-if="open"
-        class="xb-select-panel absolute left-0 z-50 mt-2 w-full overflow-hidden rounded-xl border border-ink/10 bg-white shadow-xl shadow-ink/10"
+        ref="panel"
+        class="xb-select-panel absolute left-0 z-50 w-full overflow-hidden rounded-xl border border-ink/10 bg-white shadow-xl shadow-ink/10"
+        :class="panelPlacement === 'top' ? 'bottom-full mb-2' : 'mt-2'"
       >
         <!-- 模糊搜索（searchable 版本） -->
         <div v-if="searchable" class="border-b border-ink/5 p-2">
@@ -72,7 +74,9 @@ const props = defineProps({
   // 两版本开关：false=普通下拉；true=带模糊搜索（选项较多时使用）
   searchable: { type: Boolean, default: false },
   disabled: { type: Boolean, default: false },
-  size: { type: String, default: 'md' } // md | sm
+  size: { type: String, default: 'md' }, // md | sm
+  // 展开方向：bottom 向下 / top 向上 / auto 按可用空间自适应（默认 bottom，保持旧行为）
+  placement: { type: String, default: 'bottom' }
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -83,6 +87,8 @@ const highlightedIndex = ref(-1)
 const root = ref(null)
 const list = ref(null)
 const searchInput = ref(null)
+const panel = ref(null)
+const panelPlacement = ref(props.placement === 'auto' ? 'bottom' : props.placement)
 
 // 归一化选项为 { label, value }
 const normalized = computed(() =>
@@ -110,18 +116,42 @@ function isSelected(opt) {
 
 function toggle() {
   if (props.disabled) return
-  open.value = !open.value
+  if (open.value) close()
+  else openPanel()
 }
 
-function openPanel() {
+async function openPanel() {
   if (props.disabled || open.value) return
   open.value = true
   query.value = ''
   const idx = normalized.value.findIndex((o) => o.value === props.modelValue)
   highlightedIndex.value = idx >= 0 ? idx : 0
-  if (props.searchable) {
-    nextTick(() => searchInput.value && searchInput.value.focus())
+  await nextTick()
+  refinePlacement()
+  if (props.searchable && searchInput.value) searchInput.value.focus()
+}
+
+// 展开方向：默认向下；auto 模式下若下方空间不足且上方更充裕，则翻转为向上展开
+function refinePlacement() {
+  if (props.placement !== 'auto') {
+    panelPlacement.value = props.placement
+    return
   }
+  const trigger = root.value
+  const pnl = panel.value
+  if (!trigger || !pnl) {
+    panelPlacement.value = 'bottom'
+    return
+  }
+  const rect = trigger.getBoundingClientRect()
+  const ph = pnl.offsetHeight
+  const spaceBelow = window.innerHeight - rect.bottom
+  const spaceAbove = rect.top
+  panelPlacement.value = spaceBelow < ph + 8 && spaceAbove > ph + 8 ? 'top' : 'bottom'
+}
+
+function onResize() {
+  if (open.value) refinePlacement()
 }
 
 function select(opt) {
@@ -155,11 +185,11 @@ function move(delta) {
 function onKeydown(e) {
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
     e.preventDefault()
-    if (!open.value) openPanel()
+    if (!open.value) toggle()
     else move(e.key === 'ArrowDown' ? 1 : -1)
   } else if (e.key === 'Enter' || e.key === ' ') {
     e.preventDefault()
-    if (!open.value) openPanel()
+    if (!open.value) toggle()
     else if (filteredOptions.value[highlightedIndex.value]) select(filteredOptions.value[highlightedIndex.value])
   } else if (e.key === 'Escape') {
     close()
@@ -189,12 +219,20 @@ function onDocClick(e) {
 }
 
 watch(open, (v) => {
-  if (v) document.addEventListener('mousedown', onDocClick)
-  else document.removeEventListener('mousedown', onDocClick)
+  if (v) {
+    document.addEventListener('mousedown', onDocClick)
+    window.addEventListener('resize', onResize)
+  } else {
+    document.removeEventListener('mousedown', onDocClick)
+    window.removeEventListener('resize', onResize)
+  }
 })
 
 onMounted(() => document.removeEventListener('mousedown', onDocClick))
-onBeforeUnmount(() => document.removeEventListener('mousedown', onDocClick))
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', onDocClick)
+  window.removeEventListener('resize', onResize)
+})
 </script>
 
 <style scoped>

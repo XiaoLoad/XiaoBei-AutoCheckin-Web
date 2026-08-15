@@ -49,3 +49,16 @@
  * @property {number} page_size
  * @property {{ total_users:number, enabled:number, disabled:number, total_quota:number, used_quota:number }} summary
  */
+
+/**
+ * 签到记录（第三方数据，按单个平台账号查询）
+ * @typedef {Object} SignRecord
+ * @property {number} id
+ * @property {number} accountId      所属 B 平台账号 id
+ * @property {string} taskName       任务名称
+ * @property {('dorm'|'activity')} type   签到类型：寝室签到 / 活动签到
+ * @property {string} date           日期 YYYY-MM-DD
+ * @property {string} time           时间 HH:mm
+ * @property {string} initiator      发起人（漏签时为「—」）
+ * @property {('signed'|'unsigned')} status   状态：已签到 / 未签到（漏签）
+ */

@@ -10,7 +10,7 @@
     <template v-if="loading">
       <div class="flex items-start justify-between">
         <div class="h-4 w-20 rounded bg-ink/5 animate-pulse" />
-        <div class="h-9 w-9 rounded-xl bg-ink/5 animate-pulse" :class="compact ? 'h-7 w-7' : 'h-9 w-9'" />
+        <div class="h-9 w-9 rounded-xl bg-ink/5 animate-pulse" :class="compact ? 'h-8 w-8 sm:h-9 sm:w-9' : 'h-9 w-9'" />
       </div>
       <div class="h-8 w-16 rounded bg-ink/5 animate-pulse" />
       <div v-if="delta !== null" class="h-3 w-28 rounded bg-ink/5 animate-pulse" />
@@ -18,8 +18,8 @@
     <template v-else>
       <div class="flex items-start justify-between">
         <span class="font-medium text-ink-muted" :class="compact ? 'text-xs' : 'text-sm'">{{ label }}</span>
-        <span class="grid place-items-center rounded-xl" :class="[iconWrapClass, compact ? 'h-7 w-7' : 'h-9 w-9']">
-          <Icon :name="icon" :size="compact ? 15 : 18" />
+        <span class="grid place-items-center rounded-xl" :class="[iconWrapClass, compact ? 'h-8 w-8 sm:h-9 sm:w-9' : 'h-9 w-9']">
+          <Icon :name="icon" :size="18" :class="compact ? 'sm:h-5 sm:w-5' : ''" />
         </span>
       </div>
       <div class="flex items-end gap-1.5">

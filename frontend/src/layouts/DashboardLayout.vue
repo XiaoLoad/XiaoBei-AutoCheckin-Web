@@ -141,7 +141,8 @@ const navGroups = computed(() => {
     {
       title: '运营管理',
       items: [
-        { name: '签到记录', to: '/sign-records', icon: 'calendar' }
+        { name: '签到记录', to: '/sign-records', icon: 'calendar' },
+        { name: auth.isAdmin ? '平台资源' : '签到配置', to: '/sign-config', icon: 'sliders' }
       ]
     }
   ]

@@ -1,0 +1,53 @@
+<template>
+  <ConfigSection title="图片策略" icon="image" :source="source">
+    <div class="space-y-3">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <p class="text-sm font-medium text-ink">上传图片</p>
+          <p class="text-xs text-ink-muted">开启后签到时按策略消费图库图片</p>
+        </div>
+        <ConfigToggle v-model="config.image.enabled" />
+      </div>
+
+      <div v-if="config.image.enabled" class="space-y-2">
+        <div>
+          <label class="mb-1 block text-xs font-medium text-ink-muted">图片策略</label>
+          <BaseSelect v-model="config.image.strategy" :options="strategyOptions" size="sm" class="w-72" />
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-ink-muted">图库 {{ activeCount }} 张（回收站 {{ trashCount }} 张）</span>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-lg border border-ink/10 px-3 py-1.5 text-sm text-ink-soft transition hover:bg-cloud"
+            @click="store.gotoResource('images')"
+          >
+            <Icon name="image" :size="14" />管理图库
+          </button>
+        </div>
+      </div>
+    </div>
+  </ConfigSection>
+</template>
+
+<script setup>
+import { computed } from 'vue'
+import ConfigSection from '@/components/signconfig/ConfigSection.vue'
+import ConfigToggle from '@/components/signconfig/ConfigToggle.vue'
+import BaseSelect from '@/components/BaseSelect.vue'
+import Icon from '@/components/Icon.vue'
+import { useSignConfigStore } from '@/stores/signConfig'
+
+const props = defineProps({
+  config: { type: Object, required: true },
+  source: { type: String, default: '' }
+})
+
+const store = useSignConfigStore()
+const strategyOptions = [
+  { label: '循环复用（用毕入回收站续用）', value: 'recycle' },
+  { label: '用后删除', value: 'delete' },
+  { label: '用后入回收站可恢复', value: 'trash' }
+]
+const activeCount = computed(() => store.imageLibrary.filter((i) => !i.inTrash).length)
+const trashCount = computed(() => store.imageLibrary.filter((i) => i.inTrash).length)
+</script>

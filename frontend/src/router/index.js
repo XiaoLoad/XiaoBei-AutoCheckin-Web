@@ -17,6 +17,12 @@ const routes = [
     meta: { title: '签到记录', requiresAuth: true, roles: ['admin', 'user'] }
   },
   {
+    path: '/sign-config',
+    name: 'sign-config',
+    component: () => import('@/views/SignConfigView.vue'),
+    meta: { title: '签到配置', requiresAuth: true, roles: ['admin', 'user'] }
+  },
+  {
     path: '/accounts',
     name: 'accounts',
     component: () => import('@/views/AccountManagementView.vue'),

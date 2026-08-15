@@ -29,11 +29,11 @@
           type="text"
           placeholder="搜索用户名…"
           class="login-input h-9 py-0 pl-9 text-sm sm:h-11"
-          @input="onKeywordInput"
+          @input="store.onKeywordInput"
         />
       </div>
       <div class="grid grid-cols-[1fr_auto_auto] items-center gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
-        <select v-model="roleFilter" class="h-9 w-full rounded-xl border border-ink/10 bg-white px-3 text-sm text-ink-soft outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10 sm:h-11 sm:w-auto" @change="onFilterChange">
+        <select v-model="roleFilter" class="h-9 w-full rounded-xl border border-ink/10 bg-white px-3 text-sm text-ink-soft outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10 sm:h-11 sm:w-auto" @change="store.onFilterChange">
           <option value="">全部角色</option>
           <option value="admin">管理员</option>
           <option value="user">普通用户</option>
@@ -43,14 +43,14 @@
           class="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-ink/10 text-ink-muted transition hover:bg-cloud hover:text-ink sm:h-11 sm:w-11"
           aria-label="刷新"
           :disabled="loading"
-          @click="fetchUsers"
+          @click="refresh"
         >
           <Icon name="refresh" :size="17" :class="loading && 'spin-refresh'" />
         </button>
         <button
           type="button"
           class="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-brand px-3 text-sm font-semibold text-white shadow-lg shadow-brand/25 transition hover:bg-brand-dark focus:outline-none focus:ring-4 focus:ring-brand/30 sm:w-auto sm:px-4 sm:py-2.5"
-          @click="openAdd"
+          @click="store.openAdd"
         >
           <Icon name="plus" :size="17" />
           <span class="hidden sm:inline">新增用户</span>
@@ -138,7 +138,7 @@
                   <button
                     type="button"
                     class="inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1.5 text-[13px] font-medium text-brand transition hover:bg-brand/10"
-                    @click="openEdit(item)"
+                    @click="store.openEdit(item)"
                   >
                     <Icon name="edit" :size="14" />编辑
                   </button>
@@ -146,14 +146,14 @@
                     type="button"
                     class="inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1.5 text-[13px] font-medium text-ink-muted transition hover:bg-cloud"
                     :class="item.enabled ? 'hover:text-warning' : 'hover:text-success'"
-                    @click="toggleStatus(item)"
+                    @click="onToggle(item)"
                   >
                     <Icon :name="item.enabled ? 'x-circle' : 'check-circle'" :size="14" />{{ item.enabled ? '禁用' : '启用' }}
                   </button>
                   <button
                     type="button"
                     class="inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1.5 text-[13px] font-medium text-danger transition hover:bg-danger/10"
-                    @click="openDelete(item)"
+                    @click="store.openDelete(item)"
                   >
                     <Icon name="trash" :size="14" />删除
                   </button>
@@ -195,13 +195,13 @@
             </div>
             <div class="mt-2 text-xs text-ink-muted tabular-nums">创建于 {{ item.created_at }}</div>
             <div class="mt-3 flex gap-2 border-t border-ink/5 pt-3">
-              <button type="button" class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-ink/10 py-2 text-sm font-medium text-ink-soft transition hover:bg-cloud hover:text-brand" @click="openEdit(item)">
+              <button type="button" class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-ink/10 py-2 text-sm font-medium text-ink-soft transition hover:bg-cloud hover:text-brand" @click="store.openEdit(item)">
                 <Icon name="edit" :size="16" /> 编辑
               </button>
-              <button type="button" class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-ink/10 py-2 text-sm font-medium transition" :class="item.enabled ? 'text-ink-soft hover:bg-cloud hover:text-warning' : 'text-ink-soft hover:bg-cloud hover:text-success'" @click="toggleStatus(item)">
+              <button type="button" class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-ink/10 py-2 text-sm font-medium transition" :class="item.enabled ? 'text-ink-soft hover:bg-cloud hover:text-warning' : 'text-ink-soft hover:bg-cloud hover:text-success'" @click="onToggle(item)">
                 <Icon :name="item.enabled ? 'x-circle' : 'check-circle'" :size="16" /> {{ item.enabled ? '禁用' : '启用' }}
               </button>
-              <button type="button" class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-ink/10 py-2 text-sm font-medium text-ink-soft transition hover:bg-danger/10 hover:text-danger" @click="openDelete(item)">
+              <button type="button" class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-ink/10 py-2 text-sm font-medium text-ink-soft transition hover:bg-danger/10 hover:text-danger" @click="store.openDelete(item)">
                 <Icon name="trash" :size="16" /> 删除
               </button>
             </div>
@@ -218,8 +218,8 @@
           :total="displayTotal"
           :page-size-options="[10, 20, 50]"
           :disabled="loading"
-          @update:page="onPageChange"
-          @update:page-size="onPageSizeChange"
+          @update:page="store.onPageChange"
+          @update:page-size="store.onPageSizeChange"
         />
       </div>
     </div>
@@ -230,8 +230,8 @@
       :mode="formMode"
       :user="editingUser"
       :submitting="formSubmitting"
-      @submit="handleFormSubmit"
-      @cancel="showForm = false"
+      @submit="onSubmit"
+      @cancel="store.closeForm"
     />
 
     <!-- 删除二次确认 -->
@@ -244,8 +244,8 @@
       confirm-text="删除"
       :confirming="deleting"
       confirming-text="删除中…"
-      @confirm="confirmDelete"
-      @cancel="showDelete = false"
+      @confirm="onConfirmDelete"
+      @cancel="store.closeDelete"
     />
 
     <!-- 轻量提示 -->
@@ -264,37 +264,38 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive } from 'vue'
 import StatCard from '@/components/StatCard.vue'
 import Pagination from '@/components/Pagination.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
 import UserFormModal from '@/components/UserFormModal.vue'
 import Icon from '@/components/Icon.vue'
-import { getUsers, createUser, updateUser, setUserStatus, deleteUser } from '@/api/users'
+import { useUsersStore } from '@/stores/users'
+import { storeToRefs } from 'pinia'
 
-// 列表与筛选状态
-const list = ref([])
-const total = ref(0)
-const page = ref(1)
-const pageSize = ref(10)
-const keyword = ref('')
-const roleFilter = ref('')
-const loading = ref(false)
-const summary = ref({ total_users: 0, enabled: 0, disabled: 0, total_quota: 0, used_quota: 0 })
-
-// 乐观删除：后端删除为桩，标记隐藏的 id 并在拉取后过滤，刷新页面前保持不可见
-const hiddenIds = ref(new Set())
-
-// 表单弹窗状态
-const showForm = ref(false)
-const formMode = ref('add')
-const editingUser = ref(null)
-const formSubmitting = ref(false)
-
-// 删除确认状态
-const showDelete = ref(false)
-const deletingUser = ref(null)
-const deleting = ref(false)
+// 领域状态下沉到 store：视图只做渲染、展示辅助与 toast 提示
+const store = useUsersStore()
+const {
+  list,
+  total,
+  page,
+  pageSize,
+  keyword,
+  roleFilter,
+  loading,
+  summary,
+  hiddenIds,
+  showForm,
+  formMode,
+  editingUser,
+  formSubmitting,
+  showDelete,
+  deletingUser,
+  deleting,
+  rows,
+  displayTotal,
+  quotaRate
+} = storeToRefs(store)
 
 // 轻量提示
 const toast = reactive({ show: false, message: '', type: 'success' })
@@ -307,13 +308,11 @@ function showToast(message, type = 'success') {
   toastTimer = setTimeout(() => (toast.show = false), 2600)
 }
 
-// 展示用数据（剔除乐观删除项）
-const rows = computed(() => list.value.filter((i) => !hiddenIds.value.has(i.user_id)))
-const displayTotal = computed(() => Math.max(0, total.value - hiddenIds.value.size))
-const quotaRate = computed(() =>
-  summary.value.total_quota > 0
-    ? Math.min(100, Math.round((summary.value.used_quota / summary.value.total_quota) * 100))
-    : 0
+// 删除确认文案
+const deleteMessage = computed(() =>
+  store.deletingUser?.username
+    ? `确定要删除用户「${store.deletingUser.username}」吗？此操作不可恢复。`
+    : ''
 )
 
 // 头像 / 额度展示辅助
@@ -338,132 +337,38 @@ function quotaTextClass(item) {
   return p >= 90 ? 'text-danger' : p >= 70 ? 'text-warning' : 'text-ink-muted'
 }
 
-// 拉取列表
-async function fetchUsers() {
-  loading.value = true
-  try {
-    const params = { page: page.value, page_size: pageSize.value }
-    if (keyword.value.trim()) params.keyword = keyword.value.trim()
-    if (roleFilter.value) params.role = roleFilter.value
-    const res = await getUsers(params)
-    list.value = res.items || []
-    total.value = res.total || 0
-    if (res.summary) summary.value = res.summary
-    // 删除后可能使当前页越界，做收敛
-    const tp = Math.max(1, Math.ceil(displayTotal.value / pageSize.value))
-    if (page.value > tp) page.value = tp
-  } catch (e) {
-    showToast(e.message || '获取用户列表失败', 'error')
-  } finally {
-    loading.value = false
-  }
+// 事件包装：调用 store action 并负责 toast 反馈
+function refresh() {
+  store.fetchUsers().catch((e) => showToast(e.message || '获取用户列表失败', 'error'))
 }
-
-// 关键词搜索防抖
-let kwTimer = null
-function onKeywordInput() {
-  if (kwTimer) clearTimeout(kwTimer)
-  kwTimer = setTimeout(() => {
-    page.value = 1
-    fetchUsers()
-  }, 300)
-}
-function onFilterChange() {
-  page.value = 1
-  fetchUsers()
-}
-function onPageChange(p) {
-  page.value = p
-  fetchUsers()
-}
-function onPageSizeChange(size) {
-  pageSize.value = size
-  page.value = 1
-  fetchUsers()
-}
-
-// 新增 / 编辑
-function openAdd() {
-  formMode.value = 'add'
-  editingUser.value = null
-  showForm.value = true
-}
-function openEdit(item) {
-  formMode.value = 'edit'
-  editingUser.value = item
-  showForm.value = true
-}
-async function handleFormSubmit(payload) {
-  formSubmitting.value = true
-  try {
-    if (formMode.value === 'add') {
-      await createUser(payload)
-      showToast('用户创建成功', 'success')
-    } else {
-      await updateUser(editingUser.value.user_id, payload)
-      showToast('保存成功', 'success')
-    }
-    showForm.value = false
-    page.value = 1
-    await fetchUsers()
-  } catch (e) {
-    showToast(e.message || '操作失败', 'error')
-  } finally {
-    formSubmitting.value = false
-  }
-}
-
-// 禁用 / 启用（可逆，直接切换并本地更新，避免整表刷新闪烁）
-async function toggleStatus(item) {
+async function onToggle(item) {
   const next = !item.enabled
   try {
-    await setUserStatus(item.user_id, next)
-    item.enabled = next
-    // 同步汇总计数
-    if (next) {
-      summary.value.enabled += 1
-      summary.value.disabled = Math.max(0, summary.value.disabled - 1)
-    } else {
-      summary.value.disabled += 1
-      summary.value.enabled = Math.max(0, summary.value.enabled - 1)
-    }
+    await store.toggleStatus(item)
     showToast(next ? '已启用该用户' : '已禁用该用户', 'success')
   } catch (e) {
     showToast(e.message || '状态更新失败', 'error')
   }
 }
-
-// 删除（后端为桩，前端乐观移除并标记隐藏）
-const deleteMessage = computed(() =>
-  deletingUser.value ? `确定要删除用户「${deletingUser.value.username}」吗？此操作不可恢复。` : ''
-)
-function openDelete(item) {
-  deletingUser.value = item
-  showDelete.value = true
-}
-async function confirmDelete() {
-  if (!deletingUser.value) return
-  deleting.value = true
-  const user = deletingUser.value
+async function onConfirmDelete() {
+  const name = store.deletingUser?.username
   try {
-    await deleteUser(user.user_id)
-    hiddenIds.value = new Set(hiddenIds.value).add(user.user_id)
-    total.value = Math.max(0, total.value - 1)
-    summary.value.total_users = Math.max(0, summary.value.total_users - 1)
-    summary.value.used_quota = Math.max(0, summary.value.used_quota - (user.used_quota || 0))
-    summary.value.total_quota = Math.max(0, summary.value.total_quota - (user.quota || 0))
-    if (user.enabled) summary.value.enabled = Math.max(0, summary.value.enabled - 1)
-    else summary.value.disabled = Math.max(0, summary.value.disabled - 1)
-    showToast(`已删除用户「${user.username}」`, 'success')
-    showDelete.value = false
+    await store.confirmDelete()
+    showToast(`已删除用户「${name}」`, 'success')
   } catch (e) {
     showToast(e.message || '删除失败', 'error')
-  } finally {
-    deleting.value = false
+  }
+}
+async function onSubmit(payload) {
+  try {
+    await store.handleFormSubmit(payload)
+    showToast(store.formMode === 'add' ? '用户创建成功' : '保存成功', 'success')
+  } catch (e) {
+    showToast(e.message || '操作失败', 'error')
   }
 }
 
-onMounted(fetchUsers)
+onMounted(refresh)
 </script>
 
 <style scoped>

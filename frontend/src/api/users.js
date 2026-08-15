@@ -1,4 +1,5 @@
 // 用户管理接口：列表（分页/过滤）、新增、编辑、禁用启用、删除（桩）
+// 返回结构见 @/api/types 中的 UserListResult / UserListItem（前后端契约）
 import request from '@/api/request'
 
 // 用户列表：支持分页、关键词、角色过滤

@@ -1,5 +1,6 @@
 // axios 实例封装：统一 baseURL、超时、请求/响应拦截、并发取消
 import axios from 'axios'
+import { bus, EVENTS } from '@/utils/eventBus'
 
 const service = axios.create({
   // 开发环境通过 Vite 代理转发到后端（见 vite.config.js）
@@ -83,5 +84,9 @@ service.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+// 订阅登出事件：退出登录时由事件总线统一通知此处取消并发请求，
+// 取代 auth store 直接 import 本模块的耦合，使 auth 与请求层互不硬连线。
+bus.on(EVENTS.AUTH_LOGOUT, () => cancelPendingRequests())
 
 export default service

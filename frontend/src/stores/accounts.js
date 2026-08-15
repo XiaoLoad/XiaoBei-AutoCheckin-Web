@@ -1,0 +1,190 @@
+// 账号管理领域状态（Pinia）：收纳列表 / 筛选 / 分页 / 增删改，
+// 把原本散落在 AccountManagementView 里的数据编排逻辑下沉到 store，
+// 视图只负责渲染与事件派发。后端接入时只需改 api/accounts.js，本 store 与视图无需变动。
+import { defineStore } from 'pinia'
+import { ref, computed, watch } from 'vue'
+import { fetchAccounts, createAccount, updateAccount, deleteAccount } from '@/api/accounts'
+
+export const useAccountsStore = defineStore('accounts', () => {
+  const loading = ref(false)
+  const accounts = ref([])
+
+  // 筛选状态（前端演示；后端接入时作为查询参数传递，见 api/accounts.js）
+  const keyword = ref('')
+  const typeFilter = ref('')
+  const signFilter = ref('')
+  const enabledFilter = ref('')
+
+  // 分页状态（复用用户管理页 Pagination 组件）
+  const page = ref(1)
+  const pageSize = ref(10)
+
+  // 弹窗状态
+  const showForm = ref(false)
+  const formMode = ref('add')
+  const editing = ref(null)
+  const submitting = ref(false)
+  const showDelete = ref(false)
+  const deleting = ref(false)
+  const deletingItem = ref(null)
+
+  // 任意筛选 / 搜索命中时显示「重置」
+  const hasFilter = computed(
+    () => !!keyword.value.trim() || !!typeFilter.value || !!signFilter.value || !!enabledFilter.value
+  )
+
+  // 模糊搜索 + 三项筛选（前端演示）
+  const filtered = computed(() => {
+    const kw = keyword.value.trim().toLowerCase()
+    return accounts.value.filter((a) => {
+      if (typeFilter.value && a.type !== typeFilter.value) return false
+      if (enabledFilter.value !== '' && String(a.enabled) !== enabledFilter.value) return false
+      if (signFilter.value) {
+        const st = (a.lastSignIn && a.lastSignIn.status) || 'never'
+        if (st !== signFilter.value) return false
+      }
+      if (kw) {
+        const p = a.profile || {}
+        const hit =
+          (a.account || '').toLowerCase().includes(kw) ||
+          (p.name || '').toLowerCase().includes(kw) ||
+          (p.studentNo || '').toLowerCase().includes(kw)
+        if (!hit) return false
+      }
+      return true
+    })
+  })
+
+  // 当前页切片（分页逻辑核心）
+  const pagedRows = computed(() => {
+    const start = (page.value - 1) * pageSize.value
+    return filtered.value.slice(start, start + pageSize.value)
+  })
+
+  // 筛选或关键词变化时回到第一页
+  watch([keyword, typeFilter, signFilter, enabledFilter], () => {
+    page.value = 1
+  })
+
+  // 数据量变化（筛选/删除）导致当前页越界时收敛
+  watch(filtered, (list) => {
+    const tp = Math.max(1, Math.ceil(list.length / pageSize.value))
+    if (page.value > tp) page.value = tp
+  })
+
+  function resetFilters() {
+    typeFilter.value = ''
+    signFilter.value = ''
+    enabledFilter.value = ''
+  }
+
+  async function load() {
+    loading.value = true
+    try {
+      // 后端接入时此处可传 { keyword, type, signStatus, enabled } 由服务端过滤与分页
+      accounts.value = await fetchAccounts()
+    } finally {
+      loading.value = false
+    }
+  }
+
+  function onPageChange(p) {
+    page.value = p
+  }
+  function onPageSizeChange(size) {
+    pageSize.value = size
+    page.value = 1
+  }
+
+  function openAdd() {
+    formMode.value = 'add'
+    editing.value = null
+    showForm.value = true
+  }
+  function openEdit(item) {
+    formMode.value = 'edit'
+    editing.value = item
+    showForm.value = true
+  }
+  function closeForm() {
+    showForm.value = false
+  }
+
+  async function onSubmitForm(payload) {
+    submitting.value = true
+    try {
+      if (formMode.value === 'add') {
+        const created = await createAccount(payload)
+        accounts.value.unshift(created)
+      } else if (editing.value) {
+        const updated = await updateAccount(editing.value.id, payload)
+        const i = accounts.value.findIndex((a) => a.id === updated.id)
+        if (i !== -1) accounts.value[i] = updated
+      }
+      showForm.value = false
+    } finally {
+      submitting.value = false
+    }
+  }
+
+  // 启用 / 禁用切换（乐观更新，由调用方负责 toast 提示）
+  async function onToggle(item) {
+    const updated = await updateAccount(item.id, { enabled: !item.enabled })
+    const i = accounts.value.findIndex((a) => a.id === item.id)
+    if (i !== -1) accounts.value[i] = updated
+  }
+
+  function askDelete(item) {
+    deletingItem.value = item
+    showDelete.value = true
+  }
+  function closeDelete() {
+    showDelete.value = false
+  }
+
+  async function confirmDelete() {
+    if (!deletingItem.value) return
+    deleting.value = true
+    try {
+      await deleteAccount(deletingItem.value.id)
+      accounts.value = accounts.value.filter((a) => a.id !== deletingItem.value.id)
+      showDelete.value = false
+    } finally {
+      deleting.value = false
+      deletingItem.value = null
+    }
+  }
+
+  return {
+    loading,
+    accounts,
+    keyword,
+    typeFilter,
+    signFilter,
+    enabledFilter,
+    page,
+    pageSize,
+    showForm,
+    formMode,
+    editing,
+    submitting,
+    showDelete,
+    deleting,
+    deletingItem,
+    hasFilter,
+    filtered,
+    pagedRows,
+    resetFilters,
+    load,
+    onPageChange,
+    onPageSizeChange,
+    openAdd,
+    openEdit,
+    closeForm,
+    onSubmitForm,
+    onToggle,
+    askDelete,
+    closeDelete,
+    confirmDelete
+  }
+})

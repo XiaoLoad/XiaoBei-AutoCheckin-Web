@@ -48,7 +48,7 @@
             class="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-ink/10 text-ink-muted transition hover:bg-cloud hover:text-ink"
             aria-label="刷新"
             :disabled="loading"
-            @click="load"
+            @click="store.load"
           >
             <Icon name="refresh" :size="17" :class="loading && 'spin-refresh'" />
           </button>
@@ -56,14 +56,14 @@
             v-if="hasFilter"
             type="button"
             class="inline-flex h-9 items-center gap-1.5 rounded-xl border border-ink/10 px-3 text-sm font-medium text-ink-soft transition hover:bg-cloud"
-            @click="resetFilters"
+            @click="store.resetFilters"
           >
             <Icon name="close" :size="14" />重置
           </button>
           <button
             type="button"
             class="inline-flex items-center justify-center gap-1.5 rounded-xl bg-brand px-3.5 py-2 text-sm font-semibold text-white shadow-lg shadow-brand/25 transition hover:bg-brand-dark focus:outline-none focus:ring-4 focus:ring-brand/30 sm:px-4"
-            @click="openAdd"
+            @click="store.openAdd"
           >
             <Icon name="plus" :size="17" />
             <span class="hidden sm:inline">新增账号</span>
@@ -153,13 +153,13 @@
               <!-- 操作 -->
               <td class="px-3 py-3 align-top">
                 <div class="flex flex-nowrap items-center justify-start gap-1">
-                  <button class="inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1.5 text-[13px] font-medium text-brand transition hover:bg-brand/10" @click="openEdit(item)">
+                  <button class="inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1.5 text-[13px] font-medium text-brand transition hover:bg-brand/10" @click="store.openEdit(item)">
                     <Icon name="edit" :size="14" />编辑
                   </button>
-                  <button class="inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1.5 text-[13px] font-medium text-ink-muted transition hover:bg-cloud" @click="onToggle(item)">
+                  <button class="inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1.5 text-[13px] font-medium text-ink-muted transition hover:bg-cloud" @click="store.onToggle(item)">
                     <Icon :name="item.enabled ? 'x-circle' : 'check-circle'" :size="14" />{{ item.enabled ? '禁用' : '启用' }}
                   </button>
-                  <button class="inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1.5 text-[13px] font-medium text-danger transition hover:bg-danger/10" @click="askDelete(item)">
+                  <button class="inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1.5 text-[13px] font-medium text-danger transition hover:bg-danger/10" @click="store.askDelete(item)">
                     <Icon name="trash" :size="14" />删除
                   </button>
                 </div>
@@ -226,9 +226,9 @@
           </div>
 
           <div class="mt-3 flex items-center gap-2">
-            <button class="flex-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand transition hover:bg-brand/10" @click="openEdit(item)">编辑</button>
-            <button class="flex-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-cloud" @click="onToggle(item)">{{ item.enabled ? '禁用' : '启用' }}</button>
-            <button class="flex-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-danger transition hover:bg-danger/10" @click="askDelete(item)">删除</button>
+            <button class="flex-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand transition hover:bg-brand/10" @click="store.openEdit(item)">编辑</button>
+            <button class="flex-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-cloud" @click="store.onToggle(item)">{{ item.enabled ? '禁用' : '启用' }}</button>
+            <button class="flex-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-danger transition hover:bg-danger/10" @click="store.askDelete(item)">删除</button>
           </div>
         </div>
       </div>
@@ -241,8 +241,8 @@
           :total="filtered.length"
           :page-size-options="[10, 20, 50]"
           :disabled="loading"
-          @update:page="onPageChange"
-          @update:page-size="onPageSizeChange"
+          @update:page="store.onPageChange"
+          @update:page-size="store.onPageSizeChange"
         />
       </div>
     </div>
@@ -253,8 +253,8 @@
       :mode="formMode"
       :account="editing"
       :submitting="submitting"
-      @submit="onSubmitForm"
-      @cancel="showForm = false"
+      @submit="store.onSubmitForm"
+      @cancel="store.closeForm"
     />
 
     <!-- 删除二次确认 -->
@@ -267,38 +267,43 @@
       cancel-text="取消"
       danger
       :confirming="deleting"
-      @confirm="confirmDelete"
-      @cancel="showDelete = false"
+      @confirm="store.confirmDelete"
+      @cancel="store.closeDelete"
     />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { useAccountsStore } from '@/stores/accounts'
+import { storeToRefs } from 'pinia'
 import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import Pagination from '@/components/Pagination.vue'
 import AccountFormModal from '@/components/AccountFormModal.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
-import {
-  fetchAccounts,
-  createAccount,
-  updateAccount,
-  deleteAccount
-} from '@/api/accounts'
 
-const loading = ref(false)
-const accounts = ref([])
-const keyword = ref('')
-
-// 筛选状态（前端演示；后端接入时将作为查询参数传递，见 api/accounts.js）
-const typeFilter = ref('')
-const signFilter = ref('')
-const enabledFilter = ref('')
-
-// 分页状态（复用用户管理页 Pagination 组件）
-const page = ref(1)
-const pageSize = ref(10)
+// 领域状态下沉到 store：视图只做渲染与展示辅助，数据编排由 store 负责
+const store = useAccountsStore()
+const {
+  loading,
+  accounts,
+  keyword,
+  typeFilter,
+  signFilter,
+  enabledFilter,
+  page,
+  pageSize,
+  showForm,
+  formMode,
+  editing,
+  submitting,
+  showDelete,
+  deleting,
+  deletingItem,
+  hasFilter,
+  filtered,
+  pagedRows
+} = storeToRefs(store)
 
 // 自定义下拉选项（通用数据：{ label, value }）
 const typeOptions = [
@@ -320,20 +325,6 @@ const enabledOptions = [
   { label: '禁用', value: 'false' }
 ]
 
-// 任意筛选 / 搜索命中时显示「重置」
-const hasFilter = computed(
-  () => !!keyword.value.trim() || !!typeFilter.value || !!signFilter.value || !!enabledFilter.value
-)
-
-const showForm = ref(false)
-const formMode = ref('add')
-const editing = ref(null)
-const submitting = ref(false)
-
-const showDelete = ref(false)
-const deleting = ref(false)
-const deletingItem = ref(null)
-
 // 签到类型映射
 function typeMeta(type) {
   if (type === 'activity') return { label: '活动', cls: 'bg-info/10 text-info' }
@@ -351,124 +342,8 @@ function signMeta(item) {
   return { label: '从未签到', cls: 'text-ink-muted', dot: 'bg-ink/30' }
 }
 
-// 模糊搜索 + 三项筛选（前端演示）
-const filtered = computed(() => {
-  const kw = keyword.value.trim().toLowerCase()
-  return accounts.value.filter((a) => {
-    if (typeFilter.value && a.type !== typeFilter.value) return false
-    if (enabledFilter.value !== '' && String(a.enabled) !== enabledFilter.value) return false
-    if (signFilter.value) {
-      const st = (a.lastSignIn && a.lastSignIn.status) || 'never'
-      if (st !== signFilter.value) return false
-    }
-    if (kw) {
-      const p = a.profile || {}
-      const hit =
-        (a.account || '').toLowerCase().includes(kw) ||
-        (p.name || '').toLowerCase().includes(kw) ||
-        (p.studentNo || '').toLowerCase().includes(kw)
-      if (!hit) return false
-    }
-    return true
-  })
-})
-
-// 当前页切片（分页逻辑核心）
-const pagedRows = computed(() => {
-  const start = (page.value - 1) * pageSize.value
-  return filtered.value.slice(start, start + pageSize.value)
-})
-
-// 筛选或关键词变化时回到第一页
-watch([keyword, typeFilter, signFilter, enabledFilter], () => {
-  page.value = 1
-})
-
-// 数据量变化（筛选/删除）导致当前页越界时收敛
-watch(filtered, (list) => {
-  const tp = Math.max(1, Math.ceil(list.length / pageSize.value))
-  if (page.value > tp) page.value = tp
-})
-
-function resetFilters() {
-  typeFilter.value = ''
-  signFilter.value = ''
-  enabledFilter.value = ''
-}
-
-async function load() {
-  loading.value = true
-  try {
-    // 后端接入时此处可传 { keyword, type, signStatus, enabled } 由服务端过滤与分页
-    accounts.value = await fetchAccounts()
-  } finally {
-    loading.value = false
-  }
-}
-
-function onPageChange(p) {
-  page.value = p
-}
-function onPageSizeChange(size) {
-  pageSize.value = size
-  page.value = 1
-}
-
-function openAdd() {
-  formMode.value = 'add'
-  editing.value = null
-  showForm.value = true
-}
-
-function openEdit(item) {
-  formMode.value = 'edit'
-  editing.value = item
-  showForm.value = true
-}
-
-async function onSubmitForm(payload) {
-  submitting.value = true
-  try {
-    if (formMode.value === 'add') {
-      const created = await createAccount(payload)
-      accounts.value.unshift(created)
-    } else if (editing.value) {
-      const updated = await updateAccount(editing.value.id, payload)
-      const i = accounts.value.findIndex((a) => a.id === updated.id)
-      if (i !== -1) accounts.value[i] = updated
-    }
-    showForm.value = false
-  } finally {
-    submitting.value = false
-  }
-}
-
-// 启用 / 禁用切换
-async function onToggle(item) {
-  const updated = await updateAccount(item.id, { enabled: !item.enabled })
-  const i = accounts.value.findIndex((a) => a.id === item.id)
-  if (i !== -1) accounts.value[i] = updated
-}
-
-function askDelete(item) {
-  deletingItem.value = item
-  showDelete.value = true
-}
-
-async function confirmDelete() {
-  if (!deletingItem.value) return
-  deleting.value = true
-  try {
-    await deleteAccount(deletingItem.value.id)
-    accounts.value = accounts.value.filter((a) => a.id !== deletingItem.value.id)
-    showDelete.value = false
-  } finally {
-    deleting.value = false
-    deletingItem.value = null
-  }
-}
-
-load()
+// 首次加载（store 内部负责拉取与状态管理）
+store.load()
 </script>
 
 <style scoped>

@@ -5,8 +5,9 @@ from flask_cors import CORS
 from config import get_config
 from app.extensions import db
 from app.models import User  # noqa: F401  确保模型被加载
-from app.utils.response import api_bp  # 健康检查蓝图（统一返回格式演示）
+from app.utils.response import success, error
 from app.routes.example import bp as example_bp
+from app.routes.health import bp as health_bp
 from app.routes.auth import bp as auth_bp
 from app.routes.users import bp as users_bp
 
@@ -27,7 +28,7 @@ def create_app(env_name=None):
     db.init_app(app)
 
     # 注册蓝图（按模块划分）
-    app.register_blueprint(api_bp)          # /api/health
+    app.register_blueprint(health_bp)        # /api/health
     app.register_blueprint(example_bp)       # /api/example
     app.register_blueprint(auth_bp)          # /api/auth
     app.register_blueprint(users_bp)         # /api/users

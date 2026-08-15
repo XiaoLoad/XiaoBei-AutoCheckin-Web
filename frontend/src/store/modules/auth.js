@@ -2,7 +2,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import * as authApi from '@/api/auth'
-import { cancelPendingRequests } from '@/api/request'
+import { bus, EVENTS } from '@/utils/eventBus'
 
 const TOKEN_KEY = 'token'
 const USER_KEY = 'user'
@@ -35,7 +35,20 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  function persist() {    if (token.value) localStorage.setItem(TOKEN_KEY, token.value)
+  // 统一的可访问性决策：是否允许进入某路由。
+  // 把「是否登录 + 会话是否有效 + 角色是否匹配」收敛为单一入口，
+  // 路由守卫不再散点读取内部状态，降低守卫与 store 内部结构的耦合。
+  function canAccess(route) {
+    const meta = route.meta || {}
+    if (!meta.requiresAuth) return true
+    if (!(isAuthenticated.value && isSessionValid())) return false
+    const roles = meta.roles
+    if (roles && roles.length && !roles.includes(role.value)) return false
+    return true
+  }
+
+  function persist() {
+    if (token.value) localStorage.setItem(TOKEN_KEY, token.value)
     else localStorage.removeItem(TOKEN_KEY)
     if (user.value) localStorage.setItem(USER_KEY, JSON.stringify(user.value))
     else localStorage.removeItem(USER_KEY)
@@ -65,6 +78,11 @@ export const useAuthStore = defineStore('auth', () => {
     persist()
   }
 
+  // 仅清理本地会话（不发起网络请求），供路由守卫在发现无效 token 时直接拦截重定向
+  function clearSession() {
+    _clearSession()
+  }
+
   // 退出登录：服务端吊销 token + 客户端清理 + 并发/异常兜底
   async function logout() {
     if (loggingOut.value) return
@@ -76,8 +94,9 @@ export const useAuthStore = defineStore('auth', () => {
     } finally {
       // 2) 无论如何都清除本地会话与凭证
       _clearSession()
-      // 3) 取消仍在进行的并发请求，避免它们拿到 401 后误触发跳转 / 报错
-      cancelPendingRequests()
+      // 3) 发布登出事件，由事件总线统一通知关注方（如请求层取消并发请求），
+      //    取代 auth store 直接依赖 api/request 的反向耦合。
+      bus.emit(EVENTS.AUTH_LOGOUT)
       loggingOut.value = false
     }
   }
@@ -87,6 +106,7 @@ export const useAuthStore = defineStore('auth', () => {
     user,
     isAuthenticated,
     isSessionValid,
+    canAccess,
     role,
     isAdmin,
     username,
@@ -114,12 +134,6 @@ function decodeJwt(raw) {
   } catch {
     return null
   }
-}
-
-// 仅清理本地会话（内存态 + 持久化），用于路由守卫发现无效 token 时直接拦截重定向，
-// 不发起退出登录的网络请求（token 已不可用）。
-function clearSession() {
-  _clearSession()
 }
 
 function parseUser(raw) {

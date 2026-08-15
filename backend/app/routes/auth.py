@@ -8,6 +8,7 @@ from app.extensions import db
 from app.models.user import User
 from app.utils.auth import blacklist_token, generate_token, token_required
 from app.utils.response import error, success
+from app.events import auth_logged_out
 
 bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
@@ -79,4 +80,6 @@ def logout():
         except Exception:
             # 吊销失败不影响前端本地退出；最坏情况该 token 仍可在 exp 前使用，由前端兜底清理
             pass
+    # 发布登出事件，供前端（或未来后端订阅者）统一响应清理，避免调用方硬连线
+    auth_logged_out.send('auth.logout', user=request.current_user)
     return success(message='注销成功')

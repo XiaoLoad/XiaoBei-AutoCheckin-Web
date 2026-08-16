@@ -1,5 +1,5 @@
 <template>
-  <ConfigSection title="时间配置" icon="clock" :source="source">
+  <ConfigSection title="时间配置" icon="clock" :source="source" :error="error" :required="required">
     <div class="space-y-4">
       <div>
         <label class="mb-1.5 block text-xs font-medium text-ink-muted">每日签到时间段</label>
@@ -69,7 +69,9 @@ import BaseSelect from '@/components/BaseSelect.vue'
 
 const props = defineProps({
   config: { type: Object, required: true },
-  source: { type: String, default: '' }
+  source: { type: String, default: '' },
+  error: { type: String, default: '' },
+  required: { type: Boolean, default: false }
 })
 
 const hourOptions = computed(() => Array.from({ length: 24 }, (_, h) => ({ label: String(h), value: h })))

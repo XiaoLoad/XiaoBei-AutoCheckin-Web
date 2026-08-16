@@ -1,5 +1,5 @@
 <template>
-  <ConfigSection title="位置配置" icon="map-pin" :source="source">
+  <ConfigSection title="位置配置" icon="map-pin" :source="source" :error="error" :required="required">
     <div class="space-y-3">
       <div class="flex items-end gap-2">
         <div class="flex-1">
@@ -40,7 +40,9 @@ import { useSignConfigStore } from '@/stores/signConfig'
 
 const props = defineProps({
   config: { type: Object, required: true },
-  source: { type: String, default: '' }
+  source: { type: String, default: '' },
+  error: { type: String, default: '' },
+  required: { type: Boolean, default: false }
 })
 
 const store = useSignConfigStore()

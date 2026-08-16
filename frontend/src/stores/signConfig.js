@@ -1,8 +1,9 @@
 // 签到配置领域状态（Pinia）：收纳用户配置套 / 任务实例配置 / 四类资源池的 mock 数据与 UI 状态。
 // 后端接入时只需改 api/signConfig.js，本 store 与视图无需变动。
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useAuthStore } from '@/store/modules/auth'
+import { toast } from '@/utils/toast'
 import * as api from '@/api/signConfig'
 
 export const useSignConfigStore = defineStore('signConfig', () => {
@@ -11,6 +12,50 @@ export const useSignConfigStore = defineStore('signConfig', () => {
 
   const loading = ref(true)
   const saving = ref(false)
+
+  // 必填校验错误：键为 time / location / remarks，值为提示文案；保存前若非空则阻断提交
+  const formErrors = ref({})
+
+  // 校验一份配置是否满足必填：时间配置 / 位置配置 / 备注列表 三项为必填
+  function validateConfig(config) {
+    const errors = {}
+    const t = config.time || {}
+    const sh = Number(t.startHour)
+    const eh = Number(t.endHour)
+    if (t.startHour == null || t.endHour == null || Number.isNaN(sh) || Number.isNaN(eh)) {
+      errors.time = '请设置完整的签到时间段'
+    } else if (sh >= eh) {
+      errors.time = '开始时间须早于结束时间'
+    } else if (!Array.isArray(t.weekdays) || t.weekdays.length === 0) {
+      errors.time = '请至少选择一个触发星期'
+    }
+    if (!config.locationId) errors.location = '请选择签到位置'
+    const validRemarks = (config.remarks || []).filter((r) => String(r ?? '').trim() !== '')
+    if (validRemarks.length === 0) errors.remarks = '请至少填写一条备注'
+    return errors
+  }
+  function clearFormErrors() {
+    formErrors.value = {}
+  }
+  // 当前正在编辑的配置对象：任务页编辑 taskConfig，其余页编辑默认配置套
+  function currentEditableConfig() {
+    if (activeTab.value === 'tasks') return taskConfig.value
+    return activeSet.value?.config
+  }
+  // 实时消除：某必填项被填写后，立即从 formErrors 移除该项（无需再次提交）。
+  // 只删、不增——仅当该项当前已不再非法时才清除，避免误清未填项。
+  function liveClearErrors() {
+    const errs = formErrors.value
+    if (!errs || Object.keys(errs).length === 0) return
+    const cfg = currentEditableConfig()
+    if (!cfg) return
+    const stillInvalid = validateConfig(cfg)
+    const next = {}
+    for (const k of Object.keys(errs)) {
+      if (stillInvalid[k]) next[k] = errs[k]
+    }
+    formErrors.value = next
+  }
 
   // 元信息
   const accounts = ref([])
@@ -72,6 +117,17 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     { label: 'PushPlus', value: 'pushplus' },
     { label: '邮件', value: 'email' }
   ]
+  // 按通道类型分组的凭证选项：推送配置里每个通道各自绑定一个凭证，只能选同类型的
+  const credentialOptionsByChannel = computed(() => {
+    const map = {}
+    for (const c of channelOptions) {
+      map[c.value] = [
+        { label: '未选择', value: '' },
+        ...credentials.value.filter((x) => x.type === c.value).map((x) => ({ label: x.name, value: x.id }))
+      ]
+    }
+    return map
+  })
   const setOptions = computed(() => userConfigSets.value.map((s) => ({ label: s.name, value: s.id })))
 
   function deepEqual(a, b) {
@@ -133,6 +189,13 @@ export const useSignConfigStore = defineStore('signConfig', () => {
   // ── 配置套：增删改 ──
   async function saveActiveSet() {
     if (!activeSet.value) return
+    const errs = validateConfig(activeSet.value.config)
+    if (Object.keys(errs).length) {
+      formErrors.value = errs
+      toast(`保存失败：${Object.values(errs).join('；')}`, 'error')
+      return
+    }
+    formErrors.value = {}
     saving.value = true
     try {
       const saved = await api.saveConfigSet({ id: activeSet.value.id, name: activeSet.value.name, config: activeSet.value.config })
@@ -177,6 +240,13 @@ export const useSignConfigStore = defineStore('signConfig', () => {
   // ── 任务实例配置保存 ──
   async function saveTaskConfig() {
     if (!selectedAccountId.value) return
+    const errs = validateConfig(taskConfig.value)
+    if (Object.keys(errs).length) {
+      formErrors.value = errs
+      toast(`保存失败：${Object.values(errs).join('；')}`, 'error')
+      return
+    }
+    formErrors.value = {}
     saving.value = true
     try {
       const saved = await api.saveTaskConfig(selectedAccountId.value, selectedTaskType.value, taskConfig.value)
@@ -299,16 +369,36 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     activeTab.value = 'resources'
   }
   function setActiveSet(id) {
+    if (activeSetId.value !== id) formErrors.value = {}
     activeSetId.value = id
   }
   function selectTask(accountId, type) {
+    if (selectedAccountId.value !== accountId || selectedTaskType.value !== type) formErrors.value = {}
     selectedAccountId.value = accountId
     selectedTaskType.value = type
   }
 
+  // 监听必填字段内容：一旦变化且该项已合法，立刻清掉对应红框/提醒。
+  // 放在此处（activeTab / taskConfig 等已初始化之后）注册，避免 watch getter 同步取值时触发 TDZ。
+  watch(
+    () => {
+      const cfg = currentEditableConfig()
+      if (!cfg) return null
+      const t = cfg.time || {}
+      return {
+        time: JSON.stringify({ sh: t.startHour, eh: t.endHour, wd: t.weekdays }),
+        loc: cfg.locationId,
+        rem: JSON.stringify((cfg.remarks || []).map((r) => String(r ?? '').trim()))
+      }
+    },
+    () => liveClearErrors(),
+    { deep: false }
+  )
+
   return {
     loading,
     saving,
+    formErrors,
     accounts,
     taskTypes,
     userConfigSets,
@@ -330,6 +420,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     accountTree,
     locationOptions,
     credentialOptions,
+    credentialOptionsByChannel,
     uaOptions,
     channelOptions,
     setOptions,
@@ -354,6 +445,8 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     setResourceSubTab,
     gotoResource,
     setActiveSet,
-    selectTask
+    selectTask,
+    validateConfig,
+    clearFormErrors
   }
 })

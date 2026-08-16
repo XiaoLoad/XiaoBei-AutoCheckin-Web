@@ -9,22 +9,24 @@
         <ConfigToggle v-model="config.image.enabled" />
       </div>
 
-      <div v-if="config.image.enabled" class="space-y-2">
-        <div>
-          <label class="mb-1 block text-xs font-medium text-ink-muted">图片策略</label>
-          <BaseSelect v-model="config.image.strategy" :options="strategyOptions" size="sm" class="w-72" />
+      <GCollapse :show="config.image.enabled">
+        <div class="space-y-2 pt-1">
+          <div>
+            <label class="mb-1 block text-xs font-medium text-ink-muted">图片策略</label>
+            <BaseSelect v-model="config.image.strategy" :options="strategyOptions" size="sm" class="w-72" />
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-ink-muted">图库 {{ activeCount }} 张（回收站 {{ trashCount }} 张）</span>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1.5 rounded-lg border border-ink/10 px-3 py-1.5 text-sm text-ink-soft transition hover:bg-cloud"
+              @click="store.gotoResource('images')"
+            >
+              <Icon name="image" :size="14" />管理图库
+            </button>
+          </div>
         </div>
-        <div class="flex items-center gap-2">
-          <span class="text-xs text-ink-muted">图库 {{ activeCount }} 张（回收站 {{ trashCount }} 张）</span>
-          <button
-            type="button"
-            class="inline-flex items-center gap-1.5 rounded-lg border border-ink/10 px-3 py-1.5 text-sm text-ink-soft transition hover:bg-cloud"
-            @click="store.gotoResource('images')"
-          >
-            <Icon name="image" :size="14" />管理图库
-          </button>
-        </div>
-      </div>
+      </GCollapse>
     </div>
   </ConfigSection>
 </template>
@@ -33,6 +35,7 @@
 import { computed } from 'vue'
 import ConfigSection from '@/components/signconfig/ConfigSection.vue'
 import ConfigToggle from '@/components/signconfig/ConfigToggle.vue'
+import GCollapse from '@/components/signconfig/GCollapse.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import Icon from '@/components/Icon.vue'
 import { useSignConfigStore } from '@/stores/signConfig'

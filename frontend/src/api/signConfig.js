@@ -25,7 +25,7 @@ export function makeConfig() {
     push: {
       channels: [], // 推送通道多选：serverchan / pushplus / email
       useOwnCredential: true, // true=回填"我的凭证"；false=下方直接填写
-      credId: null, // 回填"我的凭证"时选中的凭证 id
+      credIds: { serverchan: null, pushplus: null, email: null }, // 回填"我的凭证"时各通道各自绑定的凭证 id
       cred: { serverchanKey: '', pushplusToken: '', emailSmtp: '', emailFrom: '', emailPass: '', emailTo: '' },
       notify: { success: false, skip: true, fail: true } // 各状态推送开关：成功 / 跳过 / 失败
     },

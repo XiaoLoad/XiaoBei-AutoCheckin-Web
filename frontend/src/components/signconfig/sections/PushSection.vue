@@ -49,24 +49,60 @@
           </div>
         </div>
 
-        <BaseSelect
-          v-if="config.push.useOwnCredential"
-          v-model="credId"
-          :options="store.credentialOptions"
-          :searchable="true"
-          placeholder="选择我的凭证"
-          size="sm"
-          class="mt-3 w-72"
-        />
+        <!-- 回填我的凭证：每个已选通道各绑一个同类型凭证，支持多通道同时推送 -->
+        <GCollapse :show="config.push.useOwnCredential">
+          <div class="pt-3">
+            <p v-if="selectedChannels.length === 0" class="rounded-xl border border-dashed border-ink/15 px-3 py-3 text-center text-xs text-ink-muted">
+              请先在上方选择推送通道，再为各通道绑定凭证
+            </p>
+            <div v-else class="space-y-2">
+              <p class="text-xs text-ink-muted">为每个通道分别绑定凭证，多通道会同时推送。</p>
+              <transition-group name="remark" tag="div" class="relative space-y-2">
+                <div v-for="ch in selectedChannels" :key="ch" class="flex flex-wrap items-center gap-2">
+                  <span class="w-20 shrink-0 rounded-lg bg-cloud px-2 py-1 text-center text-xs font-medium text-ink-soft">
+                    {{ channelLabel(ch) }}
+                  </span>
+                  <BaseSelect
+                    v-if="hasCredential(ch)"
+                    :model-value="credIdOf(ch)"
+                    :options="store.credentialOptionsByChannel[ch]"
+                    :searchable="true"
+                    placement="auto"
+                    placeholder="选择凭证"
+                    size="sm"
+                    class="w-60"
+                    @update:model-value="(v) => setCredId(ch, v)"
+                  />
+                  <button
+                    v-else
+                    type="button"
+                    class="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-amber/40 bg-amber/10 px-3 py-1.5 text-xs text-amber transition hover:bg-amber/15"
+                    @click="store.gotoResource('credentials')"
+                  >
+                    <Icon name="plus" :size="14" />暂无该类型凭证，去新建
+                  </button>
+                </div>
+              </transition-group>
+            </div>
+          </div>
+        </GCollapse>
 
-        <div v-else class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <input v-if="config.push.channels.includes('serverchan')" v-model="config.push.cred.serverchanKey" class="rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="Server酱 SendKey" />
-          <input v-if="config.push.channels.includes('pushplus')" v-model="config.push.cred.pushplusToken" class="rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="PushPlus Token" />
-          <input v-if="config.push.channels.includes('email')" v-model="config.push.cred.emailSmtp" class="rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="SMTP 地址" />
-          <input v-if="config.push.channels.includes('email')" v-model="config.push.cred.emailFrom" class="rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="发件人" />
-          <input v-if="config.push.channels.includes('email')" v-model="config.push.cred.emailPass" type="password" class="rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="授权码" />
-          <input v-if="config.push.channels.includes('email')" v-model="config.push.cred.emailTo" class="rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="收件人" />
-        </div>
+        <!-- 直接填写：只渲染已选通道对应的字段 -->
+        <GCollapse :show="!config.push.useOwnCredential">
+          <div class="pt-3">
+            <p v-if="selectedChannels.length === 0" class="rounded-xl border border-dashed border-ink/15 px-3 py-3 text-center text-xs text-ink-muted">
+              请先在上方选择推送通道，再填写对应密钥
+            </p>
+            <div v-else class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <input v-if="config.push.channels.includes('serverchan')" v-model="config.push.cred.serverchanKey" class="rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="Server酱 SendKey" />
+              <input v-if="config.push.channels.includes('pushplus')" v-model="config.push.cred.pushplusToken" class="rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="PushPlus Token" />
+              <input v-if="config.push.channels.includes('email')" v-model="config.push.cred.emailSmtp" class="rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="SMTP 地址" />
+              <input v-if="config.push.channels.includes('email')" v-model="config.push.cred.emailFrom" class="rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="发件人" />
+              <input v-if="config.push.channels.includes('email')" v-model="config.push.cred.emailPass" type="password" class="rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="授权码" />
+              <input v-if="config.push.channels.includes('email')" v-model="config.push.cred.emailTo" class="rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="收件人" />
+            </div>
+          </div>
+        </GCollapse>
       </div>
 
       <div>
@@ -82,10 +118,12 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import ConfigSection from '@/components/signconfig/ConfigSection.vue'
 import ConfigToggle from '@/components/signconfig/ConfigToggle.vue'
+import GCollapse from '@/components/signconfig/GCollapse.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
+import Icon from '@/components/Icon.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
 
 const props = defineProps({
@@ -94,14 +132,53 @@ const props = defineProps({
 })
 
 const store = useSignConfigStore()
-const credId = computed({
-  get: () => props.config.push.credId,
-  set: (v) => (props.config.push.credId = v)
-})
+const CHANNELS = ['serverchan', 'pushplus', 'email']
+
+// 补齐 credIds 结构，并兼容早期"单一 credId"数据：按凭证类型归位到对应通道
+function ensureCredIds(cfg) {
+  const push = cfg && cfg.push
+  if (!push) return
+  if (!push.credIds || typeof push.credIds !== 'object') push.credIds = {}
+  for (const ch of CHANNELS) if (!(ch in push.credIds)) push.credIds[ch] = null
+  if (push.credId) {
+    const hit = store.credentials.find((c) => c.id === push.credId)
+    if (hit && CHANNELS.includes(hit.type) && !push.credIds[hit.type]) push.credIds[hit.type] = push.credId
+    delete push.credId
+  }
+}
+
+watch(() => props.config, ensureCredIds, { immediate: true })
+// 凭证池异步加载完成后再兜一次，保证旧数据的类型归位能命中
+watch(() => store.credentials.length, () => ensureCredIds(props.config))
+
+// 按 channelOptions 的顺序输出已选通道，避免点选顺序影响展示顺序
+const selectedChannels = computed(() =>
+  store.channelOptions.map((c) => c.value).filter((v) => props.config.push.channels.includes(v))
+)
+
+function channelLabel(v) {
+  const hit = store.channelOptions.find((c) => c.value === v)
+  return hit ? hit.label : v
+}
+function hasCredential(ch) {
+  return store.credentials.some((c) => c.type === ch)
+}
+function credIdOf(ch) {
+  return (props.config.push.credIds && props.config.push.credIds[ch]) || ''
+}
+function setCredId(ch, v) {
+  props.config.push.credIds[ch] = v || null
+}
 
 function toggleChannel(v) {
-  const i = props.config.push.channels.indexOf(v)
-  if (i === -1) props.config.push.channels.push(v)
-  else props.config.push.channels.splice(i, 1)
+  const list = props.config.push.channels
+  const i = list.indexOf(v)
+  if (i === -1) {
+    list.push(v)
+  } else {
+    list.splice(i, 1)
+    // 取消通道时清掉其凭证绑定，避免保存脏数据
+    if (props.config.push.credIds) props.config.push.credIds[v] = null
+  }
 }
 </script>

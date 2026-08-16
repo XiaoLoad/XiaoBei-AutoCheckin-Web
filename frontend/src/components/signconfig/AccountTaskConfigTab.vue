@@ -91,14 +91,14 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <TimeSection :config="store.taskConfig" />
-          <LocationSection :config="store.taskConfig" />
-          <RemarkSection :config="store.taskConfig" />
+        <MasonryGrid>
+          <TimeSection :config="store.taskConfig" :required="true" :error="store.formErrors.time" />
+          <LocationSection :config="store.taskConfig" :required="true" :error="store.formErrors.location" />
+          <RemarkSection :config="store.taskConfig" :required="true" :error="store.formErrors.remarks" />
           <ImageSection :config="store.taskConfig" />
           <PushSection :config="store.taskConfig" />
           <AdvancedSection :config="store.taskConfig" />
-        </div>
+        </MasonryGrid>
       </template>
     </div>
   </div>
@@ -115,6 +115,7 @@ import RemarkSection from '@/components/signconfig/sections/RemarkSection.vue'
 import ImageSection from '@/components/signconfig/sections/ImageSection.vue'
 import PushSection from '@/components/signconfig/sections/PushSection.vue'
 import AdvancedSection from '@/components/signconfig/sections/AdvancedSection.vue'
+import MasonryGrid from '@/components/signconfig/MasonryGrid.vue'
 
 const store = useSignConfigStore()
 

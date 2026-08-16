@@ -71,14 +71,14 @@
           这是<strong>你的配置套（命名模板）</strong>。不同 B 账号批次时间规律不同（如一批周三至周五、一批仅周日），可分别建套；填写账号任务时再引用对应套回填，避免重复配置。改完点右上角保存。
         </div>
 
-        <div class="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <TimeSection :config="store.activeSet.config" />
-          <LocationSection :config="store.activeSet.config" />
-          <RemarkSection :config="store.activeSet.config" />
+        <MasonryGrid class="mt-4">
+          <TimeSection :config="store.activeSet.config" :required="true" :error="store.formErrors.time" />
+          <LocationSection :config="store.activeSet.config" :required="true" :error="store.formErrors.location" />
+          <RemarkSection :config="store.activeSet.config" :required="true" :error="store.formErrors.remarks" />
           <ImageSection :config="store.activeSet.config" />
           <PushSection :config="store.activeSet.config" />
           <AdvancedSection :config="store.activeSet.config" />
-        </div>
+        </MasonryGrid>
       </template>
     </div>
   </div>
@@ -94,6 +94,7 @@ import RemarkSection from '@/components/signconfig/sections/RemarkSection.vue'
 import ImageSection from '@/components/signconfig/sections/ImageSection.vue'
 import PushSection from '@/components/signconfig/sections/PushSection.vue'
 import AdvancedSection from '@/components/signconfig/sections/AdvancedSection.vue'
+import MasonryGrid from '@/components/signconfig/MasonryGrid.vue'
 
 const store = useSignConfigStore()
 

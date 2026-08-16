@@ -69,3 +69,26 @@
 @media (prefers-reduced-motion: reduce) {
   .brand-glow-a, .brand-glow-b, .brand-ring, .brand-dot { animation: none !important; }
 }
+
+/* 卡片内折叠/展开动画改由 GSAP 驱动的 <GCollapse> 组件实现
+   （见 components/signconfig/GCollapse.vue），不再依赖 CSS grid 0fr→1fr，
+   以免部分环境下内容卡在 0 高度、导致配置区不渲染。 */
+
+/* 列表项增删过渡：备注列表、推送凭证行等按行增删的场景复用 */
+.remark-enter-active,
+.remark-leave-active {
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+.remark-enter-from,
+.remark-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+/* 离开项脱离文档流 + 其余项平滑补位，避免删除时列表跳动 */
+.remark-leave-active {
+  position: absolute;
+  width: 100%;
+}
+.remark-move {
+  transition: transform 0.22s ease;
+}

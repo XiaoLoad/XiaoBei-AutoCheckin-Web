@@ -15,50 +15,53 @@
       <Icon name="chevron-down" :size="16" class="shrink-0 text-ink-muted transition-transform duration-200" :class="open && 'rotate-180'" />
     </button>
 
-    <!-- 下拉面板 -->
-    <transition name="xb-pop">
-      <div
-        v-if="open"
-        ref="panel"
-        class="xb-select-panel absolute left-0 z-50 w-full overflow-hidden rounded-xl border border-ink/10 bg-white shadow-xl shadow-ink/10"
-        :class="panelPlacement === 'top' ? 'bottom-full mb-2' : 'mt-2'"
-      >
-        <!-- 模糊搜索（searchable 版本） -->
-        <div v-if="searchable" class="border-b border-ink/5 p-2">
-          <div class="relative">
-            <Icon name="search" :size="15" class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
-            <input
-              ref="searchInput"
-              v-model="query"
-              type="text"
-              placeholder="搜索…"
-              class="w-full rounded-lg border border-ink/10 bg-cloud/40 py-1.5 pl-8 pr-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/10"
-              @keydown.stop="onSearchKeydown"
-            />
+    <!-- 下拉面板：Teleport 到 body，脱离滚动容器，避免展开时撑开页面引发抖动 -->
+    <Teleport to="body">
+      <transition name="xb-pop">
+        <div
+          v-if="open"
+          ref="panel"
+          class="xb-select-panel fixed z-[1000] overflow-hidden rounded-xl border border-ink/10 bg-white shadow-xl shadow-ink/10"
+          :style="panelStyle"
+          :class="panelPlacement === 'top' ? 'origin-bottom' : 'origin-top'"
+        >
+          <!-- 模糊搜索（searchable 版本） -->
+          <div v-if="searchable" class="border-b border-ink/5 p-2">
+            <div class="relative">
+              <Icon name="search" :size="15" class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
+              <input
+                ref="searchInput"
+                v-model="query"
+                type="text"
+                placeholder="搜索…"
+                class="w-full rounded-lg border border-ink/10 bg-cloud/40 py-1.5 pl-8 pr-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/10"
+                @keydown.stop="onSearchKeydown"
+              />
+            </div>
           </div>
-        </div>
 
-        <ul ref="list" class="xb-select-list max-h-60 overflow-auto py-1">
-          <li
-            v-for="(opt, i) in filteredOptions"
-            :key="String(opt.value)"
-            class="xb-select-option flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-sm transition"
-            :class="[
-              i === highlightedIndex ? 'bg-cloud' : '',
-              isSelected(opt) ? 'font-medium text-brand' : 'text-ink-soft'
-            ]"
-            @mouseenter="highlightedIndex = i"
-            @click="select(opt)"
-          >
-            <span class="min-w-0 flex-1 truncate">{{ opt.label }}</span>
-            <Icon v-if="isSelected(opt)" name="check" :size="15" class="shrink-0 text-brand" />
-          </li>
-          <li v-if="filteredOptions.length === 0" class="px-3 py-3 text-center text-sm text-ink-muted">
-            无匹配项
-          </li>
-        </ul>
-      </div>
-    </transition>
+          <ul ref="list" class="xb-select-list max-h-60 overflow-auto py-1">
+            <li
+              v-for="(opt, i) in filteredOptions"
+              :key="String(opt.value)"
+              class="xb-select-option flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-sm transition"
+              :class="[
+                i === highlightedIndex ? 'bg-cloud' : '',
+                isSelected(opt) ? 'font-medium text-brand' : 'text-ink-soft'
+              ]"
+              @mouseenter="highlightedIndex = i"
+              @click="select(opt)"
+            >
+              <span class="min-w-0 flex-1 truncate">{{ opt.label }}</span>
+              <Icon v-if="isSelected(opt)" name="check" :size="15" class="shrink-0 text-brand" />
+            </li>
+            <li v-if="filteredOptions.length === 0" class="px-3 py-3 text-center text-sm text-ink-muted">
+              无匹配项
+            </li>
+          </ul>
+        </div>
+      </transition>
+    </Teleport>
   </div>
 </template>
 
@@ -89,6 +92,8 @@ const list = ref(null)
 const searchInput = ref(null)
 const panel = ref(null)
 const panelPlacement = ref(props.placement === 'auto' ? 'bottom' : props.placement)
+// 面板位置（fixed，相对视口）：由触发器 getBoundingClientRect 计算，脱离滚动容器
+const panelStyle = ref({ left: '0px', top: '0px', width: '0px' })
 
 // 归一化选项为 { label, value }
 const normalized = computed(() =>
@@ -131,27 +136,33 @@ async function openPanel() {
   if (props.searchable && searchInput.value) searchInput.value.focus()
 }
 
-// 展开方向：默认向下；auto 模式下若下方空间不足且上方更充裕，则翻转为向上展开
+// 面板定位：始终以视口坐标（fixed）渲染在 body 下，按可用空间自动上/下翻转。
+// 面板挂 body 而非滚动容器内，展开后不会撑大页面滚动高度，从而避免抖动。
 function refinePlacement() {
-  if (props.placement !== 'auto') {
-    panelPlacement.value = props.placement
-    return
-  }
   const trigger = root.value
-  const pnl = panel.value
-  if (!trigger || !pnl) {
-    panelPlacement.value = 'bottom'
-    return
-  }
+  if (!trigger) return
   const rect = trigger.getBoundingClientRect()
-  const ph = pnl.offsetHeight
+  const ph = panel.value ? panel.value.offsetHeight : 240
   const spaceBelow = window.innerHeight - rect.bottom
   const spaceAbove = rect.top
-  panelPlacement.value = spaceBelow < ph + 8 && spaceAbove > ph + 8 ? 'top' : 'bottom'
+  const placeTop = spaceBelow < ph + 12 && spaceAbove > ph + 12
+  panelPlacement.value = placeTop ? 'top' : 'bottom'
+  const width = trigger.offsetWidth
+  const style = { left: rect.left + 'px', width: width + 'px', minWidth: width + 'px' }
+  if (placeTop) style.top = Math.max(8, rect.top - ph - 8) + 'px'
+  else style.top = rect.bottom + 8 + 'px'
+  panelStyle.value = style
 }
 
 function onResize() {
   if (open.value) refinePlacement()
+}
+
+// 展开时监听滚动：页面滚动则关闭面板（忽略面板内部列表自身的滚动），
+// 避免面板脱离触发器悬空；同时用户滚动通常意味着放弃当前选择。
+function onScrollClose(e) {
+  if (panel.value && panel.value.contains(e.target)) return
+  close()
 }
 
 function select(opt) {
@@ -222,9 +233,12 @@ watch(open, (v) => {
   if (v) {
     document.addEventListener('mousedown', onDocClick)
     window.addEventListener('resize', onResize)
+    // capture 阶段监听，可捕获任意容器（含滚动主区域）的滚动；面板内列表滚动已单独排除
+    window.addEventListener('scroll', onScrollClose, true)
   } else {
     document.removeEventListener('mousedown', onDocClick)
     window.removeEventListener('resize', onResize)
+    window.removeEventListener('scroll', onScrollClose, true)
   }
 })
 
@@ -232,6 +246,7 @@ onMounted(() => document.removeEventListener('mousedown', onDocClick))
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', onDocClick)
   window.removeEventListener('resize', onResize)
+  window.removeEventListener('scroll', onScrollClose, true)
 })
 </script>
 
@@ -240,9 +255,17 @@ onBeforeUnmount(() => {
 .xb-pop-leave-active {
   transition: opacity 0.15s ease, transform 0.15s ease;
 }
-.xb-pop-enter-from,
-.xb-pop-leave-to {
+/* 向下展开（top 定位）从上方滑入；向上展开（bottom 定位）从下方滑入，避免与触发器方向冲突 */
+.xb-pop-enter-from.xb-select-panel,
+.xb-pop-leave-to.xb-select-panel {
   opacity: 0;
+}
+.xb-pop-enter-from.origin-top,
+.xb-pop-leave-to.origin-top {
   transform: translateY(-4px);
+}
+.xb-pop-enter-from.origin-bottom,
+.xb-pop-leave-to.origin-bottom {
+  transform: translateY(4px);
 }
 </style>

@@ -64,19 +64,31 @@
               <h3 class="text-sm font-semibold text-ink">{{ accountName }} · {{ typeLabel }}</h3>
               <p class="text-xs text-ink-muted">从下方六类配置中调整；也可先选一套配置套回填，再按需微调。</p>
             </div>
-            <button
-              class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
-              :disabled="store.saving"
-              @click="store.saveTaskConfig"
-            >
-              <Icon name="check" :size="14" />{{ store.saving ? '保存中…' : '保存' }}
-            </button>
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-ink/10 px-4 text-sm font-medium text-ink-soft transition hover:bg-cloud disabled:opacity-50"
+                :disabled="store.saving"
+                @click="store.resetTaskConfig"
+              >
+                <Icon name="trash" :size="14" />清空填写
+              </button>
+              <button
+                class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
+                :disabled="store.saving"
+                @click="store.saveTaskConfig"
+              >
+                <Icon name="check" :size="14" />{{ store.saving ? '保存中…' : '保存' }}
+              </button>
+            </div>
           </div>
 
           <!-- 配置套回填 + 任务状态 -->
           <div class="flex flex-wrap items-center gap-2 rounded-lg bg-cloud/50 px-3 py-2">
             <span class="text-xs text-ink-soft">配置套回填：</span>
-            <BaseSelect v-model="applySetId" :options="store.setOptions" :searchable="true" size="sm" placeholder="选择配置套" class="w-48" />
+            <div class="w-56">
+              <BaseSelect v-model="applySetId" :options="store.setOptions" :searchable="true" size="sm" placeholder="选择配置套" />
+            </div>
             <button
               type="button"
               class="inline-flex h-8 items-center gap-1 rounded-lg border border-ink/10 px-3 text-sm text-ink-soft transition hover:bg-cloud disabled:opacity-40"

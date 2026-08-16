@@ -7,7 +7,7 @@
 // 底部对齐：仅把每列「末张卡片」用 min-height 拉伸到统一的静止底边，使卡片底边本身落在同一条水平线；
 // 用 min-height 而非 height —— 内容短则底部留白对齐、内容增长超出底边时自动撑高（绝不溢出），
 // 因此展开态下某卡超出底边只是「临时不统一」，收回（内容减少）后自然回到统一底边。
-import { h, ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import { h, ref, onMounted, onActivated, onBeforeUnmount, nextTick, watch } from 'vue'
 
 const GAP = 16
 
@@ -154,6 +154,10 @@ export default {
         if (el) ro.observe(el)
       })
       window.addEventListener('resize', onWindowResize)
+    })
+    // keep-alive 重新激活该 Tab 时，DOM 已脱离文档又被重新插入，需按当前宽度重排一次
+    onActivated(() => {
+      if (!isRelayouting) relayout(true)
     })
     onBeforeUnmount(() => {
       if (ro) ro.disconnect()

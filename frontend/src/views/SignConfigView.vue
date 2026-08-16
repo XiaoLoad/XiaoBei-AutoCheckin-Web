@@ -22,9 +22,11 @@
     </div>
 
     <div v-if="store.loading" class="dash-card flex flex-1 items-center justify-center text-ink-muted">加载中…</div>
-    <DefaultConfigTab v-else-if="effectiveTab === 'default'" />
-    <AccountTaskConfigTab v-else-if="effectiveTab === 'tasks'" />
-    <MyResourcesTab v-else-if="effectiveTab === 'resources'" />
+    <keep-alive>
+      <DefaultConfigTab v-if="effectiveTab === 'default'" />
+      <AccountTaskConfigTab v-else-if="effectiveTab === 'tasks'" />
+      <MyResourcesTab v-else-if="effectiveTab === 'resources'" />
+    </keep-alive>
 
     <div class="h-6 shrink-0 -mt-6" aria-hidden="true"></div>
   </div>

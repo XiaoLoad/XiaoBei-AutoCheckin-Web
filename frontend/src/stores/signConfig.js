@@ -264,6 +264,22 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     taskConfigs.value = { ...taskConfigs.value, [taskConfigKey.value]: cloned }
   }
 
+  // 清空当前正在编辑的配置（舍弃所有已填内容，回到默认空白模板）。
+  // 配合「保存按钮旁的清空填写」使用：Tab 切换内容由 store 持有不会丢失，此为手动显式清空。
+  function resetActiveSetConfig() {
+    const i = userConfigSets.value.findIndex((s) => s.id === activeSetId.value)
+    if (i === -1) return
+    const clone = { ...userConfigSets.value[i] }
+    clone.config = api.makeConfig()
+    userConfigSets.value[i] = clone
+    formErrors.value = {}
+  }
+  function resetTaskConfig() {
+    if (!selectedAccountId.value) return
+    taskConfigs.value = { ...taskConfigs.value, [taskConfigKey.value]: api.makeConfig() }
+    formErrors.value = {}
+  }
+
   // ── 资源池：位置 ──
   async function saveLocation(payload) {
     saving.value = true
@@ -431,6 +447,8 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     renameConfigSet,
     saveTaskConfig,
     applySetToTask,
+    resetActiveSetConfig,
+    resetTaskConfig,
     saveLocation,
     deleteLocation,
     trashImage,

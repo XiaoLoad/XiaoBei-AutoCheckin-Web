@@ -81,6 +81,8 @@ const router = createRouter({
 
 // 动态路由是否已挂载（按角色仅挂载一次，登出时复位）
 const dynamicAdded = ref(false)
+// 刷新竞态兜底：记录已为哪个 path 补挂并重放过，防止「未挂载→补挂→仍 not-found→再补挂」死循环
+const replayAttempted = ref('')
 
 // 角色是否满足路由的 roles 约束；无 roles 视为不限制。
 // 注意：不再为 admin 做全局绕过——管理员只应看到/进入「roles 含 admin」的路由，
@@ -115,6 +117,34 @@ function filterAsyncRoutes(routes, role) {
   return res
 }
 
+// 解析当前角色：优先用 store 中已挂载的 user.role；
+// 兜底：localStorage 的 user 缺失（极少见）时，从 JWT payload 的 role 字段补回，
+// 避免「role 为空 → 动态路由全部不加 → 刷新落到 not-found → 回仪表盘」的死局。
+function resolveRole() {
+  const auth = useAuthStore()
+  if (auth.role) return auth.role
+  try {
+    const raw = auth.token
+    if (raw) {
+      const seg = raw.split('.')[1]
+      if (seg) {
+        const json = JSON.parse(
+          decodeURIComponent(
+            atob(seg.replace(/-/g, '+').replace(/_/g, '/'))
+              .split('')
+              .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+              .join('')
+          )
+        )
+        if (json.role) return json.role
+      }
+    }
+  } catch {
+    /* 解析失败忽略，回落到空角色 */
+  }
+  return ''
+}
+
 // 按当前角色挂载动态路由
 function addRoutesByRole(role) {
   filterAsyncRoutes(dynamicRoutes, role).forEach((r) => router.addRoute(r))
@@ -126,6 +156,23 @@ function removeDynamicRoutes() {
     if (router.hasRoute(r.name)) router.removeRoute(r.name)
   })
   dynamicAdded.value = false
+  replayAttempted.value = ''
+}
+
+// 应用启动时为已登录会话预注册动态路由：刷新后首跳不再因「路由尚未挂载」而落到
+// 404 → 仪表盘，浏览器地址栏的当前页能被直接解析并停留。须在 pinia 安装后调用。
+// 用 try/catch 包裹：预注册失败不得阻塞应用启动，守卫会在首次导航时兜底补挂。
+export function syncInitialRoutes() {
+  try {
+    const auth = useAuthStore()
+    if (auth.isAuthenticated && auth.isSessionValid() && !dynamicAdded.value) {
+      addRoutesByRole(resolveRole())
+      dynamicAdded.value = true
+    }
+  } catch (e) {
+    // 预注册失败不应阻塞启动；守卫首跳会兜底
+    console.warn('[router] syncInitialRoutes 失败，将由守卫兜底:', e)
+  }
 }
 
 // 路由守卫：登录校验 + 角色权限控制 + 动态路由挂载
@@ -154,7 +201,9 @@ router.beforeEach((to, from, next) => {
     addRoutesByRole(auth.role)
     dynamicAdded.value = true
     auth.bumpRouteEpoch() // 通知菜单重算
-    return next({ ...to, replace: true })
+    // 必须用「原始 location」（仅 path/query/hash，不带 to 的 matched）重放，
+    // 否则 Vue Router 会沿用旧的 not-found 匹配结果，无法重新解析已挂载的路由。
+    return next({ path: to.path, query: to.query, hash: to.hash, replace: true })
   }
 
   // 3) 已登录但会话失效 → 清态跳登录
@@ -163,11 +212,30 @@ router.beforeEach((to, from, next) => {
     return next({ name: 'login', query: { redirect: to.fullPath } })
   }
 
-  // 4) 已登录却落到 404：多为手动输入了「未挂载的管理员路由」或无效路径。
-  //    已登录态下绝不再跳登录页——按名册判定后给出明确提示并回仪表盘。
+  // 4) 已登录却落到 404：多为「路由尚未挂载」或手动输入了无效/越权路径。
+  //    已登录态下绝不再跳登录页。分两种情况：
+  //    (a) 命中名册中「当前角色有权访问」的已知路由，但路由因初始化竞态尚未挂载
+  //        → 兜底补挂并重放当前目标，确保刷新后能停留在原页面（不再回仪表盘）。
+  //    (b) 越权路径 / 完全无效路径 → 提示后回仪表盘。
   if (to.name === 'not-found') {
     const entry = matchRegistry(to.path)
-    if (entry && !hasRole(auth.role, entry.roles)) {
+    const role = resolveRole()
+    if (entry && hasRole(role, entry.roles)) {
+      // (a) 已知且有权访问，却因路由未挂载而落到 404（刷新竞态 / 初始化顺序等）
+      //     → 兜底补挂并重放当前目标，确保刷新后停留在原页面。
+      //     用 replayAttempted 按 path 去重，避免极端情况下无限重放。
+      if (replayAttempted.value !== to.path) {
+        replayAttempted.value = to.path
+        addRoutesByRole(role)
+        dynamicAdded.value = true
+        auth.bumpRouteEpoch() // 通知菜单重算
+        // 用原始 location 重放，强制重新匹配（见上方说明）
+        return next({ path: to.path, query: to.query, hash: to.hash, replace: true })
+      }
+      // 已补挂重放一次仍 404（理论不可能），回仪表盘
+      return next('/')
+    }
+    if (entry && !hasRole(role, entry.roles)) {
       // 命中已知动态路由，但当前角色无权访问（如普通用户访问 /users）
       toast('无权限访问该页面', 'error')
     } else if (!entry) {

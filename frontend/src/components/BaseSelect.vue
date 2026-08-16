@@ -148,7 +148,9 @@ function refinePlacement() {
   const placeTop = spaceBelow < ph + 12 && spaceAbove > ph + 12
   panelPlacement.value = placeTop ? 'top' : 'bottom'
   const width = trigger.offsetWidth
-  const style = { left: rect.left + 'px', width: width + 'px', minWidth: width + 'px' }
+  // 面板至少与触发器同宽（避免比输入框还窄），但按内容自适应撑宽以完整显示选项文字，
+  // 并用 90vw 封顶，防止超长选项把面板拉出视口。
+  const style = { left: rect.left + 'px', minWidth: width + 'px', maxWidth: '90vw' }
   if (placeTop) style.top = Math.max(8, rect.top - ph - 8) + 'px'
   else style.top = rect.bottom + 8 + 'px'
   panelStyle.value = style

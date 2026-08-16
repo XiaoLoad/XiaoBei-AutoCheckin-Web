@@ -57,14 +57,24 @@
             <h3 class="text-sm font-semibold text-ink">正在编辑：{{ store.activeSet.name }}</h3>
             <p class="text-xs text-ink-muted">配置套是一份完整模板；在「账号任务配置」里可指定某任务回填此套。</p>
           </div>
-          <button
-            type="button"
-            class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
-            :disabled="store.saving"
-            @click="store.saveActiveSet"
-          >
-            <Icon name="check" :size="14" />{{ store.saving ? '保存中…' : '保存配置套' }}
-          </button>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-ink/10 px-4 text-sm font-medium text-ink-soft transition hover:bg-cloud disabled:opacity-50"
+              :disabled="store.saving"
+              @click="store.resetActiveSetConfig"
+            >
+              <Icon name="trash" :size="14" />清空填写
+            </button>
+            <button
+              type="button"
+              class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
+              :disabled="store.saving"
+              @click="store.saveActiveSet"
+            >
+              <Icon name="check" :size="14" />{{ store.saving ? '保存中…' : '保存配置套' }}
+            </button>
+          </div>
         </div>
 
         <div class="rounded-xl border-l-4 border-brand/30 bg-brand/5 px-4 py-3 text-xs leading-relaxed text-ink-soft">

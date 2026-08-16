@@ -14,6 +14,9 @@ export const useAuthStore = defineStore('auth', () => {
   // 退出中标记：防止并发点击 / 重复触发导致重复请求或竞态
   const loggingOut = ref(false)
 
+  // 动态路由挂载/卸载后自增，作为侧边栏菜单重算的响应式依赖
+  const routeEpoch = ref(0)
+
   const isAuthenticated = computed(() => !!token.value)
   const role = computed(() => user.value?.role || '')
   const isAdmin = computed(() => role.value === 'admin')
@@ -83,6 +86,11 @@ export const useAuthStore = defineStore('auth', () => {
     _clearSession()
   }
 
+  // 动态路由变化后自增，驱动依赖 routeEpoch 的菜单重新计算
+  function bumpRouteEpoch() {
+    routeEpoch.value++
+  }
+
   // 退出登录：服务端吊销 token + 客户端清理 + 并发/异常兜底
   async function logout() {
     if (loggingOut.value) return
@@ -107,6 +115,8 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     isSessionValid,
     canAccess,
+    routeEpoch,
+    bumpRouteEpoch,
     role,
     isAdmin,
     username,

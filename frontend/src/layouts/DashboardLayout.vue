@@ -120,6 +120,7 @@
 import { ref, computed } from 'vue'
 import { useRoute, useRouter, RouterLink, RouterView } from 'vue-router'
 import { useAuthStore } from '@/store/modules/auth'
+import { hasRole } from '@/directives/permission'
 import Icon from '@/components/Icon.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
 
@@ -139,36 +140,36 @@ const showLogoutConfirm = ref(false)
 // [权限判断] 按角色渲染菜单：管理员可见全部；普通用户仅见本人相关与"个人设置"
 const roleLabel = computed(() => (auth.isAdmin ? '管理员' : '普通用户'))
 
+// 菜单由「已挂载的路由」按角色派生，而非硬编码分组：
+// 动态路由登录后才按角色挂载，故普通用户根本不会拥有管理员路由，菜单天然收敛。
+// 依赖 auth.routeEpoch：动态路由挂载/卸载后强制重算菜单。
 const navGroups = computed(() => {
-  const groups = [
-    { title: '概览', items: [{ name: '概览', to: '/', icon: 'dashboard' }] },
-    {
-      title: '运营管理',
-      items: [
-        { name: '签到记录', to: '/sign-records', icon: 'calendar' },
-        { name: auth.isAdmin ? '平台资源池' : '签到配置', to: '/sign-config', icon: 'sliders' }
-      ]
-    }
-  ]
-  if (auth.isAdmin) {
-    groups.push({
-      title: '系统',
-      items: [
-        // 用户管理（查看/新增/编辑/删除/权限管理）仅管理员可见
-        { name: '用户管理', to: '/users', icon: 'users' },
-        { name: '系统设置', to: '/settings', icon: 'settings' }
-      ]
+  // 依赖 auth.routeEpoch：动态路由挂载/卸载后该值自增，强制本 computed 重算菜单
+  auth.routeEpoch
+
+  const order = []
+  const map = {}
+  router
+    .getRoutes()
+    .filter((r) => r.meta?.requiresAuth && hasRole(auth.role, r.meta.roles))
+    .forEach((r) => {
+      const g = r.meta.group || '其它'
+      if (!map[g]) {
+        map[g] = []
+        order.push(g)
+      }
+      map[g].push({ name: navTitleOf(r), to: r.path, icon: r.meta.icon, order: r.meta.order ?? 99 })
     })
-  } else {
-    // 普通用户：在"运营管理"中提供 B 平台账号管理入口
-    groups[1].items.push({ name: '账号管理', to: '/accounts', icon: 'authorize' })
-    groups.push({
-      title: '系统',
-      items: [{ name: '个人设置', to: '/settings', icon: 'settings' }]
-    })
-  }
-  return groups
+  // 同组导航按 meta.order 升序排列（未声明者置后），保证顺序确定、不依赖路由注册顺序
+  return order.map((g) => ({ title: g, items: map[g].slice().sort((a, b) => a.order - b.order) }))
 })
+
+// 个别路由按角色使用不同的菜单文案（其余沿用 meta.title）
+function navTitleOf(r) {
+  if (r.name === 'sign-config') return auth.isAdmin ? '平台资源池' : '签到配置'
+  if (r.name === 'settings') return auth.isAdmin ? '系统设置' : '个人设置'
+  return r.meta?.title || r.name
+}
 
 // 点击退出按钮：先弹二次确认，不直接登出
 function handleLogout() {

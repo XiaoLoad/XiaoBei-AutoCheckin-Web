@@ -5,7 +5,7 @@ from datetime import datetime
 from flask import Blueprint, request
 
 from app.extensions import db
-from app.models.user import User
+from app.models.user import User, now_cst
 from app.utils.auth import blacklist_token, generate_token, token_required
 from app.utils.response import error, success
 from app.events import auth_logged_out
@@ -34,7 +34,7 @@ def login():
         return error(message='密码错误', code=1002, status=401)
 
     token = generate_token(user)
-    user.last_login = datetime.utcnow()
+    user.last_login = now_cst()
     db.session.commit()
 
     return success(

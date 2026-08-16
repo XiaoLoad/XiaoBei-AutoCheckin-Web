@@ -11,6 +11,8 @@
   -->
   <component :is="layout" v-if="ready" :key="$route.path" />
   <div v-else class="min-h-screen bg-cloud" />
+  <!-- 全局 Toast 宿主：独立于布局，路由守卫等任意位置均可触发提示 -->
+  <ToastHost />
 </template>
 
 <script setup>
@@ -18,6 +20,7 @@ import { computed, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import DashboardLayout from '@/layouts/DashboardLayout.vue'
 import BlankLayout from '@/layouts/BlankLayout.vue'
+import ToastHost from '@/components/ToastHost.vue'
 
 const route = useRoute()
 const router = useRouter()

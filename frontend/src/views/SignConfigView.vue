@@ -4,8 +4,7 @@
     <div class="dash-card fade-up shrink-0 p-3 sm:p-4">
       <div class="flex flex-wrap items-center gap-x-4 gap-y-3">
         <div class="flex items-center gap-2">
-          <span class="text-sm font-medium text-ink-soft">{{ title }}</span>
-          <span class="hidden text-xs text-ink-muted sm:inline">{{ subtitle }}</span>
+          <span class="text-xs text-ink-muted">{{ subtitle }}</span>
         </div>
         <div v-if="tabs.length > 1" class="ml-auto inline-flex items-center rounded-xl bg-cloud p-1">
           <button
@@ -54,10 +53,11 @@ const tabs = computed(() =>
         { value: 'resources', label: '我的资源', icon: 'layers' }
       ]
 )
-// 标题按角色区分：管理员只维护平台级资源（位置池/UA 模板），不宜沿用「签到配置」
-const title = computed(() => (isAdmin.value ? '平台资源' : '签到配置'))
+// 副标题（第二条标题行）：一句话说明该模块的功能用途
 const subtitle = computed(() =>
-  isAdmin.value ? '平台级资源（位置池 · UA 模板），普通用户可选不可改' : '配置套 · 账号任务配置 · 我的资源'
+  isAdmin.value
+    ? '管理全站共用的平台级资源：预设位置池与 User-Agent 模板，供普通用户在签到配置中引用，平台维护、用户不可修改。'
+    : '管理你的签到配置套、账号任务配置与私有资源（位置池 · 图库 · 凭证）。'
 )
 
 // 兜底：切换角色后若 activeTab 不在当前角色 tabs 内，回落到第一个可用 Tab

@@ -185,6 +185,12 @@ export async function deleteUaTemplate(id) {
   await delay()
   return clone((mock.uaTemplates = mock.uaTemplates.filter((x) => x.id !== id)))
 }
+// 批量删除 UA 模板（管理员）：传入 id 数组，一次性移除
+export async function deleteUaTemplates(ids) {
+  await delay()
+  const set = new Set(ids)
+  return clone((mock.uaTemplates = mock.uaTemplates.filter((x) => !set.has(x.id))))
+}
 
 // 图库：上传（模拟）、删除（移入回收站）、恢复
 export async function saveImage(payload) {

@@ -1,65 +1,155 @@
 <template>
   <div class="space-y-3">
-    <div class="flex items-center justify-between gap-2">
-      <p class="text-xs text-ink-muted">
-        系统级 UA 模板（机型默认值），由管理员维护；普通用户在「高级设置」中下拉选择，亦可自定义填写。
-      </p>
+    <p class="text-xs text-ink-muted">
+      系统级 UA 模板（机型默认值），由管理员维护；普通用户在「高级设置」中下拉选择，亦可自定义填写。
+    </p>
+
+    <!-- 顶部工具栏：搜索 + 添加 -->
+    <div class="flex flex-wrap items-center gap-2">
+      <div class="relative min-w-[200px] flex-1">
+        <Icon name="search" :size="15" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
+        <input
+          v-model="query"
+          type="text"
+          class="w-full rounded-xl border border-ink/10 bg-white py-2 pl-9 pr-3 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
+          placeholder="搜索机型名称"
+          @input="onQuery"
+        />
+      </div>
       <button
         v-if="isAdmin"
         type="button"
-        class="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
-        :disabled="editing"
+        class="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
+        :disabled="showModal"
         @click="openAdd"
       >
         <Icon name="plus" :size="15" />添加模板
       </button>
     </div>
 
-    <!-- 内联表单 -->
-    <div v-if="editing" class="rounded-xl border border-brand/20 bg-brand/5 p-3">
-      <input
-        v-model="form.name"
-        class="mb-2 w-full rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
-        placeholder="模板名称（如 iPhone 15）"
-      />
-      <textarea
-        v-model="form.ua"
-        rows="3"
-        class="w-full resize-y rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
-        placeholder="User-Agent 字符串"
-      />
-      <div class="mt-2 flex justify-end gap-2">
-        <button class="rounded-lg border border-ink/10 px-3 py-1.5 text-sm text-ink-soft hover:bg-cloud" @click="editing = null">取消</button>
+    <!-- 批量操作条（仅管理员，有选中时显示） -->
+    <div v-if="isAdmin && selectedIds.length" class="flex items-center justify-between rounded-xl bg-brand/5 px-3 py-2 text-sm">
+      <span class="text-ink-soft">已选 {{ selectedIds.length }} 项</span>
+      <div class="flex items-center gap-2">
+        <button class="rounded-lg border border-ink/10 px-3 py-1 text-ink-soft transition hover:bg-cloud" @click="clearSelection">取消选择</button>
         <button
-          class="rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-dark disabled:opacity-50"
-          :disabled="!form.name || !form.ua"
-          @click="save"
+          class="inline-flex items-center gap-1.5 rounded-lg bg-danger px-3 py-1 font-medium text-white transition hover:bg-danger/90 disabled:opacity-50"
+          :disabled="saving"
+          @click="batchDelete"
         >
-          保存
+          <Icon name="trash" :size="14" />批量删除
         </button>
       </div>
     </div>
 
-    <!-- 列表 -->
-    <div v-if="store.uaTemplates.length === 0" class="py-8 text-center text-sm text-ink-muted">暂无模板</div>
-    <div v-else class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-      <div v-for="u in store.uaTemplates" :key="u.id" class="rounded-xl border border-ink/10 bg-white p-3">
-        <div class="mb-1 flex items-center justify-between gap-2">
-          <p class="text-sm font-medium text-ink">{{ u.name }}</p>
-          <div v-if="isAdmin" class="flex shrink-0 gap-3">
-            <button class="text-xs text-brand hover:underline" @click="openEdit(u)">编辑</button>
-            <button class="text-xs text-danger hover:underline" @click="del(u)">删除</button>
-          </div>
-        </div>
-        <p class="break-all text-xs text-ink-muted">{{ u.ua }}</p>
-      </div>
+    <!-- 空态 -->
+    <div v-if="paged.length === 0" class="py-10 text-center text-sm text-ink-muted">
+      {{ query ? '未找到匹配的机型模板' : '暂无模板' }}
     </div>
+
+    <!-- 列表 -->
+    <div v-else class="overflow-hidden rounded-xl border border-ink/10">
+      <table class="w-full text-left text-sm">
+        <thead class="bg-cloud/60 text-ink-muted">
+          <tr>
+            <th v-if="isAdmin" class="w-10 px-3 py-2">
+              <input
+                type="checkbox"
+                class="h-4 w-4 cursor-pointer accent-brand"
+                :checked="allOnPageSelected"
+                @change="toggleAllOnPage"
+              />
+            </th>
+            <th class="px-3 py-2 font-medium">机型名称</th>
+            <th class="px-3 py-2 font-medium">User-Agent</th>
+            <th v-if="isAdmin" class="px-3 py-2 text-right font-medium">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="u in paged"
+            :key="u.id"
+            class="border-t border-ink/5 transition"
+            :class="selectedIds.includes(u.id) ? 'bg-brand/5' : 'hover:bg-cloud/40'"
+          >
+            <td v-if="isAdmin" class="px-3 py-2">
+              <input
+                type="checkbox"
+                class="h-4 w-4 cursor-pointer accent-brand"
+                :checked="selectedIds.includes(u.id)"
+                @change="toggle(u.id)"
+              />
+            </td>
+            <td class="px-3 py-2 font-medium text-ink">{{ u.name }}</td>
+            <td class="px-3 py-2">
+              <p class="max-w-md truncate text-xs text-ink-muted" :title="u.ua">{{ u.ua }}</p>
+            </td>
+            <td v-if="isAdmin" class="px-3 py-2 text-right">
+              <button class="text-xs text-brand hover:underline" @click="openEdit(u)">编辑</button>
+              <button class="ml-3 text-xs text-danger hover:underline" @click="del(u)">删除</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 分页（复用 BasePagination） -->
+    <BasePagination
+      v-if="filtered.length"
+      :page="page"
+      :page-size="pageSize"
+      :total="filtered.length"
+      @update:page="page = $event"
+      @update:page-size="onSize"
+    />
+
+    <!-- 添加 / 编辑 模态框 -->
+    <BaseModal v-model="showModal" :title="editingId ? '编辑 UA 模板' : '添加 UA 模板'">
+      <div class="space-y-3">
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-ink-soft">机型名称</label>
+          <input
+            v-model="form.name"
+            class="w-full rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
+            placeholder="模板名称（如 iPhone 15）"
+          />
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-ink-soft">User-Agent</label>
+          <textarea
+            v-model="form.ua"
+            rows="3"
+            class="w-full resize-y rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
+            placeholder="User-Agent 字符串"
+          />
+        </div>
+      </div>
+      <template #footer>
+        <button
+          type="button"
+          class="flex-1 rounded-xl border border-ink/10 px-4 py-2.5 text-sm font-medium text-ink-soft transition hover:bg-cloud"
+          @click="showModal = false"
+        >
+          取消
+        </button>
+        <button
+          type="button"
+          class="flex-1 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand/25 transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+          :disabled="!form.name || !form.ua || saving"
+          @click="save"
+        >
+          {{ saving ? '保存中…' : '保存' }}
+        </button>
+      </template>
+    </BaseModal>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import Icon from '@/components/Icon.vue'
+import BasePagination from '@/components/BasePagination.vue'
+import BaseModal from '@/components/BaseModal.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
 import { useAuthStore } from '@/store/modules/auth'
 
@@ -67,24 +157,89 @@ const store = useSignConfigStore()
 const auth = useAuthStore()
 const isAdmin = computed(() => auth.isAdmin)
 
-const editing = ref(false)
-const form = reactive({ id: '', name: '', ua: '' })
+// 模糊搜索（按机型名称，不区分大小写）
+const query = ref('')
+const page = ref(1)
+const pageSize = ref(10)
+const selectedIds = ref([])
+
+const filtered = computed(() => {
+  const q = query.value.trim().toLowerCase()
+  if (!q) return store.uaTemplates
+  return store.uaTemplates.filter((u) => u.name.toLowerCase().includes(q))
+})
+
+// 搜索词或每页条数变化后，页码越界则回拉
+watch([filtered, pageSize], () => {
+  const tp = Math.max(1, Math.ceil(filtered.value.length / pageSize.value))
+  if (page.value > tp) page.value = tp
+})
+function onQuery() {
+  page.value = 1
+  clearSelection()
+}
+function onSize(s) {
+  pageSize.value = Number(s)
+}
+
+const paged = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return filtered.value.slice(start, start + pageSize.value)
+})
+
+// 批量选择
+function toggle(id) {
+  const i = selectedIds.value.indexOf(id)
+  if (i === -1) selectedIds.value.push(id)
+  else selectedIds.value.splice(i, 1)
+}
+function toggleAllOnPage(e) {
+  const ids = paged.value.map((u) => u.id)
+  if (e.target.checked) {
+    for (const id of ids) if (!selectedIds.value.includes(id)) selectedIds.value.push(id)
+  } else {
+    selectedIds.value = selectedIds.value.filter((id) => !ids.includes(id))
+  }
+}
+const allOnPageSelected = computed(
+  () => paged.value.length > 0 && paged.value.every((u) => selectedIds.value.includes(u.id))
+)
+function clearSelection() {
+  selectedIds.value = []
+}
+async function batchDelete() {
+  if (!selectedIds.value.length) return
+  await store.deleteUaTemplates(selectedIds.value)
+  clearSelection()
+}
+
+// 模态框：添加 / 编辑
+const showModal = ref(false)
+const editingId = ref('')
+const saving = ref(false)
+const form = reactive({ name: '', ua: '' })
 
 function openAdd() {
-  form.id = ''
+  editingId.value = ''
   form.name = ''
   form.ua = ''
-  editing.value = true
+  showModal.value = true
 }
 function openEdit(u) {
-  form.id = u.id
+  editingId.value = u.id
   form.name = u.name
   form.ua = u.ua
-  editing.value = true
+  showModal.value = true
 }
 async function save() {
-  await store.saveUaTemplate({ id: form.id || undefined, name: form.name, ua: form.ua })
-  editing.value = false
+  if (!form.name || !form.ua) return
+  saving.value = true
+  try {
+    await store.saveUaTemplate({ id: editingId.value || undefined, name: form.name, ua: form.ua })
+    showModal.value = false
+  } finally {
+    saving.value = false
+  }
 }
 function del(u) {
   store.deleteUaTemplate(u.id)

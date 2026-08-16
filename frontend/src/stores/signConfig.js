@@ -277,6 +277,14 @@ export const useSignConfigStore = defineStore('signConfig', () => {
       saving.value = false
     }
   }
+  async function deleteUaTemplates(ids) {
+    saving.value = true
+    try {
+      uaTemplates.value = await api.deleteUaTemplates(ids)
+    } finally {
+      saving.value = false
+    }
+  }
 
   // ── UI 切换 ──
   function setActiveTab(tab) {
@@ -341,6 +349,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     deleteCredential,
     saveUaTemplate,
     deleteUaTemplate,
+    deleteUaTemplates,
     setActiveTab,
     setResourceSubTab,
     gotoResource,

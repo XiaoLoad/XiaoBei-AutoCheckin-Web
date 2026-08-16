@@ -127,7 +127,11 @@ const route = useRoute()
 const router = useRouter()
 const open = ref(false)
 const auth = useAuthStore()
-const pageTitle = computed(() => route.meta?.title || '概览')
+// 顶栏标题：默认取路由 meta.title；签到配置页按角色区分（管理员维护平台资源池）
+const pageTitle = computed(() => {
+  if (route.path === '/sign-config') return auth.isAdmin ? '平台资源池' : '签到配置'
+  return route.meta?.title || '概览'
+})
 
 // 退出登录二次确认弹窗状态
 const showLogoutConfirm = ref(false)
@@ -142,7 +146,7 @@ const navGroups = computed(() => {
       title: '运营管理',
       items: [
         { name: '签到记录', to: '/sign-records', icon: 'calendar' },
-        { name: auth.isAdmin ? '平台资源' : '签到配置', to: '/sign-config', icon: 'sliders' }
+        { name: auth.isAdmin ? '平台资源池' : '签到配置', to: '/sign-config', icon: 'sliders' }
       ]
     }
   ]

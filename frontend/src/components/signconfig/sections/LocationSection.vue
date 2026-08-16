@@ -22,7 +22,7 @@
       </div>
 
       <div v-if="selected" class="space-y-0.5 rounded-lg bg-cloud/60 px-3 py-2 text-xs text-ink-soft">
-        <p>名称：<span class="font-medium text-ink">{{ selected.name }}</span>（须与地址对应）</p>
+        <p>名称：<span class="font-medium text-ink">{{ selected.name }}</span></p>
         <p class="truncate">地址：{{ selected.address }}</p>
         <p>经纬度：{{ selected.lat }}, {{ selected.lng }} · 坐标偏移 {{ selected.offset }} 米</p>
       </div>

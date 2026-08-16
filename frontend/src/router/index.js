@@ -36,6 +36,13 @@ const dynamicRoutes = [
     meta: { title: '账号管理', requiresAuth: true, roles: ['user'], group: '运营管理', icon: 'authorize', order: 3 }
   },
   {
+    path: '/schedules',
+    name: 'schedules',
+    component: () => import('@/views/SchedulesView.vue'),
+    // [权限判断] 定时任务为平台用户（普通用户）专属页面：管理员无 B 平台账号，无需该页
+    meta: { title: '定时任务', requiresAuth: true, roles: ['user'], group: '运营管理', icon: 'clock', order: 4 }
+  },
+  {
     path: '/users',
     name: 'users',
     component: () => import('@/views/UserManagementView.vue'),

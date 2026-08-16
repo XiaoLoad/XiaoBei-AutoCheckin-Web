@@ -9,7 +9,32 @@
           <BaseSelect v-model="config.time.endHour" :options="hourOptions" size="sm" class="w-24" />
           <span class="text-sm text-ink-muted">时</span>
         </div>
+        <p class="mt-1.5 text-xs text-ink-muted">部分签到任务仅允许在此时段内签到，属于业务限制，与下方「定时签到时间」相互独立。</p>
       </div>
+
+      <div>
+        <label class="mb-1.5 block text-xs font-medium text-ink-muted">定时签到时间</label>
+        <div class="flex items-center gap-2">
+          <input
+            v-model.number="config.time.signTime.hour"
+            type="number"
+            min="0"
+            max="23"
+            class="w-20 rounded-lg border border-ink/10 bg-white px-3 py-2 text-center text-sm tabular-nums outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
+          />
+          <span class="text-sm text-ink-muted">时</span>
+          <input
+            v-model.number="config.time.signTime.minute"
+            type="number"
+            min="0"
+            max="59"
+            class="w-20 rounded-lg border border-ink/10 bg-white px-3 py-2 text-center text-sm tabular-nums outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
+          />
+          <span class="text-sm text-ink-muted">分</span>
+        </div>
+        <p class="mt-1.5 text-xs text-ink-muted">调度器在每周选定星期、该时刻附近（叠加随机延时）自动触发；定时任务页默认采纳此时间。</p>
+      </div>
+
       <div>
         <label class="mb-1.5 block text-xs font-medium text-ink-muted">随机延时上限</label>
         <div class="flex items-center gap-2">

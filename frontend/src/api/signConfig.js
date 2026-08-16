@@ -10,7 +10,8 @@ export function makeConfig() {
   return {
     presetSetId: null, // 任务实例回填自哪个配置套（仅任务实例用，配置套内恒为 null）
     time: {
-      startHour: 8, // 每日签到起始小时
+      signTime: { hour: 8, minute: 0 }, // 定时签到时间（精确到时分）：调度器在每周选定星期、该时刻附近（叠加随机延时）触发；定时任务页默认采纳此时间
+      startHour: 8, // 每日签到起始小时（业务时段：仅该时段内允许签到）
       endHour: 22, // 每日签到结束小时
       weekdays: [1, 2, 3, 4, 5, 6, 7], // 触发星期（1=周一 … 7=周日）多选
       randomDelayMax: 5, // 随机延时上限（分钟）
@@ -46,18 +47,18 @@ function setConfig(weekdays) {
 // ── mock 数据源（仅前端框架演示，后端接入后删除） ──
 const mock = {
   accounts: [
-    { id: 'acc1', name: '张三 / 寝室号A101', platform: 'B平台', status: 'enabled' },
-    { id: 'acc2', name: '李四 / 寝室号B202', platform: 'B平台', status: 'enabled' },
-    { id: 'acc3', name: '王五 / 寝室号C303', platform: 'B平台', status: 'disabled' },
-    { id: 'acc4', name: '赵六 / 寝室号D404', platform: 'B平台', status: 'enabled' },
-    { id: 'acc5', name: '钱七 / 寝室号E505', platform: 'B平台', status: 'enabled' },
-    { id: 'acc6', name: '孙八 / 寝室号F606', platform: 'B平台', status: 'enabled' },
-    { id: 'acc7', name: '周九 / 寝室号G707', platform: 'B平台', status: 'disabled' },
-    { id: 'acc8', name: '吴十 / 寝室号H808', platform: 'B平台', status: 'enabled' },
-    { id: 'acc9', name: '郑十一 / 寝室号I909', platform: 'B平台', status: 'enabled' },
-    { id: 'acc10', name: '王十二 / 寝室号J010', platform: 'B平台', status: 'enabled' },
-    { id: 'acc11', name: '李十三 / 寝室号K111', platform: 'B平台', status: 'enabled' },
-    { id: 'acc12', name: '刘十四 / 寝室号L212', platform: 'B平台', status: 'disabled' }
+    { id: 'acc1', name: '张三', studentNo: '2023010101', className: '计算机2301', platform: 'B平台', status: 'enabled' },
+    { id: 'acc2', name: '李四', studentNo: '2023010102', className: '计算机2301', platform: 'B平台', status: 'enabled' },
+    { id: 'acc3', name: '王五', studentNo: '2023010103', className: '软件2302', platform: 'B平台', status: 'disabled' },
+    { id: 'acc4', name: '赵六', studentNo: '2023010201', className: '计算机2301', platform: 'B平台', status: 'enabled' },
+    { id: 'acc5', name: '钱七', studentNo: '2023020101', className: '电信2303', platform: 'B平台', status: 'enabled' },
+    { id: 'acc6', name: '孙八', studentNo: '2023020102', className: '电信2303', platform: 'B平台', status: 'enabled' },
+    { id: 'acc7', name: '周九', studentNo: '2023030101', className: '自动化2304', platform: 'B平台', status: 'disabled' },
+    { id: 'acc8', name: '吴十', studentNo: '2023030102', className: '自动化2304', platform: 'B平台', status: 'enabled' },
+    { id: 'acc9', name: '郑十一', studentNo: '2023040101', className: '数学2305', platform: 'B平台', status: 'enabled' },
+    { id: 'acc10', name: '王十二', studentNo: '2023040102', className: '数学2305', platform: 'B平台', status: 'enabled' },
+    { id: 'acc11', name: '李十三', studentNo: '2023050101', className: '外语2306', platform: 'B平台', status: 'enabled' },
+    { id: 'acc12', name: '刘十四', studentNo: '2023050102', className: '外语2306', platform: 'B平台', status: 'disabled' }
   ],
   taskTypes: [
     { value: 'dorm', label: '寝室签到' },
@@ -107,6 +108,20 @@ for (const a of mock.accounts) {
 export async function fetchConfigMeta() {
   await delay()
   return clone({ accounts: mock.accounts, taskTypes: mock.taskTypes })
+}
+
+// 读取某任务实例的配置套元信息（供定时任务页"跟随配置套"预览使用）。
+// 返回 { time, presetSetName, locationName }；后端接入后此函数改为读取真实配置。
+export function getTaskConfigMeta(accountId, type) {
+  const cfg = mock.taskConfigs[`${accountId}:${type}`]
+  if (!cfg) return { time: null, presetSetName: '未关联', locationName: '未设置位置' }
+  const set = mock.userConfigSets.find((s) => s.id === cfg.presetSetId)
+  const loc = [...mock.systemLocations, ...mock.userLocations].find((l) => l.id === cfg.locationId)
+  return {
+    time: clone(cfg.time),
+    presetSetName: set ? set.name : '未关联',
+    locationName: loc ? loc.name : '未设置位置'
+  }
 }
 
 // ── 用户配置套（多项命名模板） ──

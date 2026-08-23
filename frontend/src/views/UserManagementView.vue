@@ -251,18 +251,8 @@
       @cancel="store.closeDelete"
     />
 
-    <!-- 轻量提示 -->
-    <Teleport to="body">
-      <Transition name="toast">
-        <div
-          v-if="toast.show"
-          class="fixed bottom-6 right-6 z-[1100] flex items-center gap-2 rounded-xl bg-ink px-3 py-2.5 align-middle text-sm font-medium text-white shadow-2xl"
-        >
-          <Icon :name="toast.type === 'error' ? 'alert' : 'check'" :size="16" :class="toast.type === 'error' ? 'text-danger' : 'text-success'" />
-          {{ toast.message }}
-        </div>
-      </Transition>
-    </Teleport>
+    <!-- 轻量提示：右下角深色底，样式收敛到共享组件 PageToast（与系统设置页同一出口） -->
+    <PageToast :show="toast.show" :message="toast.message" :type="toast.type" />
 
     <!-- 底部间距占位：真实在流子元素，盒高计入 scrollHeight，不受滚动容器末端 padding/margin 折叠影响；
          -mt-4 sm:-mt-6 抵消根容器 gap-4 sm:gap-6，确保底部间距精确 24px、与其它页面一致 -->
@@ -277,6 +267,7 @@ import Pagination from '@/components/Pagination.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
 import UserFormModal from '@/components/UserFormModal.vue'
 import Icon from '@/components/Icon.vue'
+import PageToast from '@/components/PageToast.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import { useUsersStore } from '@/stores/users'
 import { storeToRefs } from 'pinia'
@@ -385,10 +376,6 @@ onMounted(refresh)
 /* 仅让刷新图标旋转，按钮容器与其它元素保持静止 */
 .spin-refresh { animation: xb-spin 0.8s linear infinite; }
 @keyframes xb-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
-.toast-enter-active,
-.toast-leave-active { transition: opacity 0.25s ease, transform 0.25s ease; }
-.toast-enter-from,
-.toast-leave-to { opacity: 0; transform: translateY(8px); }
 @media (prefers-reduced-motion: reduce) {
   .spin-refresh { animation: none; }
 }

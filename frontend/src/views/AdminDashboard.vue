@@ -10,28 +10,6 @@
       ============================================================
     -->
 
-    <!-- 筛选器：指定用户 / 时间范围 / 打卡类型 -->
-    <!-- [权限判断] 指定用户筛选为管理员专属；普通用户无此筛选项（只看本人） -->
-    <section class="dash-card p-4 fade-up flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-      <div class="flex flex-wrap items-end gap-3">
-        <label class="flex flex-col gap-1 text-xs font-medium text-ink-muted">
-          指定用户
-          <BaseSelect v-model="fUser" placeholder="全站用户" :options="userOptions" />
-        </label>
-        <label class="flex flex-col gap-1 text-xs font-medium text-ink-muted">
-          时间范围
-          <BaseSelect v-model="fRange" :options="[{ label: '近 7 天', value: '7d' }, { label: '近 30 天', value: '30d' }]" />
-        </label>
-        <label class="flex flex-col gap-1 text-xs font-medium text-ink-muted">
-          打卡类型
-          <BaseSelect v-model="fType" :options="[{ label: '全部类型', value: 'all' }, { label: '课程打卡', value: 'course' }, { label: '寝室打卡', value: 'dorm' }]" />
-        </label>
-      </div>
-      <button class="rounded-lg border border-ink/15 px-3 py-1.5 text-sm font-medium text-ink-muted hover:bg-ink/5" @click="resetFilters">
-        重置筛选
-      </button>
-    </section>
-
     <!-- ============ 全站汇总指标 ============ -->
     <!-- [权限判断] 全站汇总仅管理员可见 -->
     <section>
@@ -168,9 +146,16 @@
     <!-- 全局最新打卡日志 -->
     <!-- [权限判断] 全站日志为管理员监控视角；普通用户仅见本人 -->
     <section class="dash-card p-5 fade-up delay-4">
-      <div class="flex items-center justify-between mb-4">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
         <h3 class="font-semibold text-ink">全局最新打卡日志</h3>
-        <span class="text-xs text-ink-muted">按筛选条件（用户 / 类型）实时过滤</span>
+        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div class="w-36 sm:w-40">
+            <BaseSelect v-model="fUser" size="sm" placeholder="全站用户" :options="userOptions" />
+          </div>
+          <div class="w-32 sm:w-36">
+            <BaseSelect v-model="fType" size="sm" :options="[{ label: '全部类型', value: 'all' }, { label: '课程打卡', value: 'course' }, { label: '寝室打卡', value: 'dorm' }]" />
+          </div>
+        </div>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
@@ -261,12 +246,12 @@ const statusMeta = {
 }
 const dotCls = (k) => statusMeta[k]?.dot || 'bg-ink/30'
 
-// ===== 筛选器状态 =====
+// ===== 筛选状态 =====
+// 指定用户 / 打卡类型作用于「全局最新打卡日志」；时间范围由趋势图切换控制
 const fUser = ref('')
 const fRange = ref('7d')
 const fType = ref('all')
 const userOptions = ['张明', '李雷', '王芳', '赵强', '陈静', '刘洋', '孙丽', '周杰']
-function resetFilters() { fUser.value = ''; fRange.value = '7d'; fType.value = 'all' }
 
 // ===== 全站汇总指标（mock）=====
 // 预留后端请求：GET /api/admin/overview

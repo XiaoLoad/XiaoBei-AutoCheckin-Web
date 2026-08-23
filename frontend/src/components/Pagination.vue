@@ -9,14 +9,15 @@
       <!-- 每页条数 -->
       <div class="flex items-center gap-1.5 text-ink-muted">
         <span>每页</span>
-        <select
-          :value="pageSize"
-          :disabled="disabled"
-          class="h-9 rounded-lg border border-ink/10 bg-white px-2 text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10 disabled:opacity-50"
-          @change="onPageSizeChange"
-        >
-          <option v-for="opt in pageSizeOptions" :key="opt" :value="opt">{{ opt }}</option>
-        </select>
+        <div class="w-20">
+          <BaseSelect
+            :model-value="pageSize"
+            :options="pageSizeOptions"
+            size="sm"
+            :disabled="disabled"
+            @update:model-value="onPageSizeChange"
+          />
+        </div>
         <span>条</span>
       </div>
 
@@ -88,6 +89,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import Icon from '@/components/Icon.vue'
+import BaseSelect from '@/components/BaseSelect.vue'
 
 // 通用分页组件：仅负责展示与翻页事件，不耦合任何业务数据。
 // 父级通过 v-model:page 与 :page-size 传入状态，并监听 update:page / update:page-size 重新拉取数据。
@@ -135,9 +137,9 @@ function go(p) {
   if (next !== props.page) emit('update:page', next)
 }
 
-function onPageSizeChange(e) {
-  const size = Number(e.target.value)
-  emit('update:pageSize', size)
+function onPageSizeChange(size) {
+  const s = Number(size)
+  emit('update:pageSize', s)
   emit('update:page', 1) // 改变每页条数时回到第一页
 }
 

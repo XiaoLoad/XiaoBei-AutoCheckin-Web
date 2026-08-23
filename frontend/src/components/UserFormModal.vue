@@ -61,10 +61,14 @@
             <div class="grid grid-cols-2 gap-4">
               <div>
                 <label class="mb-1.5 block text-sm font-medium text-ink-soft">角色</label>
-                <select v-model="form.role" class="login-input appearance-none">
-                  <option value="user">普通用户</option>
-                  <option value="admin">管理员</option>
-                </select>
+                <BaseSelect
+                  v-model="form.role"
+                  placeholder="角色"
+                  :options="[
+                    { label: '普通用户', value: 'user' },
+                    { label: '管理员', value: 'admin' }
+                  ]"
+                />
               </div>
               <div>
                 <label class="mb-1.5 block text-sm font-medium text-ink-soft">状态</label>
@@ -128,6 +132,7 @@
 <script setup>
 import { reactive, ref, watch } from 'vue'
 import Icon from '@/components/Icon.vue'
+import BaseSelect from '@/components/BaseSelect.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },

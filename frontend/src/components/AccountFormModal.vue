@@ -65,11 +65,15 @@
               <div class="grid grid-cols-2 gap-4">
                 <div>
                   <label class="mb-1.5 block text-sm font-medium text-ink-soft">签到类型</label>
-                  <select v-model="form.type" class="login-input appearance-none">
-                    <option value="dorm">寝室</option>
-                    <option value="activity">活动</option>
-                    <option value="general">通用</option>
-                  </select>
+                  <BaseSelect
+                    v-model="form.type"
+                    placeholder="签到类型"
+                    :options="[
+                      { label: '寝室', value: 'dorm' },
+                      { label: '活动', value: 'activity' },
+                      { label: '通用', value: 'general' }
+                    ]"
+                  />
                 </div>
                 <div>
                   <label class="mb-1.5 block text-sm font-medium text-ink-soft">状态</label>
@@ -189,6 +193,7 @@
 <script setup>
 import { reactive, ref, watch } from 'vue'
 import Icon from '@/components/Icon.vue'
+import BaseSelect from '@/components/BaseSelect.vue'
 import { fetchProfile } from '@/api/accounts'
 
 const props = defineProps({

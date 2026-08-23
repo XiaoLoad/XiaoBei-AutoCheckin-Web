@@ -32,12 +32,15 @@
           @input="store.onKeywordInput"
         />
       </div>
-      <div class="grid grid-cols-[1fr_auto_auto] items-center gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
-        <select v-model="roleFilter" class="h-9 w-full rounded-xl border border-ink/10 bg-white px-3 text-sm text-ink-soft outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10 sm:h-11 sm:w-auto" @change="store.onFilterChange">
-          <option value="">全部角色</option>
-          <option value="admin">管理员</option>
-          <option value="user">普通用户</option>
-        </select>
+      <div class="flex shrink-0 items-center gap-2 sm:gap-3">
+        <div class="w-36 shrink-0 sm:w-40">
+          <BaseSelect
+            v-model="roleFilter"
+            placeholder="全部角色"
+            :options="[{ label: '全部用户', value: '' }, { label: '管理员', value: 'admin' }, { label: '普通用户', value: 'user' }]"
+            @update:model-value="store.onFilterChange"
+          />
+        </div>
         <button
           type="button"
           class="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-ink/10 text-ink-muted transition hover:bg-cloud hover:text-ink sm:h-11 sm:w-11"
@@ -274,6 +277,7 @@ import Pagination from '@/components/Pagination.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
 import UserFormModal from '@/components/UserFormModal.vue'
 import Icon from '@/components/Icon.vue'
+import BaseSelect from '@/components/BaseSelect.vue'
 import { useUsersStore } from '@/stores/users'
 import { storeToRefs } from 'pinia'
 

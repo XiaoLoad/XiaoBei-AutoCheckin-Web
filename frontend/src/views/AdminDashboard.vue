@@ -16,25 +16,15 @@
       <div class="flex flex-wrap items-end gap-3">
         <label class="flex flex-col gap-1 text-xs font-medium text-ink-muted">
           指定用户
-          <select v-model="fUser" class="mt-0.5 rounded-lg border border-ink/15 bg-white px-3 py-1.5 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30">
-            <option value="">全站用户</option>
-            <option v-for="u in userOptions" :key="u" :value="u">{{ u }}</option>
-          </select>
+          <BaseSelect v-model="fUser" placeholder="全站用户" :options="userOptions" />
         </label>
         <label class="flex flex-col gap-1 text-xs font-medium text-ink-muted">
           时间范围
-          <select v-model="fRange" class="mt-0.5 rounded-lg border border-ink/15 bg-white px-3 py-1.5 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30">
-            <option value="7d">近 7 天</option>
-            <option value="30d">近 30 天</option>
-          </select>
+          <BaseSelect v-model="fRange" :options="[{ label: '近 7 天', value: '7d' }, { label: '近 30 天', value: '30d' }]" />
         </label>
         <label class="flex flex-col gap-1 text-xs font-medium text-ink-muted">
           打卡类型
-          <select v-model="fType" class="mt-0.5 rounded-lg border border-ink/15 bg-white px-3 py-1.5 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30">
-            <option value="all">全部类型</option>
-            <option value="course">课程打卡</option>
-            <option value="dorm">寝室打卡</option>
-          </select>
+          <BaseSelect v-model="fType" :options="[{ label: '全部类型', value: 'all' }, { label: '课程打卡', value: 'course' }, { label: '寝室打卡', value: 'dorm' }]" />
         </label>
       </div>
       <button class="rounded-lg border border-ink/15 px-3 py-1.5 text-sm font-medium text-ink-muted hover:bg-ink/5" @click="resetFilters">
@@ -256,6 +246,7 @@ import { ref, computed } from 'vue'
 import StatCard from '@/components/StatCard.vue'
 import BaseChart from '@/components/BaseChart.vue'
 import Icon from '@/components/Icon.vue'
+import BaseSelect from '@/components/BaseSelect.vue'
 
 // ===== 当前角色（mock；真实由后端按 token 返回）=====
 // [权限判断] role === '管理员' 时渲染本页；否则应由 DashboardView 分发到 UserDashboard

@@ -9,9 +9,9 @@
       >
         <div class="absolute inset-0 bg-ink/50 backdrop-blur-[2px]" @click="onCancel" />
 
-        <div class="modal-panel relative w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl shadow-ink/20" @click.stop>
+        <div class="modal-panel relative flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl shadow-ink/20" @click.stop>
           <!-- 标题 -->
-          <div class="flex items-center justify-between px-5 pt-5">
+          <div class="flex shrink-0 items-center justify-between px-5 pt-5">
             <h3 class="text-base font-semibold text-ink">
               {{ mode === 'edit' ? '编辑用户' : '新增用户' }}
             </h3>
@@ -26,7 +26,8 @@
           </div>
 
           <!-- 表单 -->
-          <form class="space-y-4 px-5 pb-2 pt-3" @submit.prevent="onSubmit">
+          <form class="flex flex-1 min-h-0 flex-col overflow-hidden" @submit.prevent="onSubmit">
+            <div class="flex-1 min-h-0 space-y-4 overflow-y-auto px-5 pb-4 pt-3">
             <div>
               <label class="mb-1.5 block text-sm font-medium text-ink-soft">用户名</label>
               <input
@@ -104,9 +105,10 @@
               />
               <p v-if="errors.quota" class="mt-1 text-xs text-danger">{{ errors.quota }}</p>
             </div>
+            </div>
 
             <!-- 操作 -->
-            <div class="flex gap-3 pt-1">
+            <div class="flex shrink-0 gap-3 border-t border-ink/5 bg-white px-5 py-4">
               <button
                 type="button"
                 class="flex-1 rounded-xl border border-ink/10 px-4 py-2.5 text-sm font-medium text-ink-soft transition hover:bg-cloud"

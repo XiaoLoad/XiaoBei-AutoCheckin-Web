@@ -13,7 +13,7 @@
           class="modal-panel relative flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl shadow-ink/20"
           @click.stop
         >
-          <div class="flex items-center justify-between px-5 pt-5">
+          <div class="flex shrink-0 items-center justify-between px-5 pt-5">
             <h3 class="text-base font-semibold text-ink">{{ title }}</h3>
             <button
               type="button"
@@ -25,11 +25,11 @@
             </button>
           </div>
 
-          <div class="overflow-y-auto px-5 py-4">
+          <div class="flex-1 min-h-0 overflow-y-auto px-5 py-4">
             <slot />
           </div>
 
-          <div v-if="$slots.footer" class="flex gap-3 border-t border-ink/5 px-5 py-4">
+          <div v-if="$slots.footer" class="flex shrink-0 gap-3 border-t border-ink/5 px-5 py-4">
             <slot name="footer" />
           </div>
         </div>

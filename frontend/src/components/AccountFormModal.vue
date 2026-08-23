@@ -28,7 +28,8 @@
             </button>
           </div>
 
-          <form class="space-y-5 overflow-y-auto px-5 pb-2 pt-4" @submit.prevent="onSubmit">
+          <form class="flex flex-1 min-h-0 flex-col overflow-hidden" @submit.prevent="onSubmit">
+            <div class="flex-1 min-h-0 space-y-5 overflow-y-auto px-5 pb-2 pt-4">
             <!-- 账号信息 -->
             <div class="space-y-4">
               <div>
@@ -165,9 +166,10 @@
               </div>
               <p class="mt-2 text-xs text-ink-muted">个人信息由 B 平台在登录后自动获取并回填，不可手动修改。</p>
             </div>
+            </div>
 
             <!-- 操作 -->
-            <div class="sticky bottom-0 -mx-5 flex gap-3 border-t border-ink/5 bg-white px-5 py-4">
+            <div class="flex shrink-0 gap-3 border-t border-ink/5 bg-white px-5 py-4">
               <button
                 type="button"
                 class="flex-1 rounded-xl border border-ink/10 px-4 py-2.5 text-sm font-medium text-ink-soft transition hover:bg-cloud"

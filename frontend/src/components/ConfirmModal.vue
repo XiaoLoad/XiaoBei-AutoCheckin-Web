@@ -13,11 +13,11 @@
 
         <!-- 弹窗主体 -->
         <div
-          class="modal-panel relative w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl shadow-ink/20"
+          class="modal-panel relative flex max-h-[90vh] w-full max-w-sm flex-col overflow-hidden rounded-2xl bg-white shadow-2xl shadow-ink/20"
           @click.stop
         >
           <!-- 标题区 -->
-          <div class="flex items-start gap-3 px-5 pt-5">
+          <div class="flex shrink-0 items-start gap-3 px-5 pt-5">
             <span
               v-if="icon"
               class="grid h-10 w-10 shrink-0 place-items-center rounded-full"
@@ -40,12 +40,12 @@
           </div>
 
           <!-- 内容区：默认展示 message，也支持具名插槽自定义 -->
-          <div class="px-5 pb-5 pt-2 text-sm leading-relaxed text-ink-muted">
+          <div class="flex-1 min-h-0 overflow-y-auto px-5 pb-5 pt-2 text-sm leading-relaxed text-ink-muted">
             <slot>{{ message }}</slot>
           </div>
 
           <!-- 操作区 -->
-          <div class="flex gap-3 px-5 pb-5">
+          <div class="flex shrink-0 gap-3 px-5 pb-5">
             <button
               type="button"
               class="flex-1 rounded-xl border border-ink/10 px-4 py-2.5 text-sm font-medium text-ink-soft transition hover:bg-cloud disabled:cursor-not-allowed disabled:opacity-50"

@@ -7,9 +7,11 @@
     >
       <!-- 品牌区 -->
       <div class="flex items-center gap-3 h-16 px-5 border-b border-white/10">
-        <span class="grid place-items-center w-9 h-9 rounded-xl bg-brand text-white shadow-lg shadow-brand/30">
-          <svg viewBox="0 0 24 24" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-        </span>
+        <img
+          src="@/assets/logo.png"
+          alt="小北寝室自动打卡"
+          class="h-10 w-10 shrink-0 rounded-2xl object-cover ring-1 ring-white/15"
+        />
         <div class="leading-tight">
           <p class="text-sm font-semibold text-white">小北寝室打卡</p>
           <p class="text-[11px] text-white/50">管理控制台</p>

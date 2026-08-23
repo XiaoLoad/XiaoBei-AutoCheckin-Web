@@ -1,9 +1,19 @@
 # 用户相关入参校验层（零依赖，可作为前后端契约的权威定义）。
 # 设计目标：把散落在路由里的字段校验集中到此，统一错误信息与错误码；
 # 未来若引入 marshmallow / pydantic，可平滑替换为对应 Schema，接口形态不变。
+from app.models.system_config import get_setting
 from app.utils.validators import validate_role, validate_username
 
-PASSWORD_MIN = 6
+# 兜底下限：系统配置不可用时仍保证基本安全（正常取值来自设置页的 password_min_length）
+FALLBACK_PASSWORD_MIN = 6
+
+
+def _password_min():
+    """密码最小长度：跟随系统设置，读取异常时回退固定下限"""
+    try:
+        return int(get_setting('password_min_length') or FALLBACK_PASSWORD_MIN)
+    except Exception:
+        return FALLBACK_PASSWORD_MIN
 
 
 def load_create(payload):
@@ -16,10 +26,12 @@ def load_create(payload):
     if not ok:
         return False, None, msg, code
     password = payload.get('password') or ''
-    if not password or len(password) < PASSWORD_MIN:
-        return False, None, f'密码至少 {PASSWORD_MIN} 位', 4002
+    pwd_min = _password_min()
+    if not password or len(password) < pwd_min:
+        return False, None, f'密码至少 {pwd_min} 位', 4002
     enabled = bool(payload.get('enabled', True))
-    quota = _parse_quota(payload.get('quota', 100))
+    # 未显式指定额度时取系统设置的默认额度（设置页可调）
+    quota = _parse_quota(payload.get('quota', get_setting('default_quota')))
     return True, {
         'username': username,
         'password': password,
@@ -45,8 +57,9 @@ def load_update(payload):
         data['role'] = role
     if payload.get('password'):
         password = payload.get('password') or ''
-        if len(password) < PASSWORD_MIN:
-            return False, None, f'密码至少 {PASSWORD_MIN} 位', 4002
+        pwd_min = _password_min()
+        if len(password) < pwd_min:
+            return False, None, f'密码至少 {pwd_min} 位', 4002
         data['password'] = password
     if 'enabled' in payload and payload['enabled'] is not None:
         data['enabled'] = bool(payload['enabled'])

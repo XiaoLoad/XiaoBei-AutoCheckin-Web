@@ -32,6 +32,15 @@ def _jwt_secret():
 
 
 def _jwt_expires_hours():
+    """会话有效期：优先取系统设置（管理员可在设置页调整），未配置时回退 .env 默认值。
+    仅在签发 token 时读取，因此修改后对下一次登录生效，无需重启服务。"""
+    try:
+        from app.models.system_config import get_setting
+        hours = get_setting('session_hours')
+        if hours and int(hours) > 0:
+            return int(hours)
+    except Exception:
+        pass
     return current_app.config['JWT_EXPIRES_HOURS']
 
 

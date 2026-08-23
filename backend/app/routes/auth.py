@@ -5,6 +5,7 @@ from datetime import datetime
 from flask import Blueprint, request
 
 from app.extensions import db
+from app.models.system_config import get_setting
 from app.models.user import User, now_cst
 from app.utils.auth import blacklist_token, generate_token, token_required
 from app.utils.response import error, success
@@ -61,6 +62,33 @@ def me():
             'enabled': u.enabled,
         }
     )
+
+
+@bp.route('/password', methods=['PUT'])
+@token_required
+def change_password():
+    """
+    修改当前登录用户密码：校验原密码 → 按系统配置的密码最小长度校验新密码 → 重设哈希。
+    错误码：1000 参数缺失 / 1002 原密码错误 / 4002 新密码不合规
+    """
+    u = request.current_user
+    payload = request.get_json(silent=True) or {}
+    old_password = payload.get('old_password') or ''
+    new_password = payload.get('new_password') or ''
+    if not old_password or not new_password:
+        return error(message='原密码和新密码不能为空', code=1000, status=400)
+
+    min_len = get_setting('password_min_length') or 6
+    if len(new_password) < min_len:
+        return error(message=f'新密码至少 {min_len} 位', code=4002, status=400)
+    if new_password == old_password:
+        return error(message='新密码不能与原密码相同', code=4002, status=400)
+    if not u.check_password(old_password):
+        return error(message='原密码错误', code=1002, status=400)
+
+    u.set_password(new_password)
+    db.session.commit()
+    return success(message='密码修改成功')
 
 
 @bp.route('/logout', methods=['POST'])

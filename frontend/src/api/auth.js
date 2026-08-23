@@ -15,3 +15,8 @@ export function getMe() {
 export function logout() {
   return request.post('/auth/logout')
 }
+
+// 修改当前登录用户密码：{ old_password, new_password }
+export function changePassword(data) {
+  return request.put('/auth/password', data)
+}

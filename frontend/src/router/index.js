@@ -52,7 +52,8 @@ const dynamicRoutes = [
   {
     path: '/settings',
     name: 'settings',
-    component: () => import('@/views/PlaceholderView.vue'),
+    component: () => import('@/views/SystemSettingsView.vue'),
+    // [权限判断] 账户安全对所有角色开放；系统参数/系统信息区仅管理员可见（页面内按角色分区，后端二次校验）
     meta: { title: '系统设置', requiresAuth: true, roles: ['admin', 'user'], group: '系统', icon: 'settings' }
   }
 ]

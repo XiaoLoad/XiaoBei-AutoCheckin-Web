@@ -2,5 +2,6 @@
 from app.extensions import db
 from app.models.user import User
 from app.models.token_blacklist import TokenBlacklist
+from app.models.system_config import SystemConfig
 
-__all__ = ['db', 'User', 'TokenBlacklist']
+__all__ = ['db', 'User', 'TokenBlacklist', 'SystemConfig']

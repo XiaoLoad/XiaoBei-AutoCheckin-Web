@@ -21,8 +21,12 @@
       </div>
     </div>
 
-    <div v-if="store.loading" class="dash-card flex flex-1 items-center justify-center text-ink-muted">加载中…</div>
-    <keep-alive>
+    <SignConfigSkeleton
+      v-if="store.loading"
+      :tab="effectiveTab"
+      :sub-tab-count="isAdmin ? 2 : 3"
+    />
+    <keep-alive v-else>
       <DefaultConfigTab v-if="effectiveTab === 'default'" />
       <AccountTaskConfigTab v-else-if="effectiveTab === 'tasks'" />
       <MyResourcesTab v-else-if="effectiveTab === 'resources'" />
@@ -40,6 +44,7 @@ import { useAuthStore } from '@/store/modules/auth'
 import DefaultConfigTab from '@/components/signconfig/DefaultConfigTab.vue'
 import AccountTaskConfigTab from '@/components/signconfig/AccountTaskConfigTab.vue'
 import MyResourcesTab from '@/components/signconfig/MyResourcesTab.vue'
+import SignConfigSkeleton from '@/components/signconfig/SignConfigSkeleton.vue'
 
 const store = useSignConfigStore()
 const auth = useAuthStore()

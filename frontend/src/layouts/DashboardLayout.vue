@@ -102,7 +102,11 @@
             <Icon name="bell" :size="20" />
             <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-danger ring-2 ring-white" />
           </button>
-          <span class="hidden sm:grid place-items-center w-9 h-9 rounded-full bg-brand/15 text-brand font-semibold text-sm">管</span>
+          <!-- [权限判断] 顶栏角色头像：按登录角色动态显示首字（管理员→管 / 普通用户→普），悬停提示完整角色 -->
+          <span
+            class="hidden sm:grid place-items-center w-9 h-9 rounded-full bg-brand/15 text-brand font-semibold text-sm"
+            :title="roleLabel"
+          >{{ roleLabel.charAt(0) }}</span>
         </div>
       </header>
 

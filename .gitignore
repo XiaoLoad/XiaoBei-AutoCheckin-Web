@@ -31,5 +31,8 @@ Thumbs.db
 # WorkBuddy 内部数据（不纳入版本库）
 .workbuddy/
 
+# 本地过程文档（AI 设计稿/实施计划等，不纳入版本库；仓库文档仅保留根目录 README/CHANGELOG）
+docs/
+
 # DSH 本地技能目录（不纳入版本库）
 .dsh/

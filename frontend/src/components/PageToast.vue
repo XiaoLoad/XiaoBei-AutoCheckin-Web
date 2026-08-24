@@ -8,7 +8,11 @@
         class="fixed bottom-6 right-6 z-[1100] flex items-center gap-2 rounded-xl bg-ink px-3 py-2.5 align-middle text-sm font-medium text-white shadow-2xl"
         role="alert"
       >
-        <Icon :name="type === 'error' ? 'alert' : 'check'" :size="16" :class="type === 'error' ? 'text-danger' : 'text-success'" />
+        <Icon
+          :name="type === 'error' ? 'alert' : 'check'"
+          :size="16"
+          :class="type === 'error' ? 'text-danger' : 'text-success'"
+        />
         {{ message }}
       </div>
     </Transition>
@@ -16,22 +20,24 @@
 </template>
 
 <script setup>
-import Icon from '@/components/Icon.vue'
+import Icon from "@/components/Icon.vue";
 
 // 受控组件：状态由调用方持有（reactive + 定时器），保证触发时机与文案完全由页面决定
 defineProps({
   show: { type: Boolean, default: false },
-  message: { type: String, default: '' },
+  message: { type: String, default: "" },
   // 'success' | 'error'（其余值按 success 处理）
-  type: { type: String, default: 'success' }
-})
+  type: { type: String, default: "success" },
+});
 </script>
 
 <style scoped>
 /* 入场自下而上浮入，与全局 Toast 的下沉方向呼应其顶部位置 */
 .page-toast-enter-active,
 .page-toast-leave-active {
-  transition: opacity 0.25s ease, transform 0.25s ease;
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
 }
 .page-toast-enter-from,
 .page-toast-leave-to {

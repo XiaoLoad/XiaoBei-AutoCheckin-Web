@@ -8,3 +8,6 @@ PyJWT==2.9.0
 bcrypt==4.2.0
 # MySQL 8 默认 caching_sha2_password 认证所需的 RSA 加密支持
 cryptography==43.0.1
+# B 平台 HTTP 适配器（登录/学生信息链路）
+requests==2.32.3
+

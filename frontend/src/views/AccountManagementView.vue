@@ -75,8 +75,8 @@
 
     <!-- 列表卡片：桌面表格 + 移动卡片，卡片 flex-1 内部滚动，底部固定分页 -->
     <div class="dash-card fade-up flex flex-1 min-h-0 flex-col overflow-hidden rounded-2xl">
-      <!-- 桌面表格（≥1024） -->
-      <div class="xb-scroll hidden min-h-0 flex-1 overflow-auto lg:block">
+      <!-- 桌面表格（≥1024）；relative 供空状态绝对定位铺满并垂直居中 -->
+      <div class="xb-scroll relative hidden min-h-0 flex-1 overflow-auto lg:block">
         <table class="w-full table-fixed text-left text-sm">
           <colgroup>
             <col class="w-[14%]" />
@@ -99,14 +99,6 @@
           <tbody>
             <tr v-if="loading" class="border-b border-ink/5">
               <td colspan="6" class="px-3 py-12 text-center text-ink-muted">加载中…</td>
-            </tr>
-            <tr v-else-if="pagedRows.length === 0" class="border-b border-ink/5">
-              <td colspan="6" class="px-3 py-16 text-center">
-                <div class="flex flex-col items-center gap-2 text-ink-muted">
-                  <Icon name="user" :size="28" class="opacity-50" />
-                  <span>暂无账号，点击「新增账号」添加你的第一个 B 平台账号。</span>
-                </div>
-              </td>
             </tr>
             <tr
               v-for="item in pagedRows"
@@ -167,6 +159,15 @@
             </tr>
           </tbody>
         </table>
+
+        <!-- 空状态：绝对定位铺满表格容器，垂直水平居中（空列表无滚动，定位稳定） -->
+        <div
+          v-if="!loading && pagedRows.length === 0"
+          class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 px-4 text-center text-sm text-ink-muted"
+        >
+          <Icon name="user" :size="28" class="opacity-50" />
+          <span>暂无账号，点击「新增账号」添加你的第一个 B 平台账号。</span>
+        </div>
       </div>
 
       <!-- 移动端卡片列表（<1024） -->

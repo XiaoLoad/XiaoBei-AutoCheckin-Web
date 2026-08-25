@@ -130,17 +130,8 @@
                 <span class="text-[11px] font-semibold tracking-wider text-ink-muted uppercase">个人信息</span>
                 <span class="h-px flex-1 bg-ink/10" />
                 <span class="inline-flex items-center gap-1 rounded-full bg-ink/5 px-2 py-0.5 text-xs text-ink-muted">
-                  <Icon name="lock" :size="12" />仅平台回填
+                  <Icon name="lock" :size="12" />校验通过自动回填
                 </span>
-                <button
-                  type="button"
-                  class="shrink-0 rounded-lg border border-brand/30 bg-brand/5 px-2.5 py-1 text-xs font-medium text-brand transition hover:bg-brand/10 disabled:cursor-not-allowed disabled:opacity-50"
-                  :disabled="backfilling || !form.account"
-                  @click="runBackfill"
-                >
-                  <span v-if="backfilling" class="inline-block h-3 w-3 animate-spin rounded-full border-2 border-brand/40 border-t-brand" />
-                  <span v-else>从平台回填</span>
-                </button>
               </div>
               <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
@@ -164,7 +155,7 @@
                   <input v-model.trim="form.profile.className" type="text" placeholder="从平台获取" disabled class="login-input bg-cloud/60 text-ink-muted cursor-not-allowed" />
                 </div>
               </div>
-              <p class="mt-2 text-xs text-ink-muted">个人信息由 B 平台在登录后自动获取并回填，不可手动修改。</p>
+              <p class="mt-2 text-xs text-ink-muted">账号密码校验通过后，个人信息由 B 平台自动获取并回填，无需手动操作。</p>
             </div>
             </div>
 
@@ -222,7 +213,6 @@ const errors = reactive({ account: '', password: '' })
 const verifyState = ref('idle') // idle | checking | ok | fail
 const verifying = ref(false)
 const verifyMsg = ref('')
-const backfilling = ref(false)
 
 function resetForm() {
   Object.assign(form, emptyForm())
@@ -266,6 +256,7 @@ async function runVerify() {
     const res = await import('@/api/accounts').then((m) => m.verifyAccount(form.account, form.password))
     verifyState.value = res.ok ? 'ok' : 'fail'
     verifyMsg.value = res.message
+    if (res.ok) await backfillProfile() // 校验通过即自动回填，无需用户手动触发
   } catch (e) {
     verifyState.value = 'fail'
     verifyMsg.value = e.message || '校验失败'
@@ -274,16 +265,11 @@ async function runVerify() {
   }
 }
 
-// 从 B 平台获取个人信息并回填（平台写入，字段保持禁用）
-async function runBackfill() {
+// 校验成功后从 B 平台档案自动回填（预检已缓存 profile，此处即时返回；字段保持禁用）
+async function backfillProfile() {
   if (!form.account) return
-  backfilling.value = true
-  try {
-    const profile = await fetchProfile(form.account)
-    form.profile = { ...form.profile, ...profile }
-  } finally {
-    backfilling.value = false
-  }
+  const profile = await fetchProfile(form.account)
+  form.profile = { ...form.profile, ...profile }
 }
 
 function validate() {

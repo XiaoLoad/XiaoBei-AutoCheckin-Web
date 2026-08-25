@@ -4,7 +4,7 @@ from flask_cors import CORS
 
 from config import get_config
 from app.extensions import db
-from app.models import User, SystemConfig  # noqa: F401  确保模型被加载
+from app.models import User, SystemConfig, BAccount  # noqa: F401  确保模型被加载
 from app.utils.response import success, error
 from app.routes.example import bp as example_bp
 from app.routes.health import bp as health_bp
@@ -12,6 +12,7 @@ from app.routes.auth import bp as auth_bp
 from app.routes.users import bp as users_bp
 from app.routes.settings import bp as settings_bp
 from app.routes.system import bp as system_bp
+from app.routes.accounts import bp as accounts_bp
 
 
 def create_app(env_name=None):
@@ -36,6 +37,7 @@ def create_app(env_name=None):
     app.register_blueprint(users_bp)         # /api/users
     app.register_blueprint(settings_bp)      # /api/settings
     app.register_blueprint(system_bp)        # /api/system
+    app.register_blueprint(accounts_bp)      # /api/accounts
 
     # 启动时自动建表（开发/联调便捷；生产环境建议改用迁移工具）。
     # 兜底捕获：数据库不可用时不影响应用启动，相关接口会在被调用时返回错误。

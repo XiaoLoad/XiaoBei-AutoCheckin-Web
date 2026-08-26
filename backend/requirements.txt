@@ -10,4 +10,6 @@ bcrypt==4.2.0
 cryptography==43.0.1
 # B 平台 HTTP 适配器（登录/学生信息链路）
 requests==2.32.3
+# 图库上传归一化压缩（JPEG 重编码/缩放/EXIF 剥离）
+Pillow==11.3.0
 

@@ -1,9 +1,12 @@
-// 签到配置模块 API（前端框架阶段：返回 mock 数据，模拟网络延迟）。
-// 后端就绪后，只需把下列函数体替换为对 request 的调用，store 与视图无需改动。
-// 资源池（位置 / 图库 / 凭证）的增删改在 mock 层直接落库，便于前端联调演示。
+// 签到配置模块 API（二期已接真：/api/config-sets 与 /api/pools）。
+// 视图形状沿用 mock 时代约定（system/user 双位置列表、sizeKb/inTrash、credentials.fields、
+// uaTemplates.ua 等），由本适配层与后端领域形状互转。
+// 【三期替换点】fetchTaskConfig / saveTaskConfig / getTaskConfigMeta 目前以 localStorage
+// 过渡持久化，三期随 /api/schedules 接口落地后改为真持久化。
+import request from '@/api/request'
+import { fetchAccounts } from './accounts'
 
-const delay = (ms = 220) => new Promise((r) => setTimeout(r, ms))
-const clone = (v) => JSON.parse(JSON.stringify(v))
+const TASK_CFG_KEY = 'signConfig.taskConfigs.v1'
 
 // 配置对象工厂：六类配置的默认骨架（值型随"配置套 → 任务实例"两层继承）
 export function makeConfig() {
@@ -37,216 +40,201 @@ export function makeConfig() {
   }
 }
 
-// 用指定星期生成一套配置（演示"不同批次时间不一致"的场景）
-function setConfig(weekdays) {
-  const c = makeConfig()
-  c.time.weekdays = weekdays
-  return c
+// ── 任务实例配置（localStorage 过渡，三期换 /api/schedules）──
+function readTaskCfgMap() {
+  try { return JSON.parse(localStorage.getItem(TASK_CFG_KEY)) || {} } catch { return {} }
+}
+function writeTaskCfgMap(map) {
+  localStorage.setItem(TASK_CFG_KEY, JSON.stringify(map))
 }
 
-// ── mock 数据源（仅前端框架演示，后端接入后删除） ──
-const mock = {
-  accounts: [
-    { id: 'acc1', name: '张三', studentNo: '2023010101', className: '计算机2301', platform: 'B平台', status: 'enabled' },
-    { id: 'acc2', name: '李四', studentNo: '2023010102', className: '计算机2301', platform: 'B平台', status: 'enabled' },
-    { id: 'acc3', name: '王五', studentNo: '2023010103', className: '软件2302', platform: 'B平台', status: 'disabled' },
-    { id: 'acc4', name: '赵六', studentNo: '2023010201', className: '计算机2301', platform: 'B平台', status: 'enabled' },
-    { id: 'acc5', name: '钱七', studentNo: '2023020101', className: '电信2303', platform: 'B平台', status: 'enabled' },
-    { id: 'acc6', name: '孙八', studentNo: '2023020102', className: '电信2303', platform: 'B平台', status: 'enabled' },
-    { id: 'acc7', name: '周九', studentNo: '2023030101', className: '自动化2304', platform: 'B平台', status: 'disabled' },
-    { id: 'acc8', name: '吴十', studentNo: '2023030102', className: '自动化2304', platform: 'B平台', status: 'enabled' },
-    { id: 'acc9', name: '郑十一', studentNo: '2023040101', className: '数学2305', platform: 'B平台', status: 'enabled' },
-    { id: 'acc10', name: '王十二', studentNo: '2023040102', className: '数学2305', platform: 'B平台', status: 'enabled' },
-    { id: 'acc11', name: '李十三', studentNo: '2023050101', className: '外语2306', platform: 'B平台', status: 'enabled' },
-    { id: 'acc12', name: '刘十四', studentNo: '2023050102', className: '外语2306', platform: 'B平台', status: 'disabled' }
-  ],
-  taskTypes: [
-    { value: 'dorm', label: '寝室签到' },
-    { value: 'activity', label: '活动签到' }
-  ],
-  // 用户配置套（多项命名模板）：不同 B 账号批次时间规律不同，分别建套
-  userConfigSets: [
-    { id: 'set_std', name: '标准套（周一至周日）', config: setConfig([1, 2, 3, 4, 5, 6, 7]) },
-    { id: 'set_wed_fri', name: '周三至周五', config: setConfig([3, 4, 5]) },
-    { id: 'set_sun', name: '仅周日', config: setConfig([7]) }
-  ],
-  taskConfigs: {}, // key: `${accountId}:${type}`
-  systemLocations: [
-    { id: 'sloc1', name: '校东门', address: 'https://map.example.com/east', lat: 30.1234, lng: 120.4567, offset: 50 },
-    { id: 'sloc2', name: '图书馆正门', address: 'https://map.example.com/lib', lat: 30.1241, lng: 120.4578, offset: 30 }
-  ],
-  userLocations: [
-    { id: 'uloc1', name: '我的寝室', address: 'https://map.example.com/dorm', lat: 30.1255, lng: 120.4589, offset: 20 }
-  ],
-  imageLibrary: [
-    { id: 'img1', name: '签到图1.jpg', sizeKb: 182, inTrash: false },
-    { id: 'img2', name: '签到图2.jpg', sizeKb: 156, inTrash: false }
-  ],
-  credentials: [
-    { id: 'cred1', name: 'Server酱-主力', type: 'serverchan', fields: { serverchanKey: 'SCTxxxx' } },
-    { id: 'cred2', name: 'PushPlus-备用', type: 'pushplus', fields: { pushplusToken: 'tokenxxxx' } },
-    { id: 'cred3', name: '邮箱-通知', type: 'email', fields: { emailSmtp: 'smtp.example.com', emailFrom: 'a@example.com', emailPass: '******', emailTo: 'b@example.com' } }
-  ],
-  uaTemplates: [
-    { id: 'ua1', name: 'iPhone 15', ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148' },
-    { id: 'ua2', name: '小米 14', ua: 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Mobile' },
-    { id: 'ua3', name: '华为 Mate 60', ua: 'Mozilla/5.0 (Linux; Android 14; HUAWEI ALN-AL00) AppleWebKit/537.36 Chrome/120 Mobile' }
-  ]
+// 【三期替换点】改为读 /api/schedules 下发的任务实例配置
+export async function fetchTaskConfig(accountId, type) {
+  return readTaskCfgMap()[`${accountId}:${type}`] || null
 }
 
-// 预生成任务实例配置：以首个配置套为起点（新建即套用），记录 presetSetId
-const firstSet = mock.userConfigSets[0]
-for (const a of mock.accounts) {
-  for (const t of mock.taskTypes) {
-    const cfg = clone(firstSet.config)
-    cfg.presetSetId = firstSet.id
-    mock.taskConfigs[`${a.id}:${t.value}`] = cfg
-  }
+// 【三期替换点】改为写回后端任务实例
+export async function saveTaskConfig(accountId, type, config) {
+  const map = readTaskCfgMap()
+  map[`${accountId}:${type}`] = JSON.parse(JSON.stringify(config))
+  writeTaskCfgMap(map)
+  return config
 }
 
-// ── 元信息 ──
-export async function fetchConfigMeta() {
-  await delay()
-  return clone({ accounts: mock.accounts, taskTypes: mock.taskTypes })
-}
-
-// 读取某任务实例的配置套元信息（供定时任务页"跟随配置套"预览使用）。
-// 返回 { time, presetSetName, locationName }；后端接入后此函数改为读取真实配置。
+// 供定时任务页「跟随配置套」预览读取（数据源同上，三期一并替换）。
+// 返回 { time, presetSetName, locationName }；轻量数据源取 fetchConfigSets /
+// fetchPools 成功时顺手写入的 localStorage 缓存。
 export function getTaskConfigMeta(accountId, type) {
-  const cfg = mock.taskConfigs[`${accountId}:${type}`]
+  const cfg = readTaskCfgMap()[`${accountId}:${type}`]
   if (!cfg) return { time: null, presetSetName: '未关联', locationName: '未设置位置' }
-  const set = mock.userConfigSets.find((s) => s.id === cfg.presetSetId)
-  const loc = [...mock.systemLocations, ...mock.userLocations].find((l) => l.id === cfg.locationId)
+  const sets = JSON.parse(localStorage.getItem('signConfig.setsCache') || '[]')
+  const locs = JSON.parse(localStorage.getItem('signConfig.locsCache') || '[]')
+  const set = sets.find((s) => String(s.id) === String(cfg.presetSetId))
+  const loc = locs.find((l) => String(l.id) === String(cfg.locationId))
   return {
-    time: clone(cfg.time),
+    time: cfg.time ? JSON.parse(JSON.stringify(cfg.time)) : null,
     presetSetName: set ? set.name : '未关联',
     locationName: loc ? loc.name : '未设置位置'
   }
 }
 
-// ── 用户配置套（多项命名模板） ──
-export async function fetchConfigSets() {
-  await delay()
-  return clone({ userConfigSets: mock.userConfigSets })
-}
-export async function saveConfigSet(set) {
-  await delay()
-  if (set.id) {
-    const i = mock.userConfigSets.findIndex((s) => s.id === set.id)
-    if (i !== -1) mock.userConfigSets[i] = clone(set)
-  } else {
-    mock.userConfigSets.push({ id: `set_${Date.now()}`, ...clone(set) })
+// ── 元信息：账号来自真实 /api/accounts ──
+export async function fetchConfigMeta() {
+  const accounts = await fetchAccounts()
+  return {
+    accounts: accounts.map((a) => ({
+      id: String(a.id),
+      name: (a.profile && a.profile.name) || a.account,
+      studentNo: (a.profile && a.profile.studentNo) || '',
+      className: (a.profile && a.profile.className) || '',
+      platform: a.platform || 'B 打卡平台',
+      status: a.enabled ? 'enabled' : 'disabled'
+    })),
+    taskTypes: [
+      { value: 'dorm', label: '寝室签到' },
+      { value: 'activity', label: '活动签到' }
+    ]
   }
-  return clone(mock.userConfigSets)
-}
-export async function deleteConfigSet(id) {
-  await delay()
-  return clone((mock.userConfigSets = mock.userConfigSets.filter((s) => s.id !== id)))
 }
 
-// ── 任务实例配置 ──
-export async function fetchTaskConfig(accountId, type) {
-  await delay()
-  return clone(mock.taskConfigs[`${accountId}:${type}`])
+// ── 用户配置套 ──
+const mapSetIn = (s) => ({
+  id: String(s.id),
+  name: s.name,
+  config: { ...(s.config || {}), locationId: s.locationId ?? null }
+})
+
+export async function fetchConfigSets() {
+  const data = await request({ url: '/config-sets', method: 'get' })
+  const sets = (data.items || []).map(mapSetIn)
+  // getTaskConfigMeta 的轻量数据源（localStorage），失败静默
+  try { localStorage.setItem('signConfig.setsCache', JSON.stringify(sets)) } catch { /* 忽略 */ }
+  return { userConfigSets: sets }
 }
-export async function saveTaskConfig(accountId, type, config) {
-  await delay()
-  mock.taskConfigs[`${accountId}:${type}`] = clone(config)
-  return clone(mock.taskConfigs[`${accountId}:${type}`])
+
+async function refreshSets() {
+  const { userConfigSets } = await fetchConfigSets()
+  return userConfigSets
+}
+
+export async function saveConfigSet(set) {
+  const payload = { name: set.name, config: set.config }
+  if (set.id) await request({ url: `/config-sets/${set.id}`, method: 'put', data: payload })
+  else await request({ url: '/config-sets', method: 'post', data: payload })
+  return refreshSets()
+}
+
+export async function deleteConfigSet(id) {
+  await request({ url: `/config-sets/${id}`, method: 'delete' })
+  return refreshSets()
 }
 
 // ── 资源池 ──
+const mapLocation = (l) => ({
+  id: String(l.id), name: l.name, address: l.address || '',
+  lat: l.lat, lng: l.lng, offset: l.offset ?? 10,
+  enabled: l.enabled !== false, isSystem: !!l.isSystem
+})
+
 export async function fetchPools() {
-  await delay()
-  return clone({
-    systemLocations: mock.systemLocations,
-    userLocations: mock.userLocations,
-    imageLibrary: mock.imageLibrary,
-    credentials: mock.credentials,
-    uaTemplates: mock.uaTemplates
-  })
+  const p = await request({ url: '/pools', method: 'get' })
+  const locations = (p.locations || []).map(mapLocation)
+  const pools = {
+    systemLocations: locations.filter((l) => l.isSystem),
+    userLocations: locations.filter((l) => !l.isSystem),
+    imageLibrary: (p.images || []).map((i) => ({ ...i })),
+    credentials: (p.credentials || []).map((c) => ({ ...c, type: c.channel })),
+    uaTemplates: (p.uas || []).map((u) => ({
+      id: String(u.id), name: u.remark || '', ua: u.content, isSystem: !!u.isSystem
+    }))
+  }
+  // getTaskConfigMeta 的预览数据源（配置套缓存由 fetchConfigSets 写入）
+  try { localStorage.setItem('signConfig.locsCache', JSON.stringify(locations)) } catch { /* 忽略 */ }
+  return pools
 }
+
+async function refreshPools() { return fetchPools() }
 
 // 位置池：scope = system | user
 export async function saveLocation(payload) {
-  await delay()
-  const arr = payload.scope === 'system' ? mock.systemLocations : mock.userLocations
-  if (payload.id) {
-    const i = arr.findIndex((x) => x.id === payload.id)
-    if (i !== -1) arr[i] = { ...arr[i], ...payload }
-  } else {
-    arr.push({ id: `loc_${Date.now()}`, ...payload })
+  const body = {
+    name: payload.name, address: payload.address || '',
+    lat: Number(payload.lat), lng: Number(payload.lng),
+    offset: Number(payload.offset) || 10, scope: payload.scope === 'system' ? 'system' : 'user'
   }
-  return clone(arr)
-}
-export async function deleteLocation(payload) {
-  await delay()
-  const arr = payload.scope === 'system' ? mock.systemLocations : mock.userLocations
-  return clone((mock[payload.scope === 'system' ? 'systemLocations' : 'userLocations'] = arr.filter((x) => x.id !== payload.id)))
+  if (payload.id) await request({ url: `/pools/locations/${payload.id}`, method: 'put', data: body })
+  else await request({ url: '/pools/locations', method: 'post', data: body })
+  const p = await refreshPools()
+  return body.scope === 'system' ? p.systemLocations : p.userLocations
 }
 
-// UA 模板（系统级，管理员维护）
+export async function deleteLocation(payload) {
+  await request({ url: `/pools/locations/${payload.id}`, method: 'delete' })
+  const p = await refreshPools()
+  return payload.scope === 'system' ? p.systemLocations : p.userLocations
+}
+
+// UA 模板（管理员维护）
 export async function saveUaTemplate(payload) {
-  await delay()
-  if (payload.id) {
-    const i = mock.uaTemplates.findIndex((x) => x.id === payload.id)
-    if (i !== -1) mock.uaTemplates[i] = { ...mock.uaTemplates[i], ...payload }
-  } else {
-    mock.uaTemplates.push({ id: `ua_${Date.now()}`, name: payload.name, ua: payload.ua })
-  }
-  return clone(mock.uaTemplates)
+  const body = { content: payload.ua, remark: payload.name || '' }
+  if (payload.id) await request({ url: `/pools/uas/${payload.id}`, method: 'put', data: body })
+  else await request({ url: '/pools/uas', method: 'post', data: body })
+  return (await refreshPools()).uaTemplates
 }
 export async function deleteUaTemplate(id) {
-  await delay()
-  return clone((mock.uaTemplates = mock.uaTemplates.filter((x) => x.id !== id)))
+  await request({ url: `/pools/uas/${id}`, method: 'delete' })
+  return (await refreshPools()).uaTemplates
 }
 // 批量删除 UA 模板（管理员）：传入 id 数组，一次性移除
 export async function deleteUaTemplates(ids) {
-  await delay()
-  const set = new Set(ids)
-  return clone((mock.uaTemplates = mock.uaTemplates.filter((x) => !set.has(x.id))))
+  await request({ url: '/pools/uas/bulk-delete', method: 'post', data: { ids } })
+  return (await refreshPools()).uaTemplates
 }
 
-// 图库：上传（模拟）、删除（移入回收站）、恢复
-export async function saveImage(payload) {
-  await delay()
-  if (payload.id) {
-    const i = mock.imageLibrary.findIndex((x) => x.id === payload.id)
-    if (i !== -1) mock.imageLibrary[i] = { ...mock.imageLibrary[i], ...payload }
-  } else {
-    mock.imageLibrary.push({ id: `img_${Date.now()}`, sizeKb: 0, inTrash: false, ...payload })
-  }
-  return clone(mock.imageLibrary)
-}
-export async function trashImage(id) {
-  await delay()
-  const it = mock.imageLibrary.find((x) => x.id === id)
-  if (it) it.inTrash = true
-  return clone(mock.imageLibrary)
-}
-export async function restoreImage(id) {
-  await delay()
-  const it = mock.imageLibrary.find((x) => x.id === id)
-  if (it) it.inTrash = false
-  return clone(mock.imageLibrary)
-}
-export async function deleteImage(id) {
-  await delay()
-  return clone((mock.imageLibrary = mock.imageLibrary.filter((x) => x.id !== id)))
-}
-
-// 我的凭证
+// 我的凭证（密文占位 •••• 原样回传，后端视为未修改保持旧值）
 export async function saveCredential(payload) {
-  await delay()
-  if (payload.id) {
-    const i = mock.credentials.findIndex((x) => x.id === payload.id)
-    if (i !== -1) mock.credentials[i] = { ...mock.credentials[i], ...payload }
-  } else {
-    mock.credentials.push({ id: `cred_${Date.now()}`, ...payload })
-  }
-  return clone(mock.credentials)
+  const body = { channel: payload.type, name: payload.name, fields: payload.fields || {} }
+  if (payload.id) await request({ url: `/pools/credentials/${payload.id}`, method: 'put', data: body })
+  else await request({ url: '/pools/credentials', method: 'post', data: body })
+  return (await refreshPools()).credentials
 }
 export async function deleteCredential(id) {
-  await delay()
-  return clone((mock.credentials = mock.credentials.filter((x) => x.id !== id)))
+  await request({ url: `/pools/credentials/${id}`, method: 'delete' })
+  return (await refreshPools()).credentials
+}
+
+// 图库：真实上传 / 回收站 / 删除
+export async function uploadImage(file) {
+  const fd = new FormData()
+  fd.append('file', file)
+  await request({
+    url: '/pools/images', method: 'post', data: fd,
+    headers: { 'Content-Type': 'multipart/form-data' }, timeout: 30000
+  })
+  return (await refreshPools()).imageLibrary
+}
+export async function trashImage(id) {
+  await request({ url: `/pools/images/${id}/trash`, method: 'post' })
+  return (await refreshPools()).imageLibrary
+}
+export async function restoreImage(id) {
+  await request({ url: `/pools/images/${id}/restore`, method: 'post' })
+  return (await refreshPools()).imageLibrary
+}
+export async function deleteImage(id) {
+  await request({ url: `/pools/images/${id}`, method: 'delete' })
+  return (await refreshPools()).imageLibrary
+}
+
+// 缩略图 blob 拉取（<img> 无法带 Authorization 头；会话级缓存 objectURL）
+const blobCache = new Map()
+export async function fetchImageBlobUrl(id) {
+  if (blobCache.has(id)) return blobCache.get(id)
+  const blob = await request({
+    url: `/pools/images/${id}/file`, method: 'get',
+    responseType: 'blob', timeout: 15000
+  })
+  const url = URL.createObjectURL(blob)
+  blobCache.set(id, url)
+  return url
 }

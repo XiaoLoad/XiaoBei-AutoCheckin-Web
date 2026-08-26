@@ -13,6 +13,9 @@ from app.routes.users import bp as users_bp
 from app.routes.settings import bp as settings_bp
 from app.routes.system import bp as system_bp
 from app.routes.accounts import bp as accounts_bp
+from app.routes.config_sets import bp as config_sets_bp
+from app.routes.pools import bp as pools_bp
+from app.routes.pool_images import bp as pool_images_bp
 
 
 def create_app(env_name=None):
@@ -38,6 +41,9 @@ def create_app(env_name=None):
     app.register_blueprint(settings_bp)      # /api/settings
     app.register_blueprint(system_bp)        # /api/system
     app.register_blueprint(accounts_bp)      # /api/accounts
+    app.register_blueprint(config_sets_bp)   # /api/config-sets
+    app.register_blueprint(pools_bp)         # /api/pools
+    app.register_blueprint(pool_images_bp)   # /api/pools/images（图库上传/回收站/文件流）
 
     # 启动时自动建表（开发/联调便捷；生产环境建议改用迁移工具）。
     # 兜底捕获：数据库不可用时不影响应用启动，相关接口会在被调用时返回错误。
@@ -45,6 +51,8 @@ def create_app(env_name=None):
         with app.app_context():
             db.create_all()
             _ensure_user_columns(app)
+            _ensure_pool_columns(app)
+            _purge_trash_safely()
     except Exception:
         pass
 
@@ -78,3 +86,40 @@ def _ensure_user_columns(app):
             db.session.rollback()
         except Exception:
             pass
+
+
+def _ensure_pool_columns(app):
+    """幂等补齐资源池表二期新增列（offset_m / is_system / trashed_at）。口径同 _ensure_user_columns。"""
+    needed = {
+        'pool_locations': {'offset_m': 'INT NOT NULL DEFAULT 10',
+                           'is_system': 'TINYINT(1) NOT NULL DEFAULT 0'},
+        'pool_uas': {'is_system': 'TINYINT(1) NOT NULL DEFAULT 0'},
+        'pool_images': {'trashed_at': 'DATETIME NULL'},
+    }
+    try:
+        from sqlalchemy import inspect as sa_inspect, text
+
+        with app.app_context():
+            insp = sa_inspect(db.engine)
+            for table, cols in needed.items():
+                if not insp.has_table(table):
+                    continue
+                existing = {c['name'] for c in insp.get_columns(table)}
+                for col, ddl in cols.items():
+                    if col not in existing:
+                        db.session.execute(text(f'ALTER TABLE {table} ADD COLUMN {col} {ddl}'))
+            db.session.commit()
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
+
+def _purge_trash_safely():
+    """启动时物理清除超期回收站图片；失败静默不阻断启动"""
+    try:
+        from app.services.image_store import purge_expired_trash
+        purge_expired_trash()
+    except Exception:
+        pass

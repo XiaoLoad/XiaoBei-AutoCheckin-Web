@@ -51,6 +51,8 @@ service.interceptors.request.use(
 service.interceptors.response.use(
   (response) => {
     untrackRequest(response.config)
+    // blob 响应（图片流）不经 {code,message,data} 解包，原样放行
+    if (response.config.responseType === 'blob') return response.data
     const res = response.data
     // 约定后端成功时 code === 0
     if (res.code !== 0 && res.code !== undefined) {

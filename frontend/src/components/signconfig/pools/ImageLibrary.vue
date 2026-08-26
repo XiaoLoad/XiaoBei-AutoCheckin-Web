@@ -15,22 +15,23 @@
       </div>
       <button
         type="button"
-        class="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white transition hover:bg-brand-dark"
-        @click="uploadMock"
+        class="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
+        :disabled="uploading"
+        @click="fileInput?.click()"
       >
-        <Icon name="plus" :size="15" />上传图片
+        <span v-if="uploading" class="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+        <Icon v-else name="plus" :size="15" />{{ uploading ? '上传中…' : '上传图片' }}
       </button>
     </div>
 
-    <div class="rounded-xl border border-dashed border-ink/15 bg-cloud/40 px-4 py-6 text-center text-xs text-ink-muted">
-      框架阶段：拖拽 / 批量上传与自动压缩至 200KB 将在后端接入后落地；此处的「上传图片」仅向图库追加一条演示记录。
-    </div>
+    <input ref="fileInput" type="file" accept="image/jpeg,image/png" multiple class="hidden" @change="onFilesPicked" />
 
     <div v-if="list.length === 0" class="py-8 text-center text-sm text-ink-muted">暂无图片</div>
     <div v-else class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
       <div v-for="img in list" :key="img.id" class="overflow-hidden rounded-xl border border-ink/10 bg-white">
-        <div class="grid h-24 place-items-center bg-gradient-to-br from-cloud to-brand/10 text-ink-muted">
-          <Icon name="image" :size="26" />
+        <div class="grid h-24 place-items-center overflow-hidden bg-gradient-to-br from-cloud to-brand/10">
+          <img v-if="urls[img.id]" :src="urls[img.id]" class="h-full w-full object-cover" alt="" />
+          <Icon v-else name="image" :size="26" class="text-ink-muted" />
         </div>
         <div class="flex items-center justify-between gap-1 px-2 py-1.5">
           <p class="min-w-0 flex-1 truncate text-xs text-ink-soft">{{ img.name }}</p>
@@ -44,14 +45,16 @@
       </div>
     </div>
 
-    <p class="text-xs text-ink-muted">分页管理与放大查看将在后端资源接口就绪后补充。</p>
+    <p class="text-xs text-ink-muted">上传即自动压缩至 ≤180KB、长边 ≤1920px（B 平台提交口径）；回收站保留 7 天后自动清除。</p>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, reactive, watch } from 'vue'
 import Icon from '@/components/Icon.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
+import { fetchImageBlobUrl } from '@/api/signConfig'
+import toast from '@/utils/toast'
 
 const store = useSignConfigStore()
 const view = ref('active')
@@ -61,16 +64,43 @@ const views = [
 ]
 const list = computed(() => store.imageLibrary.filter((i) => (view.value === 'trash' ? i.inTrash : !i.inTrash)))
 
-function uploadMock() {
-  store.saveImage({ name: `新图片_${Math.floor(Math.random() * 900 + 100)}.jpg`, sizeKb: 120 + Math.floor(Math.random() * 60) })
+// ── 真实上传 ──
+const fileInput = ref(null)
+const uploading = ref(false)
+
+async function onFilesPicked(e) {
+  const files = Array.from(e.target.files || [])
+  e.target.value = ''
+  if (!files.length) return
+  uploading.value = true
+  let okCount = 0
+  try {
+    for (const f of files) {
+      try {
+        await store.uploadImage(f)
+        okCount += 1
+      } catch (err) {
+        toast(`「${f.name}」上传失败：${err.message || '未知错误'}`, 'error')
+      }
+    }
+    if (okCount) toast(`已上传 ${okCount} 张图片`, 'success')
+  } finally {
+    uploading.value = false
+  }
 }
-function toTrash(id) {
-  store.trashImage(id)
-}
-function restore(id) {
-  store.restoreImage(id)
-}
-function remove(id) {
-  store.deleteImage(id)
-}
+
+// ── 缩略图：blob objectURL 会话级缓存 ──
+const urls = reactive({})
+
+watch(list, async (rows) => {
+  for (const r of rows) {
+    if (!urls[r.id]) {
+      try { urls[r.id] = await fetchImageBlobUrl(r.id) } catch { /* 文件丢失时留图标占位 */ }
+    }
+  }
+}, { immediate: true })
+
+function toTrash(id) { store.trashImage(id) }
+function restore(id) { store.restoreImage(id) }
+function remove(id) { store.deleteImage(id) }
 </script>

@@ -29,6 +29,10 @@ class Config:
     JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'dev-jwt-secret-change-me')
     JWT_EXPIRES_HOURS = int(os.getenv('JWT_EXPIRES_HOURS', '12'))
 
+    # 图库上传根目录（env 可覆盖；默认仓库内 backend/uploads，已被 gitignore 排除）
+    UPLOAD_DIR = os.getenv('UPLOAD_DIR') or os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'uploads')
+
 
 class DevelopmentConfig(Config):
     """开发环境配置"""

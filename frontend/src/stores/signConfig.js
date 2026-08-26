@@ -327,6 +327,15 @@ export const useSignConfigStore = defineStore('signConfig', () => {
       saving.value = false
     }
   }
+  // 上传图片：走真实归一化管线，成功后刷新图库数组
+  async function uploadImage(file) {
+    saving.value = true
+    try {
+      imageLibrary.value = await api.uploadImage(file)
+    } finally {
+      saving.value = false
+    }
+  }
 
   // ── 资源池：凭证 ──
   async function saveCredential(payload) {
@@ -454,6 +463,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     trashImage,
     restoreImage,
     deleteImage,
+    uploadImage,
     saveCredential,
     deleteCredential,
     saveUaTemplate,

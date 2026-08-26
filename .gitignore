@@ -21,6 +21,9 @@ instance/
 *.log
 tmp/
 
+# 图库上传文件（用户数据，不入库）
+backend/uploads/
+
 # 验证/预览产物（截图等，非源码）
 outputs/
 

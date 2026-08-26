@@ -14,11 +14,14 @@ class PoolLocation(db.Model):
     lat = db.Column(db.Float)
     lng = db.Column(db.Float)
     enabled = db.Column(db.Boolean, nullable=False, default=True)
+    offset_m = db.Column(db.Integer, nullable=False, default=10)      # 坐标抖动半径（米），打卡提交时应用
+    is_system = db.Column(db.Boolean, nullable=False, default=False)  # 平台预设位置：全员可读，仅管理员可写
     created_at = db.Column(db.DateTime, default=now_cst)
 
     def to_dict(self):
         return {'id': self.id, 'name': self.name, 'address': self.address,
-                'lat': self.lat, 'lng': self.lng, 'enabled': bool(self.enabled)}
+                'lat': self.lat, 'lng': self.lng, 'offset': self.offset_m,
+                'enabled': bool(self.enabled), 'isSystem': bool(self.is_system)}
 
 
 class PoolCredential(db.Model):
@@ -41,11 +44,13 @@ class PoolUa(db.Model):
     content = db.Column(db.Text, nullable=False)
     remark = db.Column(db.String(255))
     enabled = db.Column(db.Boolean, nullable=False, default=True)
+    is_system = db.Column(db.Boolean, nullable=False, default=True)   # UA 模板按产品口径为平台级资源
     created_at = db.Column(db.DateTime, default=now_cst)
 
     def to_dict(self):
         return {'id': self.id, 'content': self.content, 'remark': self.remark,
-                'enabled': bool(self.enabled)}
+                'enabled': bool(self.enabled),
+                'isSystem': bool(self.is_system)}
 
 
 class PoolImage(db.Model):
@@ -58,4 +63,5 @@ class PoolImage(db.Model):
     size = db.Column(db.Integer, default=0)
     mime = db.Column(db.String(64))
     status = db.Column(db.String(16), nullable=False, default='active')  # active | trash
+    trashed_at = db.Column(db.DateTime)   # 移入回收站时刻；恢复清空，超期物理清除依据
     created_at = db.Column(db.DateTime, default=now_cst)

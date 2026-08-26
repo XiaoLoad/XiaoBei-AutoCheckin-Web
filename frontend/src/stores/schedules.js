@@ -4,7 +4,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { toast } from '@/utils/toast'
 import * as api from '@/api/schedules'
-import * as signConfigApi from '@/api/signConfig'
+import { useSignConfigStore } from '@/stores/signConfig'
 import { computeNextRun, formatNextRun, nextRunSummary } from '@/utils/schedule'
 
 export const useSchedulesStore = defineStore('schedules', () => {
@@ -14,7 +14,7 @@ export const useSchedulesStore = defineStore('schedules', () => {
 
   // 读取某任务实例的配置套元信息（用于"跟随配置套"预览与下次执行计算）
   function configMetaOf(accountId, taskType) {
-    return signConfigApi.getTaskConfigMeta(accountId, taskType)
+    return useSignConfigStore().taskConfigMetaOf(accountId, taskType)
   }
   // 计算某任务的"下一次执行" Date
   function nextRunOf(s) {

@@ -71,7 +71,7 @@
                 :disabled="store.saving"
                 @click="store.resetTaskConfig"
               >
-                <Icon name="trash" :size="14" />清空填写
+                <Icon name="trash" :size="14" />重置修改
               </button>
               <button
                 class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
@@ -92,7 +92,7 @@
             <button
               type="button"
               class="inline-flex h-8 items-center gap-1 rounded-lg border border-ink/10 px-3 text-sm text-ink-soft transition hover:bg-cloud disabled:opacity-40"
-              :disabled="!applySetId"
+              :disabled="!applySetId || store.saving"
               @click="applySet"
             >
               <Icon name="copy" :size="13" />应用到此任务
@@ -175,15 +175,16 @@ const accountName = computed(() => store.accounts.find((a) => a.id === store.sel
 const typeLabel = computed(() => (store.taskTypes.find((t) => t.value === store.selectedTaskType) || {}).label || '')
 
 const applySetId = ref('')
-// 切换任务时，回填选择器默认指向该任务已关联的配置套
+// 切换任务时：已绑定则默认指向所绑配置套，未绑定则默认指向用户默认配置套
 watch(
   () => store.taskConfigKey,
   () => {
-    applySetId.value = store.taskConfig?.presetSetId || ''
+    const b = store.scheduleBindings[store.taskConfigKey]
+    applySetId.value = b && b.configSetId ? b.configSetId : (store.defaultSetId || '')
   },
   { immediate: true }
 )
-function applySet() {
-  if (applySetId.value) store.applySetToTask(applySetId.value)
+async function applySet() {
+  if (applySetId.value) await store.applySetToTask(applySetId.value)
 }
 </script>

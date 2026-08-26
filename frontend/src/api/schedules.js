@@ -64,3 +64,27 @@ export async function toggleSchedule(id, enabled) {
   if (s) s.enabled = enabled
   return clone(s)
 }
+
+// ── 模块 C：任务实例与配置套的绑定（真实 /api/schedules）──
+// 返回 { `${accountId}:${taskType}`: { scheduleId, configSetId } }，configSetId 为 null 表示未绑定
+export async function fetchScheduleBindings() {
+  const data = await request({ url: '/schedules', method: 'get' })
+  const map = {}
+  for (const s of (data.items || [])) {
+    map[`${s.accountId}:${s.taskType}`] = {
+      scheduleId: String(s.id),
+      configSetId: s.configSetId == null ? null : String(s.configSetId)
+    }
+  }
+  return map
+}
+
+// 将某配置套应用到任务：仅传 configSetId，后端自动置 mode=follow
+export async function bindScheduleConfigSet(scheduleId, configSetId) {
+  const data = await request({
+    url: `/schedules/${scheduleId}`,
+    method: 'put',
+    data: { configSetId: configSetId == null ? null : Number(configSetId) }
+  })
+  return data
+}

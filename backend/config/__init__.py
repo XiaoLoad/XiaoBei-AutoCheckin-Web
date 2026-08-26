@@ -24,6 +24,12 @@ class Config:
         'mysql+pymysql://root:123456@localhost:3306/xiaobei_auto?charset=utf8mb4'
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # 连接池：归还连接时回滚 + 取出前探活，避免事务泄漏导致 MySQL 可重复读快照串味
+    # （直接表现：跨请求复用的连接读不到刚提交的数据）
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_reset_on_return': 'rollback',
+        'pool_pre_ping': True,
+    }
 
     # JWT 凭证
     JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'dev-jwt-secret-change-me')

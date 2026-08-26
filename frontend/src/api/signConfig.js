@@ -1,17 +1,13 @@
 // 签到配置模块 API（二期已接真：/api/config-sets 与 /api/pools）。
 // 视图形状沿用 mock 时代约定（system/user 双位置列表、sizeKb/inTrash、credentials.fields、
 // uaTemplates.ua 等），由本适配层与后端领域形状互转。
-// 【三期替换点】fetchTaskConfig / saveTaskConfig / getTaskConfigMeta 目前以 localStorage
-// 过渡持久化，三期随 /api/schedules 接口落地后改为真持久化。
+// 任务实例与配置套的绑定（config_set_id）由 /api/schedules 提供，本文件不再持久化任务配置。
 import request from '@/api/request'
 import { fetchAccounts } from './accounts'
-
-const TASK_CFG_KEY = 'signConfig.taskConfigs.v1'
 
 // 配置对象工厂：六类配置的默认骨架（值型随"配置套 → 任务实例"两层继承）
 export function makeConfig() {
   return {
-    presetSetId: null, // 任务实例回填自哪个配置套（仅任务实例用，配置套内恒为 null）
     time: {
       signTime: { hour: 8, minute: 0 }, // 定时签到时间（精确到时分）：调度器在每周选定星期、该时刻附近（叠加随机延时）触发；定时任务页默认采纳此时间
       startHour: 8, // 每日签到起始小时（业务时段：仅该时段内允许签到）
@@ -40,44 +36,6 @@ export function makeConfig() {
   }
 }
 
-// ── 任务实例配置（localStorage 过渡，三期换 /api/schedules）──
-function readTaskCfgMap() {
-  try { return JSON.parse(localStorage.getItem(TASK_CFG_KEY)) || {} } catch { return {} }
-}
-function writeTaskCfgMap(map) {
-  localStorage.setItem(TASK_CFG_KEY, JSON.stringify(map))
-}
-
-// 【三期替换点】改为读 /api/schedules 下发的任务实例配置
-export async function fetchTaskConfig(accountId, type) {
-  return readTaskCfgMap()[`${accountId}:${type}`] || null
-}
-
-// 【三期替换点】改为写回后端任务实例
-export async function saveTaskConfig(accountId, type, config) {
-  const map = readTaskCfgMap()
-  map[`${accountId}:${type}`] = JSON.parse(JSON.stringify(config))
-  writeTaskCfgMap(map)
-  return config
-}
-
-// 供定时任务页「跟随配置套」预览读取（数据源同上，三期一并替换）。
-// 返回 { time, presetSetName, locationName }；轻量数据源取 fetchConfigSets /
-// fetchPools 成功时顺手写入的 localStorage 缓存。
-export function getTaskConfigMeta(accountId, type) {
-  const cfg = readTaskCfgMap()[`${accountId}:${type}`]
-  if (!cfg) return { time: null, presetSetName: '未关联', locationName: '未设置位置' }
-  const sets = JSON.parse(localStorage.getItem('signConfig.setsCache') || '[]')
-  const locs = JSON.parse(localStorage.getItem('signConfig.locsCache') || '[]')
-  const set = sets.find((s) => String(s.id) === String(cfg.presetSetId))
-  const loc = locs.find((l) => String(l.id) === String(cfg.locationId))
-  return {
-    time: cfg.time ? JSON.parse(JSON.stringify(cfg.time)) : null,
-    presetSetName: set ? set.name : '未关联',
-    locationName: loc ? loc.name : '未设置位置'
-  }
-}
-
 // ── 元信息：账号来自真实 /api/accounts ──
 export async function fetchConfigMeta() {
   const accounts = await fetchAccounts()
@@ -101,14 +59,13 @@ export async function fetchConfigMeta() {
 const mapSetIn = (s) => ({
   id: String(s.id),
   name: s.name,
+  isDefault: !!s.isDefault,
   config: { ...(s.config || {}), locationId: s.locationId ?? null }
 })
 
 export async function fetchConfigSets() {
   const data = await request({ url: '/config-sets', method: 'get' })
   const sets = (data.items || []).map(mapSetIn)
-  // getTaskConfigMeta 的轻量数据源（localStorage），失败静默
-  try { localStorage.setItem('signConfig.setsCache', JSON.stringify(sets)) } catch { /* 忽略 */ }
   return { userConfigSets: sets }
 }
 
@@ -148,8 +105,6 @@ export async function fetchPools() {
       id: String(u.id), name: u.remark || '', ua: u.content, isSystem: !!u.isSystem
     }))
   }
-  // getTaskConfigMeta 的预览数据源（配置套缓存由 fetchConfigSets 写入）
-  try { localStorage.setItem('signConfig.locsCache', JSON.stringify(locations)) } catch { /* 忽略 */ }
   return pools
 }
 

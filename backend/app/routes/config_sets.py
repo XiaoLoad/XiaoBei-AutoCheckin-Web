@@ -43,6 +43,10 @@ def create_set():
                   location_id=location_id, is_default=False)
     s.set_config(data['config'])
     db.session.add(s)
+    if data.get('is_default'):
+        db.session.flush()  # 先取 s.id 供唯一性约束使用
+        s.is_default = True
+        ConfigSet.enforce_single_default(request.current_user.id, s.id)
     db.session.commit()
     return success(s.to_dict(), message='创建成功', status=201)
 
@@ -65,6 +69,10 @@ def update_set(set_id):
             return err
         s.location_id = location_id
         s.set_config(data['config'])
+    if 'is_default' in data:
+        s.is_default = data['is_default']
+        if s.is_default:
+            ConfigSet.enforce_single_default(request.current_user.id, s.id)
     db.session.commit()
     return success(s.to_dict(), message='保存成功')
 

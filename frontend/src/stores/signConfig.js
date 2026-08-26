@@ -68,8 +68,9 @@ export const useSignConfigStore = defineStore('signConfig', () => {
   const userConfigSets = ref([])
   const activeSetId = ref('')
 
-  // 任务实例配置：key = `${accountId}:${type}`
-  const taskConfigs = ref({})
+  // 任务实例与配置套的绑定：key = `${accountId}:${type}` → { scheduleId, configSetId }
+  // configSetId 为 null 表示未绑定（localStorage 不再存任务配置，见模块 C）
+  const scheduleBindings = ref({})
 
   // 资源池
   const systemLocations = ref([])
@@ -89,7 +90,25 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     () => userConfigSets.value.find((s) => s.id === activeSetId.value) || userConfigSets.value[0] || null
   )
   const taskConfigKey = computed(() => `${selectedAccountId.value}:${selectedTaskType.value}`)
-  const taskConfig = computed(() => taskConfigs.value[taskConfigKey.value] || null)
+  // 用户默认配置套（is_default 优先，否则取列表首个）：未绑定任务的下拉默认值与预览来源
+  const defaultSetId = computed(() => {
+    const d = userConfigSets.value.find((s) => s.isDefault)
+    if (d) return d.id
+    return userConfigSets.value[0]?.id || ''
+  })
+  // 当前任务绑定的配置套 id（来自后端 Schedule.config_set_id）
+  const boundSetId = computed(() => {
+    const b = scheduleBindings.value[taskConfigKey.value]
+    return b && b.configSetId ? b.configSetId : null
+  })
+  // 任务配置即其跟随配置套的配置（follow 模型）：
+  // 已绑定 → 绑定套配置；未绑定 → 默认套配置（预览），点「应用到此任务」后才真正落库绑定
+  const taskConfig = computed(() => {
+    const setId = boundSetId.value
+    const set = setId ? userConfigSets.value.find((s) => s.id === setId) : null
+    const src = set || userConfigSets.value.find((s) => s.isDefault) || userConfigSets.value[0] || null
+    return src ? src.config : null
+  })
 
   // 账号树：账号 → 寝室/活动 两个任务节点
   const accountTree = computed(() =>
@@ -130,27 +149,32 @@ export const useSignConfigStore = defineStore('signConfig', () => {
   })
   const setOptions = computed(() => userConfigSets.value.map((s) => ({ label: s.name, value: s.id })))
 
-  function deepEqual(a, b) {
-    if (a === b) return true
-    if (typeof a !== 'object' || typeof b !== 'object' || a == null || b == null) return false
-    const ka = Object.keys(a)
-    const kb = Object.keys(b)
-    if (ka.length !== kb.length) return false
-    return ka.every((k) => deepEqual(a[k], b[k]))
-  }
-
-  // 任务状态：沿用某配置套 / 已修改 / 未关联
+  // 任务状态：沿用某配置套 / 未关联（follow 模型下任务配置即配置套配置，无独立修改态）
   const taskStatus = computed(() => {
-    const cfg = taskConfig.value
-    if (!cfg) return { text: '未选择任务', cls: 'bg-ink/10 text-ink-muted' }
-    const id = cfg.presetSetId
-    if (!id) return { text: '未关联配置套', cls: 'bg-ink/10 text-ink-muted' }
-    const set = userConfigSets.value.find((s) => s.id === id)
+    const b = scheduleBindings.value[taskConfigKey.value]
+    if (!b || !b.configSetId) return { text: '未关联配置套', cls: 'bg-ink/10 text-ink-muted' }
+    const set = userConfigSets.value.find((s) => s.id === b.configSetId)
     if (!set) return { text: '原配置套已删除', cls: 'bg-ink/10 text-ink-muted' }
-    return deepEqual(cfg, set.config)
-      ? { text: `沿用「${set.name}」`, cls: 'bg-info/10 text-info' }
-      : { text: `已修改（基于「${set.name}」）`, cls: 'bg-amber/15 text-amber' }
+    return { text: `沿用「${set.name}」`, cls: 'bg-info/10 text-info' }
   })
+
+  // 供定时任务页「跟随配置套」预览：解析某任务绑定配置套的时间/位置元信息
+  function taskConfigMetaOf(accountId, type) {
+    const key = `${accountId}:${type}`
+    const b = scheduleBindings.value[key]
+    const setId = b ? b.configSetId : null
+    const set = setId ? userConfigSets.value.find((s) => s.id === setId) : null
+    const cfg = set ? set.config : null
+    if (!cfg) return { time: null, presetSetName: '未关联', locationName: '未设置位置' }
+    const loc =
+      userLocations.value.find((l) => l.id === cfg.locationId) ||
+      systemLocations.value.find((l) => l.id === cfg.locationId)
+    return {
+      time: cfg.time ? JSON.parse(JSON.stringify(cfg.time)) : null,
+      presetSetName: set ? set.name : '未关联',
+      locationName: loc ? loc.name : '未设置位置'
+    }
+  }
 
   // ── 加载 ──
   async function load() {
@@ -167,15 +191,12 @@ export const useSignConfigStore = defineStore('signConfig', () => {
       credentials.value = pools.credentials
       uaTemplates.value = pools.uaTemplates
 
-      // 预载所有任务实例配置（框架演示用；后端可改为按需加载）
-      const entries = []
-      for (const a of accounts.value) {
-        for (const t of taskTypes.value) entries.push([`${a.id}:${t.value}`, api.fetchTaskConfig(a.id, t.value)])
+      // 任务实例与配置套的绑定（config_set_id）来自后端 schedules；本地不再持久化任务配置
+      try {
+        scheduleBindings.value = await api.fetchScheduleBindings()
+      } catch (e) {
+        scheduleBindings.value = {}
       }
-      const cfgs = await Promise.all(entries.map((e) => e[1]))
-      const map = {}
-      entries.forEach((e, i) => (map[e[0]] = cfgs[i]))
-      taskConfigs.value = map
 
       if (accounts.value.length) {
         selectedAccountId.value = accounts.value[0].id
@@ -238,9 +259,17 @@ export const useSignConfigStore = defineStore('signConfig', () => {
   }
 
   // ── 任务实例配置保存 ──
+  // 任务配置即配置套配置（follow 模型）：保存即写回所绑定的配置套；未绑定则提示先应用配置套
   async function saveTaskConfig() {
     if (!selectedAccountId.value) return
-    const errs = validateConfig(taskConfig.value)
+    const b = scheduleBindings.value[taskConfigKey.value]
+    if (!b || !b.configSetId) {
+      toast('请先点击「应用到此任务」绑定配置套后再保存', 'error')
+      return
+    }
+    const set = userConfigSets.value.find((s) => s.id === b.configSetId)
+    if (!set) return
+    const errs = validateConfig(set.config)
     if (Object.keys(errs).length) {
       formErrors.value = errs
       toast(`保存失败：${Object.values(errs).join('；')}`, 'error')
@@ -249,19 +278,35 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     formErrors.value = {}
     saving.value = true
     try {
-      const saved = await api.saveTaskConfig(selectedAccountId.value, selectedTaskType.value, taskConfig.value)
-      taskConfigs.value = { ...taskConfigs.value, [taskConfigKey.value]: saved }
+      const saved = await api.saveConfigSet({ id: set.id, name: set.name, config: set.config })
+      userConfigSets.value = saved
+      toast('配置已保存到配置套', 'success')
     } finally {
       saving.value = false
     }
   }
-  // 从配置套回填到当前任务（引用哪一套配置进行回填）
-  function applySetToTask(setId) {
-    const set = userConfigSets.value.find((s) => s.id === setId)
+  // 将某配置套应用到当前任务：写入后端 Schedule.config_set_id（后端自动置 mode=follow）
+  async function applySetToTask(setId) {
+    const setIdStr = String(setId)
+    const set = userConfigSets.value.find((s) => s.id === setIdStr)
     if (!set || !selectedAccountId.value) return
-    const cloned = JSON.parse(JSON.stringify(set.config))
-    cloned.presetSetId = set.id
-    taskConfigs.value = { ...taskConfigs.value, [taskConfigKey.value]: cloned }
+    const b = scheduleBindings.value[taskConfigKey.value]
+    if (!b) {
+      toast('该账号暂未生成调度实例，无法绑定配置套', 'error')
+      return
+    }
+    saving.value = true
+    try {
+      await api.bindScheduleConfigSet(b.scheduleId, setIdStr)
+      scheduleBindings.value = {
+        ...scheduleBindings.value,
+        [taskConfigKey.value]: { scheduleId: b.scheduleId, configSetId: setIdStr }
+      }
+    } catch (e) {
+      toast(e.message || '应用配置套失败', 'error')
+    } finally {
+      saving.value = false
+    }
   }
 
   // 清空当前正在编辑的配置（舍弃所有已填内容，回到默认空白模板）。
@@ -274,10 +319,16 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     userConfigSets.value[i] = clone
     formErrors.value = {}
   }
-  function resetTaskConfig() {
+  // 放弃未保存修改：重新拉取配置套（任务配置即配置套配置，无独立任务副本）
+  async function resetTaskConfig() {
     if (!selectedAccountId.value) return
-    taskConfigs.value = { ...taskConfigs.value, [taskConfigKey.value]: api.makeConfig() }
-    formErrors.value = {}
+    saving.value = true
+    try {
+      userConfigSets.value = (await api.fetchConfigSets()).userConfigSets
+      formErrors.value = {}
+    } finally {
+      saving.value = false
+    }
   }
 
   // ── 资源池：位置 ──
@@ -428,7 +479,8 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     taskTypes,
     userConfigSets,
     activeSetId,
-    taskConfigs,
+    scheduleBindings,
+    defaultSetId,
     systemLocations,
     userLocations,
     imageLibrary,
@@ -442,6 +494,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     taskConfigKey,
     taskConfig,
     taskStatus,
+    taskConfigMetaOf,
     accountTree,
     locationOptions,
     credentialOptions,

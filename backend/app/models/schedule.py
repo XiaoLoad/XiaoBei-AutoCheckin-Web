@@ -16,6 +16,7 @@ class Schedule(db.Model):
     mode = db.Column(db.String(16), nullable=False, default='follow')    # follow | custom
     custom_json = db.Column(db.Text)      # {"hour":8,"minute":0,"weekdays":[1..7],"randomDelayMax":5}
     config_set_id = db.Column(db.Integer, db.ForeignKey('config_sets.id'))
+    next_run_at = db.Column(db.DateTime, nullable=True)  # 下次执行时间缓存（调度器维护，便于前端展示）
     enabled = db.Column(db.Boolean, nullable=False, default=False)
     last_run_at = db.Column(db.DateTime)
     last_status = db.Column(db.String(16))                               # success | fail | skip
@@ -30,3 +31,23 @@ class Schedule(db.Model):
     @property
     def custom(self) -> dict:
         return json.loads(self.custom_json) if self.custom_json else {}
+
+    def to_dict(self):
+        from app.models.b_account import BAccount
+        acc = db.session.get(BAccount, self.account_id)
+        return {
+            'id': self.id,
+            'userId': self.user_id,
+            'accountId': self.account_id,
+            'accountName': acc.account if acc else '',
+            'accountEnabled': bool(acc.enabled) if acc else False,
+            'taskType': self.task_type,
+            'mode': self.mode,
+            'configSetId': self.config_set_id,
+            'custom': self.custom,
+            'enabled': bool(self.enabled),
+            'nextRunAt': self.next_run_at.strftime('%Y-%m-%d %H:%M') if self.next_run_at else '',
+            'lastRunAt': self.last_run_at.strftime('%Y-%m-%d %H:%M') if self.last_run_at else '',
+            'lastStatus': self.last_status or 'never',
+            'runCount': self.run_count,
+        }

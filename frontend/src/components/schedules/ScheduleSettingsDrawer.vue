@@ -137,7 +137,7 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { gsap } from 'gsap'
 import Icon from '@/components/Icon.vue'
-import * as signConfigApi from '@/api/signConfig'
+import { useSignConfigStore } from '@/stores/signConfig'
 import { computeNextRun, formatNextRun, nextRunSummary, WEEKDAY_LABELS, pad } from '@/utils/schedule'
 
 const props = defineProps({
@@ -151,7 +151,10 @@ const overlay = ref(null)
 const panel = ref(null)
 const closing = ref(false)
 
-const configMeta = signConfigApi.getTaskConfigMeta(props.schedule.accountId, props.schedule.taskType)
+const signConfigStore = useSignConfigStore()
+const configMeta = computed(() =>
+  signConfigStore.taskConfigMetaOf(props.schedule.accountId, props.schedule.taskType)
+)
 
 // 编辑副本：初始值取自当前调度任务
 const form = reactive({

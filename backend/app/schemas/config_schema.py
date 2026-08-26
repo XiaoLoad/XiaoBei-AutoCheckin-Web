@@ -11,6 +11,17 @@ def _clean_name(v):
     return s[:_MAX_NAME] if 0 < len(s) <= _MAX_NAME else None
 
 
+def _as_bool(v):
+    """宽松解析布尔：接受 Python bool / 'true'|'1'|'yes' 字符串 / 整数 1。"""
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, str):
+        return v.strip().lower() in ('true', '1', 'yes')
+    if isinstance(v, int):
+        return v == 1
+    return False
+
+
 def sanitize_config(raw):
     """配置体兜底清洗。返回 (ok, cfg_or_None)"""
     if not isinstance(raw, dict):
@@ -41,7 +52,10 @@ def load_create(payload):
     ok, cfg = sanitize_config(payload.get('config'))
     if not ok:
         return False, None, '配置体结构不合法', 4201
-    return True, {'name': name, 'config': cfg}, '', 0
+    data = {'name': name, 'config': cfg}
+    if 'isDefault' in payload:
+        data['is_default'] = _as_bool(payload['isDefault'])
+    return True, data, '', 0
 
 
 def load_update(payload):
@@ -58,6 +72,8 @@ def load_update(payload):
         if not ok:
             return False, None, '配置体结构不合法', 4201
         data['config'] = cfg
+    if 'isDefault' in payload:
+        data['is_default'] = _as_bool(payload['isDefault'])
     if not data:
         return False, None, '没有需要更新的字段', 4202
     return True, data, '', 0

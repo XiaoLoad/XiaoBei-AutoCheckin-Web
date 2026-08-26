@@ -25,6 +25,11 @@ class ConfigSet(db.Model):
     def set_config(self, cfg: dict):
         self.config_json = json.dumps(cfg, ensure_ascii=False)
 
+    @classmethod
+    def enforce_single_default(cls, user_id, keep_id):
+        """保证某用户仅一条 is_default：把其余配置套置为 False。"""
+        cls.query.filter_by(user_id=user_id).filter(cls.id != keep_id).update({'is_default': False})
+
     def to_dict(self):
         return {
             'id': self.id, 'name': self.name, 'isDefault': bool(self.is_default),

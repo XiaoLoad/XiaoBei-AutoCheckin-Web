@@ -4,7 +4,7 @@ from flask_cors import CORS
 
 from config import get_config
 from app.extensions import db
-from app.models import User, SystemConfig, BAccount  # noqa: F401  确保模型被加载
+from app.models import User, SystemConfig, BAccount, ConfigSet  # noqa: F401  确保模型被加载
 from app.utils.response import success, error
 from app.routes.example import bp as example_bp
 from app.routes.health import bp as health_bp
@@ -14,6 +14,7 @@ from app.routes.settings import bp as settings_bp
 from app.routes.system import bp as system_bp
 from app.routes.accounts import bp as accounts_bp
 from app.routes.config_sets import bp as config_sets_bp
+from app.routes.schedules import bp as schedules_bp
 from app.routes.pools import bp as pools_bp
 from app.routes.pool_images import bp as pool_images_bp
 
@@ -42,6 +43,7 @@ def create_app(env_name=None):
     app.register_blueprint(system_bp)        # /api/system
     app.register_blueprint(accounts_bp)      # /api/accounts
     app.register_blueprint(config_sets_bp)   # /api/config-sets
+    app.register_blueprint(schedules_bp)     # /api/schedules
     app.register_blueprint(pools_bp)         # /api/pools
     app.register_blueprint(pool_images_bp)   # /api/pools/images（图库上传/回收站/文件流）
 
@@ -52,6 +54,8 @@ def create_app(env_name=None):
             db.create_all()
             _ensure_user_columns(app)
             _ensure_pool_columns(app)
+            _ensure_schedule_columns(app)
+            _seed_default_config_sets(app)
             _purge_trash_safely()
     except Exception:
         pass
@@ -108,6 +112,53 @@ def _ensure_pool_columns(app):
                 for col, ddl in cols.items():
                     if col not in existing:
                         db.session.execute(text(f'ALTER TABLE {table} ADD COLUMN {col} {ddl}'))
+            db.session.commit()
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
+
+def _ensure_schedule_columns(app):
+    """幂等补齐 schedules 表三期新增列（next_run_at）。口径同 _ensure_pool_columns。"""
+    needed = {'schedules': {'next_run_at': 'DATETIME NULL'}}
+    try:
+        from sqlalchemy import inspect as sa_inspect, text
+
+        with app.app_context():
+            insp = sa_inspect(db.engine)
+            for table, cols in needed.items():
+                if not insp.has_table(table):
+                    continue
+                existing = {c['name'] for c in insp.get_columns(table)}
+                for col, ddl in cols.items():
+                    if col not in existing:
+                        db.session.execute(text(f'ALTER TABLE {table} ADD COLUMN {col} {ddl}'))
+            db.session.commit()
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
+
+def _seed_default_config_sets(app):
+    """为每个用户保证至少一条 is_default 配置套：无套则建空默认套，有套无默认则提升第一条。"""
+    try:
+        with app.app_context():
+            users = User.query.all()
+            for u in users:
+                default = ConfigSet.query.filter_by(user_id=u.id, is_default=True).first()
+                if default:
+                    continue
+                first = ConfigSet.query.filter_by(user_id=u.id).order_by(ConfigSet.id.asc()).first()
+                if first:
+                    first.is_default = True
+                else:
+                    s = ConfigSet(user_id=u.id, name='默认配置套', is_default=True)
+                    s.set_config({})
+                    db.session.add(s)
             db.session.commit()
     except Exception:
         try:

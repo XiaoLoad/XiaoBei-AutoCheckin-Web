@@ -7,14 +7,16 @@ from app.models.user import now_cst
 
 
 def _extract_schedule_time(schedule):
-    """返回 (hour, minute, weekdays[1..7])，缺失返回 (None, None, [])"""
+    """返回 (hour, minute, weekdays[1..7])，缺失返回 (None, None, [])。
+    follow 与调度器 _resolve 同口径：配置套 + 字段级覆盖浅合并后再取 time。"""
     if schedule.mode == 'follow':
         cfg = {}
         if schedule.config_set_id:
             from app.models.config_set import ConfigSet
             cs = db.session.get(ConfigSet, schedule.config_set_id)
             if cs:
-                cfg = cs.config
+                cfg = dict(cs.config or {})
+        cfg.update(schedule.overrides or {})
         t = cfg.get('time') or {}
         sign_time = t.get('signTime') or {}
         hour = sign_time.get('hour')

@@ -16,6 +16,9 @@ class Schedule(db.Model):
     mode = db.Column(db.String(16), nullable=False, default='follow')    # follow | custom
     custom_json = db.Column(db.Text)      # {"hour":8,"minute":0,"weekdays":[1..7],"randomDelayMax":5}
     config_set_id = db.Column(db.Integer, db.ForeignKey('config_sets.id'))
+    # 字段级覆盖（follow 模式）：顶层配置键 → 替换值，如 {"time": {...}}；
+    # 执行时与所绑配置套浅合并，未覆盖的键继续跟随配置套
+    overrides_json = db.Column(db.Text)
     next_run_at = db.Column(db.DateTime, nullable=True)  # 下次执行时间缓存（调度器维护，便于前端展示）
     enabled = db.Column(db.Boolean, nullable=False, default=False)
     last_run_at = db.Column(db.DateTime)
@@ -31,6 +34,10 @@ class Schedule(db.Model):
     @property
     def custom(self) -> dict:
         return json.loads(self.custom_json) if self.custom_json else {}
+
+    @property
+    def overrides(self) -> dict:
+        return json.loads(self.overrides_json) if self.overrides_json else {}
 
     def to_dict(self):
         from app.models.b_account import BAccount
@@ -51,6 +58,7 @@ class Schedule(db.Model):
             'mode': self.mode,
             'configSetId': self.config_set_id,
             'custom': self.custom,
+            'overrides': self.overrides,
             'enabled': bool(self.enabled),
             'nextRunAt': self.next_run_at.strftime('%Y-%m-%d %H:%M') if self.next_run_at else '',
             'lastRunAt': self.last_run_at.strftime('%Y-%m-%d %H:%M') if self.last_run_at else '',

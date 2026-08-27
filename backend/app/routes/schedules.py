@@ -101,6 +101,8 @@ def update_schedule(sched_id):
         s.mode = 'follow'
     if 'custom' in data:
         s.custom_json = json.dumps(data['custom'], ensure_ascii=False)
+    if 'overrides' in data:
+        s.overrides_json = json.dumps(data['overrides'], ensure_ascii=False) if data['overrides'] else None
     if 'enabled' in data:
         s.enabled = data['enabled']
 

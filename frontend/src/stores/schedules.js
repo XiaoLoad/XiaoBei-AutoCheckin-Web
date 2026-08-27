@@ -152,29 +152,6 @@ export const useSchedulesStore = defineStore('schedules', () => {
     }
   }
 
-  // 配置页「添加至定时任务」：为指定账号×类型创建（幂等）并立即启用、绑定配置套
-  async function activateTask(accountId, taskType, configSetId) {
-    saving.value = true
-    try {
-      const created = await api.createSchedule({ accountId: Number(accountId), taskType })
-      const updated = await api.updateSchedule({
-        id: created.id,
-        enabled: true,
-        configSetId: configSetId == null ? null : Number(configSetId)
-      })
-      const i = schedules.value.findIndex((s) => s.id === updated.id)
-      if (i !== -1) schedules.value[i] = updated
-      else schedules.value.push(updated)
-      toast('已添加至定时任务并启用', 'success')
-      return updated
-    } catch (e) {
-      toast(e.message || '添加失败', 'error')
-      return null
-    } finally {
-      saving.value = false
-    }
-  }
-
   return {
     loading,
     saving,
@@ -188,7 +165,6 @@ export const useSchedulesStore = defineStore('schedules', () => {
     saveSettings,
     addTask,
     removeTask,
-    activateTask,
     stats
   }
 })

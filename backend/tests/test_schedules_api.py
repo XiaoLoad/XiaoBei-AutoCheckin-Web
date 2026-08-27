@@ -290,3 +290,29 @@ def test_disable_clears_next_run(app, user_headers):
         assert r2.get_json()['data']['nextRunAt'] == ''
     finally:
         _delete_account(c, user_headers, acc_id)
+
+
+def test_overrides_roundtrip_and_validation(app, user_headers):
+    """字段级覆盖：time 单独设置后可读回；不支持的键被拒绝；空对象清空全部覆盖"""
+    c = app.test_client()
+    acc_id = _create_account(c, user_headers)
+    try:
+        sid = _create_schedule(c, user_headers, acc_id, 'dorm')
+        ov = {'time': {'signTime': {'hour': 6, 'minute': 50}, 'startHour': 6, 'endHour': 22,
+                       'weekdays': [1, 2, 3, 4, 5], 'randomDelayMax': 3, 'mode': 'normal'}}
+        r = c.put(f'/api/schedules/{sid}', json={'overrides': ov}, headers=user_headers)
+        assert r.status_code == 200, r.get_json()
+        it = next(x for x in c.get('/api/schedules', headers=user_headers).get_json()['data']['items']
+                  if x['id'] == sid)
+        assert it['overrides']['time']['signTime']['hour'] == 6
+
+        r = c.put(f'/api/schedules/{sid}', json={'overrides': {'nope': 1}}, headers=user_headers)
+        assert r.status_code == 400 and r.get_json()['code'] == 4413
+
+        r = c.put(f'/api/schedules/{sid}', json={'overrides': {}}, headers=user_headers)
+        assert r.status_code == 200
+        it = next(x for x in c.get('/api/schedules', headers=user_headers).get_json()['data']['items']
+                  if x['id'] == sid)
+        assert it['overrides'] == {}
+    finally:
+        _delete_account(c, user_headers, acc_id)

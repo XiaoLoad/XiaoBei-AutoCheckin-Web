@@ -148,13 +148,12 @@ def reconcile():
 
 def _extract_jitter(schedule):
     """随机延迟上限（分钟）→ 供 CronTrigger jitter 使用（秒）。
-    follow 取配置套 time.randomDelayMax；custom 取 schedule.custom.randomDelayMax。"""
+    follow 取合并覆盖后的 time.randomDelayMax；custom 取 schedule.custom.randomDelayMax。"""
     if schedule.mode == 'follow':
-        if schedule.config_set_id:
-            cs = db.session.get(ConfigSet, schedule.config_set_id)
-            if cs:
-                return int((cs.config or {}).get('time', {}).get('randomDelayMax') or 0)
-        return 0
+        resolved = _resolve(schedule)
+        if resolved is None:
+            return 0
+        return int((resolved.get('time') or {}).get('randomDelayMax') or 0)
     return int((schedule.custom or {}).get('randomDelayMax') or 0)
 
 
@@ -202,14 +201,15 @@ def _run(schedule_id):
 
 
 def _resolve(schedule):
-    """解析任务真实执行配置。follow 取配置套；custom 取内联。缺配置返回 None。"""
+    """解析任务真实执行配置。follow = 配置套 + 字段级覆盖浅合并（overrides 顶层键替换套内同键，
+    未覆盖键继续跟随配置套）；custom 取内联。缺配置返回 None。"""
     if schedule.mode == 'follow':
         if not schedule.config_set_id:
             return None
         cs = db.session.get(ConfigSet, schedule.config_set_id)
         if cs is None:
             return None
-        return cs.config or {}
+        return {**(cs.config or {}), **(schedule.overrides or {})}
     return schedule.custom or {}
 
 

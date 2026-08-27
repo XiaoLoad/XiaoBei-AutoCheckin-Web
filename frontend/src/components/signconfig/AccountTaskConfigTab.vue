@@ -66,64 +66,83 @@
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h3 class="text-sm font-semibold text-ink">{{ accountName }} · {{ typeLabel }}</h3>
-              <p class="text-xs text-ink-muted">从下方六类配置中调整；也可先选一套配置套回填，再按需微调。</p>
+              <p class="mt-0.5 text-xs text-ink-muted">{{ headerHint }}</p>
             </div>
             <div class="flex items-center gap-2">
+              <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" :class="store.taskStatus.cls">
+                <span class="h-1.5 w-1.5 rounded-full bg-current" />{{ store.taskStatus.text }}
+              </span>
+              <!-- 主按钮状态机：未启用→启用定时任务；运行中有改动→保存修改；运行中无改动→暂停调度 -->
               <button
+                v-if="!taskState.enabled"
                 type="button"
-                class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-ink/10 px-4 text-sm font-medium text-ink-soft transition hover:bg-cloud disabled:opacity-50"
-                :disabled="store.saving"
-                @click="store.resetTaskConfig"
+                class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
+                :disabled="store.saving || !cfgComplete"
+                @click="onEnable"
               >
-                <Icon name="trash" :size="14" />重置修改
+                <Icon name="clock" :size="14" />启用定时任务
               </button>
-              <!-- 已推送且启用的任务：按钮切换为「取消定时任务」；否则为「添加至定时任务」（需配置完整且已保存） -->
               <button
-                v-if="!taskState.hasInstance"
+                v-else-if="store.isDirty"
                 type="button"
-                class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-brand/30 bg-brand/5 px-4 text-sm font-medium text-brand transition hover:bg-brand/10 disabled:opacity-50"
-                :disabled="store.saving || schedulesStore.saving || !canPush"
-                @click="addToSchedule"
+                class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
+                :disabled="store.saving"
+                @click="onSaveConfig"
               >
-                <Icon name="plus" :size="14" />添加至定时任务
+                <Icon name="check" :size="14" />保存修改
               </button>
               <button
                 v-else
                 type="button"
-                class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-danger/30 bg-danger/5 px-4 text-sm font-medium text-danger transition hover:bg-danger/10 disabled:opacity-50"
-                :disabled="store.saving || schedulesStore.saving"
-                @click="cancelTask"
+                class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-ink/70 px-4 text-sm font-medium text-white transition hover:bg-ink disabled:opacity-50"
+                :disabled="store.saving"
+                @click="onPause"
               >
-                <Icon name="x-circle" :size="14" />取消定时任务
-              </button>
-              <!-- 保存：仅当配置发生改动（脏）时可点；无改动禁用。绑定与否不再拦截保存 -->
-              <button
-                class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
-                :disabled="store.saving || !store.isDirty"
-                @click="onSaveConfig"
-              >
-                <Icon name="check" :size="14" />{{ store.saving ? '保存中…' : '保存' }}
+                <Icon name="x-circle" :size="14" />暂停调度
               </button>
             </div>
           </div>
 
-          <!-- 配置套回填 + 任务状态 -->
+          <!-- 启用前置提示：配置必填项不完整 -->
+          <div v-if="!taskState.enabled && !cfgComplete" class="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-ink-soft">
+            <Icon name="alert" :size="14" class="mt-0.5 shrink-0 text-warning" />
+            <span>启用前请先完善必填项：{{ blockHint }}。补全后保存，再点「启用定时任务」。</span>
+          </div>
+
+          <!-- 配置套选择（仅本地选择/预览）+ 手动套用 + 次要编辑动作 -->
           <div class="flex flex-wrap items-center gap-2 rounded-lg bg-cloud/50 px-3 py-2">
-            <span class="text-xs text-ink-soft">配置套回填：</span>
-            <div class="w-56">
-              <BaseSelect v-model="applySetId" :options="store.setOptions" :searchable="true" size="sm" placeholder="选择配置套" />
+            <span class="shrink-0 text-xs text-ink-soft">配置套</span>
+            <div class="w-48">
+              <BaseSelect v-model="bindPick" :options="store.setOptions" :searchable="true" size="sm" placeholder="选择配置套" />
             </div>
             <button
               type="button"
-              class="inline-flex h-8 items-center gap-1 rounded-lg border border-ink/10 px-3 text-sm text-ink-soft transition hover:bg-cloud disabled:opacity-40"
-              :disabled="!applySetId || store.saving"
-              @click="applySet"
+              class="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-ink/10 px-3 text-sm text-ink-soft transition hover:bg-cloud disabled:opacity-40"
+              :disabled="!bindPick || bindPick === (taskState.configSetId || '') || store.saving"
+              @click="onBindApply"
             >
-              <Icon name="copy" :size="13" />应用到此任务
+              <Icon name="copy" :size="13" />套用
             </button>
-            <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" :class="store.taskStatus.cls">
-              <span class="h-1.5 w-1.5 rounded-full bg-current" />{{ store.taskStatus.text }}
-            </span>
+            <span class="mx-0.5 h-5 w-px bg-ink/10" />
+            <button
+              type="button"
+              class="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg px-2.5 text-sm text-ink-soft transition hover:bg-cloud disabled:opacity-40"
+              :disabled="store.saving || !store.isDirty"
+              @click="store.resetTaskConfig"
+            >
+              <Icon name="trash" :size="13" />重置
+            </button>
+            <button
+              v-if="!taskState.enabled"
+              type="button"
+              class="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg px-2.5 text-sm text-ink-soft transition hover:bg-cloud disabled:opacity-40"
+              :disabled="store.saving || !store.isDirty"
+              :title="`保存到「${saveTargetName}」`"
+              @click="onSaveConfig"
+            >
+              <Icon name="check" :size="13" />保存
+            </button>
+            <span class="ml-auto text-[11px] text-ink-muted">{{ bindHint }}</span>
           </div>
         </div>
 
@@ -153,6 +172,22 @@
         </div>
       </div>
     </div>
+
+    <!-- 换绑确认：运行中的任务换绑立即生效 -->
+    <div
+      v-if="showBindConfirm"
+      class="fixed inset-0 z-40 flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm"
+      @click.self="showBindConfirm = false"
+    >
+      <div class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+        <h3 class="text-base font-semibold text-ink">换绑配置套</h3>
+        <p class="mt-2 text-sm leading-relaxed text-ink-muted">任务正在运行，换绑后立即按新配置套执行。确定继续吗？</p>
+        <div class="mt-5 flex items-center justify-end gap-2">
+          <button type="button" class="h-9 rounded-lg px-4 text-sm font-medium text-ink-muted transition hover:bg-cloud" @click="showBindConfirm = false">取消</button>
+          <button type="button" class="h-9 rounded-lg bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-dark" @click="confirmBind">确定换绑</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -161,8 +196,6 @@ import { ref, computed, watch, reactive } from 'vue'
 import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
-import { useSchedulesStore } from '@/stores/schedules'
-import { useAccountsStore } from '@/stores/accounts'
 import { toast } from '@/utils/toast'
 import TimeSection from '@/components/signconfig/sections/TimeSection.vue'
 import LocationSection from '@/components/signconfig/sections/LocationSection.vue'
@@ -173,8 +206,6 @@ import AdvancedSection from '@/components/signconfig/sections/AdvancedSection.vu
 import MasonryGrid from '@/components/signconfig/MasonryGrid.vue'
 
 const store = useSignConfigStore()
-const schedulesStore = useSchedulesStore()
-const accountsStore = useAccountsStore()
 
 // ── 左树：搜索 + 折叠 ──
 const search = ref('')
@@ -219,52 +250,66 @@ watch(
 const accountName = computed(() => store.accounts.find((a) => a.id === store.selectedAccountId)?.name || '')
 const typeLabel = computed(() => (store.taskTypes.find((t) => t.value === store.selectedTaskType) || {}).label || '')
 
-const applySetId = ref('')
-// 切换任务时：已绑定则默认指向所绑配置套，未绑定则默认指向用户默认配置套
-watch(
-  () => store.taskConfigKey,
-  () => {
-    const b = store.scheduleBindings[store.taskConfigKey]
-    applySetId.value = b && b.configSetId ? b.configSetId : (store.defaultSetId || '')
-  },
-  { immediate: true }
-)
-async function applySet() {
-  if (applySetId.value) await store.applySetToTask(applySetId.value)
-}
-
 // 当前任务调度实例状态（来自 store，已含 enabled）
 const taskState = computed(() => store.taskScheduleState)
+const hasInstance = computed(() => !!taskState.value.hasInstance)
+const enabled = computed(() => !!taskState.value.enabled)
 // 配置完整度：必填项是否都已填写（时间/位置/备注）
 const cfgComplete = computed(() => Object.keys(store.validateConfig(store.taskConfig || {})).length === 0)
-// 是否允许「添加至定时任务」：已绑定配置套 + 配置完整 + 配置已保存（无未保存改动）
-const canPush = computed(() => !!taskState.value.configSetId && cfgComplete.value && !store.isDirty)
+const blockHint = computed(() => Object.values(store.validateConfig(store.taskConfig || {})).join('；'))
+const headerHint = computed(() =>
+  enabled.value
+    ? '任务运行中：保存修改立即生效，暂停后可随时再次启用'
+    : '配置跟随所选配置套；自定义内容保存时将派生为专属新套'
+)
+// 保存目标配置套名（写回所属套：已绑定用绑定套，未绑定用下拉所选/默认套）
+const saveTargetName = computed(() => {
+  const set = store.userConfigSets.find((s) => s.id === store.effectiveBindSetId)
+  return set ? set.name : ''
+})
 
-// 添加至定时任务：将当前账号×类型的配置主动推送为调度实例并立即启用。
-// 已绑定配置套（回填后）才放行，确保推送的是已保存的完整配置而非草稿。
-async function addToSchedule() {
-  const aid = store.selectedAccountId
-  const type = store.selectedTaskType
-  if (!aid || !type) return
-  const key = `${aid}:${type}`
-  const configSetId = (store.scheduleBindings[key] && store.scheduleBindings[key].configSetId) || null
-  if (!configSetId) {
-    toast('请先在「配置套回填」应用一套配置套', 'error')
+// 配置套下拉：仅本地选择/预览，不自动关联；关联由「套用此配置套」显式触发
+const showBindConfirm = ref(false)
+const pendingBindId = ref('')
+const bindPick = computed({
+  get: () => store.effectiveBindSetId || '',
+  set: (id) => {
+    if (id) store.selectBindSet(id)
+  }
+})
+const bindHint = computed(() =>
+  hasInstance.value ? '运行中换绑需二次确认' : '选择后点「套用」关联本任务；自定义内容保存时派生为专属新套'
+)
+async function onBindApply() {
+  if (!bindPick.value) {
+    toast('请先选择配置套', 'error')
     return
   }
-  const updated = await schedulesStore.activateTask(aid, type, configSetId)
-  if (updated) {
-    // 刷新账号列表（类型列派生）与配置页账号树（徽标/绑定）
-    await Promise.all([accountsStore.load(), store.load()])
+  if (!hasInstance.value) {
+    if (await store.applyBind()) await store.load()
+    return
   }
+  if (enabled.value) {
+    // 运行中换绑：需二次确认
+    pendingBindId.value = bindPick.value
+    showBindConfirm.value = true
+    return
+  }
+  if (await store.bindSet(bindPick.value)) await store.load()
+}
+async function confirmBind() {
+  showBindConfirm.value = false
+  if (await store.bindSet(pendingBindId.value)) await store.load()
 }
 
-// 取消定时任务：删除该账号×类型的调度实例（停止自动签到）
-async function cancelTask() {
-  const sid = taskState.value.scheduleId
-  if (!sid) return
-  await schedulesStore.removeTask(Number(sid))
-  await Promise.all([accountsStore.load(), store.load()])
+// 启用：先落盘未保存改动（确保启用的是所见配置），再创建/绑定并开启调度
+async function onEnable() {
+  if (store.isDirty) await store.saveTaskConfig()
+  if (await store.enableTask()) await store.load()
+}
+// 暂停：仅关闭调度，保留实例与绑定
+async function onPause() {
+  if (await store.pauseTask()) await store.load()
 }
 
 // 保存配置：若任务已启用，先提示覆盖确认

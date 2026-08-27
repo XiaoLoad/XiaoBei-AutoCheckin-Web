@@ -28,6 +28,7 @@ function mapItem(it) {
     mode: it.mode || 'follow',
     configSetId: it.configSetId == null ? null : it.configSetId,
     custom: normalizeCustom(it.custom),
+    overrides: it.overrides || {},
     enabled: !!it.enabled,
     nextRunAt: it.nextRunAt || '',
     lastRun: it.lastRunAt || '',
@@ -70,7 +71,9 @@ export async function deleteSchedule(id) {
 }
 
 // ── 任务实例与配置套的绑定（真实 /api/schedules）──
-// 返回 { `${accountId}:${taskType}`: { scheduleId, configSetId } }，configSetId 为 null 表示未绑定
+// 返回 { `${accountId}:${taskType}`: { scheduleId, configSetId, enabled, overrides, 运行信息 } }，
+// configSetId 为 null 表示未绑定；overrides 为字段级覆盖（顶层配置键 → 替换值）。
+// [类型约定] id 统一字符串化：需与 userConfigSets 的 id（mapSetIn 已 String）严格相等匹配
 export async function fetchScheduleBindings() {
   const data = await request({ url: '/schedules', method: 'get' })
   const map = {}
@@ -78,7 +81,11 @@ export async function fetchScheduleBindings() {
     map[`${s.accountId}:${s.taskType}`] = {
       scheduleId: String(s.id),
       configSetId: s.configSetId == null ? null : String(s.configSetId),
-      enabled: !!s.enabled
+      enabled: !!s.enabled,
+      overrides: s.overrides || {},
+      nextRunAt: s.nextRunAt || '',
+      lastRunAt: s.lastRunAt || '',
+      lastStatus: s.lastStatus || 'never'
     }
   }
   return map

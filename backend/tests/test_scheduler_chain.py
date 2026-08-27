@@ -276,3 +276,28 @@ def test_register_job_no_jitter_when_delay_zero(app, chain_user):
     job = sch.get_scheduler().get_job(sch._job_id(sid))
     assert job is not None
     assert job.trigger.jitter is None
+
+
+def test_resolve_merges_overrides(app, chain_user):
+    """follow 模式 = 配置套 + 覆盖浅合并：覆盖键生效，未覆盖键继续跟随配置套；
+    执行时刻解析（注册/展示共用）同口径应用覆盖。"""
+    from app.utils.schedule_utils import extract_schedule_time
+
+    c = app.test_client()
+    acc_id = _create_account(c, chain_user)
+    cs_id = _create_config_set(c, chain_user)  # 08:00，randomDelayMax=5，remarks=['签到']
+    sid = _create_schedule(c, chain_user, acc_id)
+    _enable(c, chain_user, sid, cs_id)
+    ov = {'time': {'signTime': {'hour': 7, 'minute': 30}, 'startHour': 8, 'endHour': 22,
+                   'weekdays': [1], 'randomDelayMax': 2, 'mode': 'normal'}}
+    r = c.put(f'/api/schedules/{sid}', json={'overrides': ov}, headers=chain_user)
+    assert r.status_code == 200, r.get_json()
+
+    with app.app_context():
+        s = db.session.get(Schedule, sid)
+        merged = sch._resolve(s)
+    assert merged['time']['signTime']['hour'] == 7      # 覆盖生效
+    assert merged['remarks'] == ['签到']                # 未覆盖键继续跟随配置套
+
+    hour, minute, weekdays = extract_schedule_time(db.session.get(Schedule, sid))
+    assert (hour, minute, weekdays) == (7, 30, [1])

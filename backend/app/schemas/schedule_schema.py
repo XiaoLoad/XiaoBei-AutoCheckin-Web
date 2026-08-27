@@ -1,5 +1,7 @@
 # 定时任务入参校验层（零依赖，风格同 account_schema / config_schema）
 _WEEKDAYS = set(range(1, 8))
+# overrides 允许覆盖的顶层配置键（与配置套 config 顶层结构对应）；浅合并语义，键整体替换
+_OVERRIDE_KEYS = {'time', 'locationId', 'remarks', 'image', 'push', 'advanced'}
 
 
 def _as_bool(v):
@@ -61,6 +63,16 @@ def load_update(payload):
         if not ok:
             return False, None, '自定义参数结构不合法（需 weekdays/hour/minute）', 4405
         data['custom'] = cfg
+    if 'overrides' in payload:
+        v = payload['overrides']
+        if v is not None and not isinstance(v, dict):
+            return False, None, 'overrides 应为对象或 null', 4412
+        if isinstance(v, dict):
+            bad = sorted(k for k in v if k not in _OVERRIDE_KEYS)
+            if bad:
+                return False, None, f'overrides 含不支持的配置项：{",".join(bad)}', 4413
+            v = v or None  # 空对象视为清空全部覆盖
+        data['overrides'] = v
     if 'enabled' in payload:
         data['enabled'] = _as_bool(payload['enabled'])
     if not data:

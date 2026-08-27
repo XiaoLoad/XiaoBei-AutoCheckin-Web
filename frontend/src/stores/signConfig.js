@@ -350,12 +350,13 @@ export const useSignConfigStore = defineStore('signConfig', () => {
         const created = await api.createSchedule({ accountId: Number(selectedAccountId.value), taskType: selectedTaskType.value })
         scheduleId = created.id
       }
-      await api.bindScheduleConfigSet(scheduleId, setIdStr)
+      // 套用即推送：绑定配置套（后端自动置 follow）并立即启用，使其生效（语义与"添加至定时任务"一致）
+      await api.updateSchedule({ id: scheduleId, enabled: true, configSetId: Number(setIdStr) })
       scheduleBindings.value = {
         ...scheduleBindings.value,
-        [key]: { scheduleId, configSetId: setIdStr, enabled: false }
+        [key]: { scheduleId, configSetId: setIdStr, enabled: true }
       }
-      toast('已套用配置并创建定时任务实例', 'success')
+      toast('已套用配置并推送至定时任务（已启用）', 'success')
     } catch (e) {
       toast(e.message || '应用配置套失败', 'error')
     } finally {

@@ -27,7 +27,7 @@ export function makeConfig() {
       useOwnCredential: true, // true=回填"我的凭证"；false=下方直接填写
       credIds: { serverchan: null, pushplus: null, email: null }, // 回填"我的凭证"时各通道各自绑定的凭证 id
       cred: { serverchanKey: '', pushplusToken: '', emailSmtp: '', emailFrom: '', emailPass: '', emailTo: '' },
-      notify: { success: false, skip: true, fail: true } // 各状态推送开关：成功 / 跳过 / 失败
+      notify: { success: true, skip: true, fail: true } // 各状态推送开关：成功 / 跳过 / 失败
     },
     advanced: {
       uaTemplateId: null, // 引用型：所选 UA 模板 id（系统级资源池）
@@ -61,7 +61,8 @@ const mapSetIn = (s) => ({
   id: String(s.id),
   name: s.name,
   isDefault: !!s.isDefault,
-  config: { ...(s.config || {}), locationId: s.locationId ?? null }
+  // locationId 后端返回整数，前端选项值均为字符串；统一转字符串，避免 === 比对失败导致刷新后位置显示为空
+  config: { ...(s.config || {}), locationId: s.locationId != null ? String(s.locationId) : null }
 })
 
 export async function fetchConfigSets() {
@@ -196,4 +197,4 @@ export async function fetchImageBlobUrl(id) {
 }
 
 // 任务实例与配置套的绑定（config_set_id）由 /api/schedules 提供；此处再导出供 signConfig store 复用
-export { fetchScheduleBindings, bindScheduleConfigSet, createSchedule, deleteSchedule } from './schedules'
+export { fetchScheduleBindings, bindScheduleConfigSet, createSchedule, deleteSchedule, updateSchedule } from './schedules'

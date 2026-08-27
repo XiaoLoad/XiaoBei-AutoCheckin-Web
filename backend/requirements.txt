@@ -12,4 +12,6 @@ cryptography==43.0.1
 requests==2.32.3
 # 图库上传归一化压缩（JPEG 重编码/缩放/EXIF 剥离）
 Pillow==11.3.0
+# 定时任务调度主链路（模块 D：cron 注册 + 执行 + 对账兜底）
+APScheduler==3.11.3
 

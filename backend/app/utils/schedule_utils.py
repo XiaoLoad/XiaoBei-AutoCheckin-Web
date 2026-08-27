@@ -28,6 +28,12 @@ def _extract_schedule_time(schedule):
     return hour, minute, weekdays
 
 
+def extract_schedule_time(schedule):
+    """解析任务执行时刻，返回 (hour, minute, weekdays[1..7])；供调度器注册 cron 复用，
+    保证前端展示与调度器实际注册使用同一套 resolve 逻辑。"""
+    return _extract_schedule_time(schedule)
+
+
 def compute_next_run(schedule, base=None):
     """基于当前/给定时刻计算下次执行时间（朴素中国本地时间）。无有效时刻返回 None。"""
     hour, minute, weekdays = _extract_schedule_time(schedule)

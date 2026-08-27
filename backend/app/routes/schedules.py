@@ -10,6 +10,7 @@ from app.schemas.schedule_schema import load_create, load_update
 from app.utils.auth import token_required
 from app.utils.response import error, success
 from app.utils.schedule_utils import compute_next_run
+from app.services.scheduler import sync_schedule, remove_job
 
 bp = Blueprint('schedules', __name__, url_prefix='/api/schedules')
 
@@ -67,6 +68,8 @@ def delete_schedule(sched_id):
         return error(message='任务不存在', code=4040, status=404)
     db.session.delete(s)
     db.session.commit()
+    # 事件钩子：移除调度器已注册 job（与账号级联删除共用兜底，此处即时清理）
+    remove_job(sched_id)
     return success(message='删除成功')
 
 
@@ -118,4 +121,6 @@ def update_schedule(sched_id):
     # 维护下次执行时间缓存：开启即计算，停用清空
     s.next_run_at = compute_next_run(s) if s.enabled else None
     db.session.commit()
+    # 事件钩子：对齐调度器 job 注册（启用→注册/替换，停用→移除）
+    sync_schedule(s)
     return success(s.to_dict(), message='保存成功')

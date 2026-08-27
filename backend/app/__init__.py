@@ -17,6 +17,7 @@ from app.routes.config_sets import bp as config_sets_bp
 from app.routes.schedules import bp as schedules_bp
 from app.routes.pools import bp as pools_bp
 from app.routes.pool_images import bp as pool_images_bp
+from app.services.scheduler import init_scheduler
 
 
 def create_app(env_name=None):
@@ -57,6 +58,12 @@ def create_app(env_name=None):
             _ensure_schedule_columns(app)
             _seed_default_config_sets(app)
             _purge_trash_safely()
+    except Exception:
+        pass
+
+    # 启动调度器主链路（事件钩子 + 对账兜底）；失败不阻断应用启动。
+    try:
+        init_scheduler(app)
     except Exception:
         pass
 

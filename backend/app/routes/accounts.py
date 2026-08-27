@@ -10,6 +10,7 @@ from app.models.user import now_cst
 from app.schemas.account_schema import load_create, load_update, load_preflight
 from app.services.b_platform import get_adapter
 from app.services.b_platform.base import BPlatformError
+from app.services.scheduler import remove_job
 from app.utils.auth import token_required
 from app.utils.response import error, success
 
@@ -165,12 +166,17 @@ def delete_account(account_id):
     if not acc:
         return error(message='账号不存在', code=4040, status=404)
 
+    sched_ids = [s.id for s in Schedule.query.filter_by(account_id=acc.id).all()]
     Schedule.query.filter_by(account_id=acc.id).delete()
     SignRecord.query.filter_by(account_id=acc.id).delete()
     user = request.current_user
     user.used_quota = max(0, (user.used_quota or 0) - 1)
     db.session.delete(acc)
     db.session.commit()
+    # 事件钩子：清理该账号任务在调度器注册的 job（delete 走 ORM 批量删除，
+    # 不经过 schedules 路由，故在此显式移除；30s 对账线程作兜底）
+    for sid in sched_ids:
+        remove_job(sid)
     return success(message='删除成功')
 
 

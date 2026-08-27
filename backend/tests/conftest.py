@@ -5,6 +5,10 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# 测试环境关闭调度器自动接管（SCHEDULER_ENABLED=0），避免后台线程干扰用例；
+# 调度主链路由 test_scheduler_chain.py 显式驱动验证。须在 create_app 前设置。
+os.environ.setdefault('SCHEDULER_ENABLED', '0')
+
 import pytest
 
 from app import create_app

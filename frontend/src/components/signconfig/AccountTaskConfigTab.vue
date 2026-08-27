@@ -79,7 +79,7 @@
               </button>
               <!-- 已推送且启用的任务：按钮切换为「取消定时任务」；否则为「添加至定时任务」（需配置完整且已保存） -->
               <button
-                v-if="!taskState.hasInstance || !taskState.enabled"
+                v-if="!taskState.hasInstance"
                 type="button"
                 class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-brand/30 bg-brand/5 px-4 text-sm font-medium text-brand transition hover:bg-brand/10 disabled:opacity-50"
                 :disabled="store.saving || schedulesStore.saving || !canPush"

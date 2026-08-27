@@ -1,71 +1,61 @@
-// 定时任务模块 API（前端框架阶段：返回 mock 数据，模拟网络延迟）。
+// 定时任务模块 API（已接真实 /api/schedules）。
 // 调度任务 = 平台账号 × 任务类型 的笛卡尔积：每个「账号 + 签到类型」实例对应一个定时任务，
-// 用于开启/管理该实例的自动签到调度。后端就绪后，把函数体替换为对 request 的调用即可。
-import * as signConfigApi from '@/api/signConfig'
+// 用于开启/管理该实例的自动签到调度。列表与开关走真实接口；任务与配置套的绑定见下方两个函数。
+import request from '@/api/request'
 
-const delay = (ms = 200) => new Promise((r) => setTimeout(r, ms))
-const clone = (v) => JSON.parse(JSON.stringify(v))
+// 后端 item → 前端卡片契约：补齐缺省 custom，统一 lastRun / nextRunAt 字段名
+function normalizeCustom(c) {
+  c = c || {}
+  return {
+    hour: typeof c.hour === 'number' ? c.hour : 8,
+    minute: typeof c.minute === 'number' ? c.minute : 0,
+    weekdays: Array.isArray(c.weekdays) ? c.weekdays : [1, 2, 3, 4, 5, 6, 7],
+    randomDelayMax: typeof c.randomDelayMax === 'number' ? c.randomDelayMax : 5
+  }
+}
 
-// mock 数据源：延迟构建（首次访问时根据账号/任务类型生成）
-const mock = { schedules: [] }
-
-async function ensureSchedules() {
-  if (mock.schedules.length) return
-  const meta = await signConfigApi.fetchConfigMeta()
-  const accounts = meta.accounts
-  const taskTypes = meta.taskTypes
-  let i = 0
-  for (const a of accounts) {
-    for (const t of taskTypes) {
-      const accountEnabled = a.status === 'enabled'
-      mock.schedules.push({
-        id: `sch_${a.id}_${t.value}`,
-        accountId: a.id,
-        accountName: a.name,
-        studentNo: a.studentNo,
-        className: a.className,
-        platform: a.platform,
-        taskType: t.value,
-        taskLabel: t.label,
-        accountEnabled, // 底层账号是否启用：未启用则定时任务不可开启
-        enabled: accountEnabled, // 默认跟随账号启用态
-        mode: 'follow', // follow 跟随配置套 / custom 自定义执行时刻
-        custom: { hour: 8, minute: 0, weekdays: [1, 2, 3, 4, 5, 6, 7], randomDelayMax: 5 },
-        lastRun: accountEnabled ? new Date(Date.now() - ((i % 4) + 1) * 3 * 3600 * 1000).toISOString() : null,
-        lastStatus: accountEnabled ? (i % 5 === 0 ? 'fail' : i % 3 === 0 ? 'skip' : 'success') : null,
-        runCount: accountEnabled ? 20 + i * 3 : 0
-      })
-      i++
-    }
+function mapItem(it) {
+  return {
+    id: it.id,
+    accountId: it.accountId,
+    accountName: it.accountName || '',
+    accountEnabled: !!it.accountEnabled,
+    taskType: it.taskType,
+    taskLabel: it.taskLabel || (it.taskType === 'dorm' ? '寝室签到' : '活动签到'),
+    platform: it.platform || '',
+    studentNo: it.studentNo || '',
+    className: it.className || '',
+    mode: it.mode || 'follow',
+    configSetId: it.configSetId == null ? null : it.configSetId,
+    custom: normalizeCustom(it.custom),
+    enabled: !!it.enabled,
+    nextRunAt: it.nextRunAt || '',
+    lastRun: it.lastRunAt || '',
+    lastStatus: it.lastStatus || 'never',
+    runCount: it.runCount || 0
   }
 }
 
 // 列出全部定时任务（账号 × 任务类型）
 export async function fetchSchedules() {
-  await delay()
-  await ensureSchedules()
-  return clone(mock.schedules || mock.schedules)
+  const data = await request({ url: '/schedules', method: 'get' })
+  return (data.items || []).map(mapItem)
 }
 
 // 更新单个定时任务（保存定时设置：mode / custom）
 export async function updateSchedule(payload) {
-  await delay()
-  await ensureSchedules()
-  const i = mock.schedules.findIndex((s) => s.id === payload.id)
-  if (i !== -1) mock.schedules[i] = { ...mock.schedules[i], ...payload }
-  return clone(mock.schedules[i])
+  const { id, ...rest } = payload
+  const data = await request({ url: `/schedules/${id}`, method: 'put', data: rest })
+  return mapItem(data)
 }
 
 // 开启 / 暂停 单个定时任务
 export async function toggleSchedule(id, enabled) {
-  await delay()
-  await ensureSchedules()
-  const s = mock.schedules.find((x) => x.id === id)
-  if (s) s.enabled = enabled
-  return clone(s)
+  const data = await request({ url: `/schedules/${id}`, method: 'put', data: { enabled } })
+  return mapItem(data)
 }
 
-// ── 模块 C：任务实例与配置套的绑定（真实 /api/schedules）──
+// ── 任务实例与配置套的绑定（真实 /api/schedules）──
 // 返回 { `${accountId}:${taskType}`: { scheduleId, configSetId } }，configSetId 为 null 表示未绑定
 export async function fetchScheduleBindings() {
   const data = await request({ url: '/schedules', method: 'get' })
@@ -86,5 +76,5 @@ export async function bindScheduleConfigSet(scheduleId, configSetId) {
     method: 'put',
     data: { configSetId: configSetId == null ? null : Number(configSetId) }
   })
-  return data
+  return mapItem(data)
 }

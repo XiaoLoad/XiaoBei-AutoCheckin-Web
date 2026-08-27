@@ -1,11 +1,23 @@
 // 定时任务领域状态（Pinia）：收纳账号 × 任务类型的调度任务、开启/暂停、定时设置。
-// 后端接入时只需改 api/schedules.js，本 store 与视图无需变动。
+// 已接真实 /api/schedules：本 store 负责开启前预校验与错误兜底，视图无需关心接口细节。
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { toast } from '@/utils/toast'
 import * as api from '@/api/schedules'
 import { useSignConfigStore } from '@/stores/signConfig'
 import { computeNextRun, formatNextRun, nextRunSummary } from '@/utils/schedule'
+
+// 开启前预校验：返回 null 表示可开启，否则返回错误文案（与后端 4401/4402 呼应）
+function enableBlockReason(s) {
+  if (!s.accountEnabled) return '该平台账号未启用，无法开启定时（请先在「账号管理」启用该账号）'
+  if (s.mode === 'follow' && !s.configSetId) return '请先在「签到配置」为该任务绑定配置套后再开启'
+  if (s.mode === 'custom') {
+    const c = s.custom || {}
+    if (!Array.isArray(c.weekdays) || c.weekdays.length === 0) return '请先在「定时设置」中选择执行星期'
+    if (typeof c.hour !== 'number' || typeof c.minute !== 'number') return '请先在「定时设置」中设置执行时刻'
+  }
+  return null
+}
 
 export const useSchedulesStore = defineStore('schedules', () => {
   const loading = ref(true)
@@ -38,19 +50,24 @@ export const useSchedulesStore = defineStore('schedules', () => {
     }
   }
 
-  // 开启 / 暂停：底层账号未启用的任务不可开启
+  // 开启 / 暂停：底层账号未启用、或未绑定配置套的任务不可开启
   async function toggle(id, enabled) {
     const cur = schedules.value.find((s) => s.id === id)
     if (!cur) return
-    if (enabled && !cur.accountEnabled) {
-      toast('该平台账号未启用，无法开启定时', 'error')
-      return
+    if (enabled) {
+      const reason = enableBlockReason(cur)
+      if (reason) {
+        toast(reason, 'error')
+        return
+      }
     }
     saving.value = true
     try {
       const updated = await api.toggleSchedule(id, enabled)
       const i = schedules.value.findIndex((s) => s.id === id)
       if (i !== -1) schedules.value[i] = updated
+    } catch (e) {
+      toast(e.message || '操作失败', 'error')
     } finally {
       saving.value = false
     }
@@ -58,9 +75,22 @@ export const useSchedulesStore = defineStore('schedules', () => {
 
   // 保存定时设置（mode / custom）
   async function saveSettings(id, patch) {
-    if (patch.mode === 'custom' && (!patch.custom.weekdays || patch.custom.weekdays.length === 0)) {
-      toast('请至少选择一个执行星期', 'error')
+    const cur = schedules.value.find((s) => s.id === id)
+    if (!cur) return
+    if (patch.mode === 'follow' && !cur.configSetId) {
+      toast('请先在「签到配置」为该任务绑定配置套后再保存', 'error')
       return
+    }
+    if (patch.mode === 'custom') {
+      const c = patch.custom || {}
+      if (!Array.isArray(c.weekdays) || c.weekdays.length === 0) {
+        toast('请至少选择一个执行星期', 'error')
+        return
+      }
+      if (typeof c.hour !== 'number' || typeof c.minute !== 'number') {
+        toast('请设置合法的小时与分钟', 'error')
+        return
+      }
     }
     saving.value = true
     try {
@@ -68,6 +98,8 @@ export const useSchedulesStore = defineStore('schedules', () => {
       const i = schedules.value.findIndex((s) => s.id === id)
       if (i !== -1) schedules.value[i] = updated
       toast('定时设置已保存', 'success')
+    } catch (e) {
+      toast(e.message || '保存失败', 'error')
     } finally {
       saving.value = false
     }

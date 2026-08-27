@@ -130,6 +130,7 @@
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { gsap } from 'gsap'
 import { useSchedulesStore } from '@/stores/schedules'
+import { useSignConfigStore } from '@/stores/signConfig'
 import ScheduleCard from '@/components/schedules/ScheduleCard.vue'
 import ScheduleSettingsDrawer from '@/components/schedules/ScheduleSettingsDrawer.vue'
 import BasePagination from '@/components/BasePagination.vue'
@@ -137,6 +138,7 @@ import BaseSelect from '@/components/BaseSelect.vue'
 import Icon from '@/components/Icon.vue'
 
 const store = useSchedulesStore()
+const signConfigStore = useSignConfigStore()
 const grid = ref(null)
 const searchQuery = ref('')
 const typeFilter = ref('all')
@@ -217,6 +219,10 @@ function staggerIn() {
 
 onMounted(async () => {
   await store.load()
+  // 配置套元信息（关联配置名/位置/时段）供卡片与抽屉预览使用；未加载则按需拉取一次
+  if (!signConfigStore.accounts.length && !signConfigStore.loading) {
+    await signConfigStore.load()
+  }
   await nextTick()
   staggerIn()
 })

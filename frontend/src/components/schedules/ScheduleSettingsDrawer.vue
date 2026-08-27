@@ -156,10 +156,16 @@ const configMeta = computed(() =>
   signConfigStore.taskConfigMetaOf(props.schedule.accountId, props.schedule.taskType)
 )
 
-// 编辑副本：初始值取自当前调度任务
+// 编辑副本：初始值取自当前调度任务（custom 字段可能为空，做兜底）
+const safeCustom = props.schedule.custom || {}
 const form = reactive({
   mode: props.schedule.mode,
-  custom: { ...props.schedule.custom, weekdays: [...props.schedule.custom.weekdays] }
+  custom: {
+    hour: typeof safeCustom.hour === 'number' ? safeCustom.hour : 8,
+    minute: typeof safeCustom.minute === 'number' ? safeCustom.minute : 0,
+    weekdays: Array.isArray(safeCustom.weekdays) ? [...safeCustom.weekdays] : [1, 2, 3, 4, 5, 6, 7],
+    randomDelayMax: typeof safeCustom.randomDelayMax === 'number' ? safeCustom.randomDelayMax : 5
+  }
 })
 
 const followText = computed(() => nextRunSummary('follow', form.custom, configMeta))

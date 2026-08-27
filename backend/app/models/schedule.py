@@ -35,6 +35,8 @@ class Schedule(db.Model):
     def to_dict(self):
         from app.models.b_account import BAccount
         acc = db.session.get(BAccount, self.account_id)
+        profile = acc.profile if acc else {}
+        task_label = '寝室签到' if self.task_type == 'dorm' else '活动签到'
         return {
             'id': self.id,
             'userId': self.user_id,
@@ -42,6 +44,10 @@ class Schedule(db.Model):
             'accountName': acc.account if acc else '',
             'accountEnabled': bool(acc.enabled) if acc else False,
             'taskType': self.task_type,
+            'taskLabel': task_label,
+            'platform': acc.platform if acc else '',
+            'studentNo': profile.get('studentNo') or '',
+            'className': profile.get('className') or '',
             'mode': self.mode,
             'configSetId': self.config_set_id,
             'custom': self.custom,

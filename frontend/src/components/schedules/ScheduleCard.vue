@@ -23,7 +23,7 @@
         type="button"
         role="switch"
         :aria-checked="schedule.enabled"
-        :disabled="!schedule.accountEnabled || switching"
+        :disabled="!schedule.accountEnabled || noConfigSet || switching"
         class="relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed"
         :class="schedule.enabled ? 'bg-brand' : 'bg-ink/15'"
         @click="$emit('toggle', schedule.id, !schedule.enabled)"
@@ -55,6 +55,11 @@
     <!-- 账号未启用提示 -->
     <p v-if="!schedule.accountEnabled" class="mt-1.5 text-[11px] text-warning">
       平台账号未启用，无法开启定时（请先在「账号管理」启用该账号）
+    </p>
+
+    <!-- 跟随配置套但未绑定配置套：无法开启 -->
+    <p v-else-if="noConfigSet" class="mt-1.5 text-[11px] text-warning">
+      未绑定配置套，无法开启（请先在「签到配置」绑定）
     </p>
 
     <!-- 操作 -->
@@ -96,11 +101,10 @@ const statusCls = computed(() => {
   return props.schedule.enabled ? 'text-success' : 'text-ink-muted'
 })
 const modeText = computed(() => (props.schedule.mode === 'follow' ? '跟随配置套' : '自定义时刻'))
+const noConfigSet = computed(() => props.schedule.mode === 'follow' && !props.schedule.configSetId)
 const nextRunText = computed(() => {
   if (!props.schedule.enabled) return '未开启'
-  const wd = props.schedule.mode === 'follow' ? props.configMeta?.time?.weekdays || [] : props.schedule.custom.weekdays || []
-  if (!wd.length) return '未设置星期'
-  return formatNextRun()
+  return props.schedule.nextRunAt || '暂不可执行'
 })
 const lastRunText = computed(() => {
   const s = props.schedule
@@ -112,13 +116,6 @@ const lastRunText = computed(() => {
   const mm = String(d.getMinutes()).padStart(2, '0')
   return `${label} · ${hh}:${mm}`
 })
-
-// 计算下一次执行（复用工具，避免重复引入）
-import { computeNextRun, formatNextRun as fmt } from '@/utils/schedule'
-function formatNextRun() {
-  const date = computeNextRun(props.schedule.mode, props.schedule.custom, props.configMeta)
-  return fmt(date).text
-}
 
 // 开关/色条动画：enabled 变化时由 GSAP 平滑过渡
 function animateState() {

@@ -193,3 +193,6 @@ export async function fetchImageBlobUrl(id) {
   blobCache.set(id, url)
   return url
 }
+
+// 任务实例与配置套的绑定（config_set_id）由 /api/schedules 提供；此处再导出供 signConfig store 复用
+export { fetchScheduleBindings, bindScheduleConfigSet } from './schedules'

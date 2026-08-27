@@ -56,6 +56,12 @@ pip install -r requirements.txt
 python run.py                 # http://127.0.0.1:5000
 ```
 
+> **部署约束（单实例）**：定时任务调度器随 Web 进程启动且 job 存于内存，全系统只允许一个进程运行调度器。
+> 上线请使用 `gunicorn -w 1 --threads 8 "app:create_app()"` 或直接 `python run.py`；
+> 多 worker 会各自注册同一批 cron 任务，导致同一账号重复打卡。未来横向扩容 Web 时，
+> 先将 Web 进程置 `SCHEDULER_ENABLED=0`，由独立常驻进程接管调度。
+> 调度相关环境变量（并发线程池 / 补跑宽限等）见 `backend/.env.example` 的「定时任务调度器」段。
+
 ### 前后端联通
 
 开发环境下，前端通过 Vite 代理将 `/api` 请求转发到后端 `5000` 端口，无需额外处理跨域。
@@ -86,6 +92,6 @@ curl http://127.0.0.1:5000/api/example
   - 功能新增 / 开发结束 → minor +1（`0.y.z` → `0.y+1.0`）
   - 上线 / 破坏性变更 → major +1（`0.y.z` → `1.0.0`）
   - 修复 BUG 不单独增加版本号，仅并入当前功能提交
-- 每次「提交版本」流程：我先 `git add` + 拟定 commit message 草案交你审核，你说「确认提交」才真正 `git commit`；`VERSION` 与 `CHANGELOG.md` 一并纳入。
+- 每次「提交版本」流程：分析本次改动后，由助手给出 commit 文案草案与按规范递增的版本号（`VERSION` 与 `CHANGELOG.md` 一并更新），**由你手动执行 git 提交**；助手不代跑 git 指令。
 - 递增版本：`python scripts/version_bump.py minor`（或 `major`）。
 - 提交信息遵循 Conventional Commits，type 用英文、subject/body 用中文祈使句，风格务实不堆砌术语。

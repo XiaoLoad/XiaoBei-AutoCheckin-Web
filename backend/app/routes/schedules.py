@@ -1,11 +1,11 @@
 # 定时任务蓝图：账号 × 任务类型的真实调度接口（承接前端从 mock 切换）。
-# 任务实例随账号生灭，故无 POST/DELETE；仅 GET 列表 + PUT 更新（含开启校验）。
+# GET 列表 + 显式 POST 创建（幂等）+ PUT 更新（含开启校验）+ DELETE 删除。
 import json
 
 from flask import Blueprint, request
 
 from app.extensions import db
-from app.models import BAccount, ConfigSet, Schedule
+from app.models import BAccount, ConfigSet, Schedule, SignRecord
 from app.schemas.schedule_schema import load_create, load_update
 from app.utils.auth import token_required
 from app.utils.response import error, success
@@ -61,11 +61,14 @@ def create_schedule():
 @bp.route('/<int:sched_id>', methods=['DELETE'])
 @token_required
 def delete_schedule(sched_id):
-    """删除定时任务实例（校验归属）。
-    注：模块 D 落地后，若任务处于启用态，删除前需先移除调度器已注册的 job。"""
+    """删除定时任务实例（校验归属）。删除前解除签到记录的引用：
+    sign_records.schedule_id 外键无级联规则，任务执行过即有记录，直接删会被
+    MySQL 1451 拦截；置空保留历史（记录内已冗余 task_name/task_type，仍可独立展示）。
+    注：模块 D 落地后，删除前需同步移除调度器已注册的 job。"""
     s = Schedule.query.filter_by(id=sched_id, user_id=request.current_user.id).first()
     if not s:
         return error(message='任务不存在', code=4040, status=404)
+    SignRecord.query.filter_by(schedule_id=s.id).update({'schedule_id': None})
     db.session.delete(s)
     db.session.commit()
     # 事件钩子：移除调度器已注册 job（与账号级联删除共用兜底，此处即时清理）

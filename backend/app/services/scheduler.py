@@ -1,6 +1,8 @@
 # 调度器主链路（模块 D）：APScheduler 注册 cron job，到点执行 B 平台签到，
 # 写签到记录、回写任务状态、按需分发推送。采用「事件钩子 + 周期性对账」双保险：
 # 路由增删改任务即时注册/移除 job；30s 对账线程兜底清理账号级联删除遗留的孤儿 job。
+# [部署约束] 调度器随 Web 进程存活、job 存于内存，全系统只允许单实例运行：
+# 多 worker / 多进程部署会让各进程重复注册同一批任务，横向扩容前须先拆出独立调度进程。
 import atexit
 import logging
 import os
@@ -10,6 +12,8 @@ import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.jobstores.base import JobLookupError
+# 注意是 APScheduler 自带的线程池执行器（默认 max_workers=10），非标准库同名类
+from apscheduler.executors.pool import ThreadPoolExecutor
 
 from app.extensions import db
 from app.models import BAccount, ConfigSet, Schedule, SignRecord
@@ -41,10 +45,21 @@ def _scheduler_tz():
 
 
 def get_scheduler():
-    """返回进程级 BackgroundScheduler 单例（惰性创建，未 start 前亦可注册 job）"""
+    """返回进程级 BackgroundScheduler 单例（惰性创建，未 start 前亦可注册 job）。
+    多人同刻集中打卡场景需显式配置（APScheduler 默认值不适合该场景）：
+    - 线程池默认 10 个槽，签到为网络 I/O，按峰值任务量调大（SCHEDULER_MAX_WORKERS）；
+    - 默认 misfire_grace_time=1 秒，排队超 1 秒的任务会被静默丢弃，放宽到补跑窗口内照常执行
+      （SCHEDULER_MISFIRE_GRACE）；coalesce=True 将积压的多次触发合并为一次，避免重复执行。"""
     global _scheduler
     if _scheduler is None:
-        _scheduler = BackgroundScheduler(timezone=_scheduler_tz())
+        _scheduler = BackgroundScheduler(
+            timezone=_scheduler_tz(),
+            executors={'default': ThreadPoolExecutor(max_workers=int(os.getenv('SCHEDULER_MAX_WORKERS', '30')))},
+            job_defaults={
+                'misfire_grace_time': int(os.getenv('SCHEDULER_MISFIRE_GRACE', '600')),
+                'coalesce': True,
+            },
+        )
     return _scheduler
 
 

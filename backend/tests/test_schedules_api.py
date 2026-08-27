@@ -7,6 +7,10 @@ import os
 os.environ['USE_STUB_BPLATFORM'] = '1'
 
 import uuid
+from datetime import date
+
+from app.extensions import db
+from app.models import SignRecord
 
 
 def _uid(c, headers):
@@ -138,6 +142,29 @@ def test_delete_schedule(app, user_headers):
         assert rd.status_code == 200
         items = c.get('/api/schedules', headers=user_headers).get_json()['data']['items']
         assert all(x['id'] != sid for x in items)
+    finally:
+        _delete_account(c, user_headers, acc_id)
+
+
+def test_delete_schedule_with_sign_records_keeps_history(app, user_headers):
+    """删除已有签到记录的任务：置空记录的 schedule_id 保留历史，而非被外键 1451 拦截"""
+    c = app.test_client()
+    acc_id = _create_account(c, user_headers)
+    try:
+        sid = _create_schedule(c, user_headers, acc_id, 'dorm')
+        uid = _uid(c, user_headers)
+        with app.app_context():
+            db.session.add(SignRecord(user_id=uid, account_id=acc_id, schedule_id=sid,
+                                      task_type='dorm', sign_date=date.today(),
+                                      status='success', initiator='system'))
+            db.session.commit()
+        rd = c.delete(f'/api/schedules/{sid}', headers=user_headers)
+        assert rd.status_code == 200, rd.get_json()
+        with app.app_context():
+            items = c.get('/api/schedules', headers=user_headers).get_json()['data']['items']
+            assert all(x['id'] != sid for x in items)
+            rec = SignRecord.query.filter_by(account_id=acc_id).one()
+            assert rec.schedule_id is None
     finally:
         _delete_account(c, user_headers, acc_id)
 

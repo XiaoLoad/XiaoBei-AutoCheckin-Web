@@ -238,7 +238,7 @@ import PageToast from '@/components/PageToast.vue'
 import ConfigToggle from '@/components/signconfig/ConfigToggle.vue'
 import * as authApi from '@/api/auth'
 import { getSettings, updateSettings, getSystemInfo } from '@/api/settings'
-import { useAuthStore } from '@/store/modules/auth'
+import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
 

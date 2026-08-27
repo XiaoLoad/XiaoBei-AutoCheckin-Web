@@ -44,7 +44,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRouter, useRoute, RouterLink } from 'vue-router'
-import { useAuthStore } from '@/store/modules/auth'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const route = useRoute()

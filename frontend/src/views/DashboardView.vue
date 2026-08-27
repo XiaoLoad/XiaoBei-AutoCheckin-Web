@@ -15,7 +15,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { useAuthStore } from '@/store/modules/auth'
+import { useAuthStore } from '@/stores/auth'
 import AdminDashboard from '@/views/AdminDashboard.vue'
 import UserDashboard from '@/views/UserDashboard.vue'
 

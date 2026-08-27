@@ -6,7 +6,7 @@
 //   v-permission="['admin','user']"  两者均可
 //   不传值                         视为不限制（保持可见）
 // 思路参考 vue-element-admin 的 permission 指令，但鉴权决策收敛到 auth store 的 role。
-import { useAuthStore } from '@/store/modules/auth'
+import { useAuthStore } from '@/stores/auth'
 
 // 单一决策：当前角色是否满足指令要求的角色集合
 export function hasRole(role, value) {

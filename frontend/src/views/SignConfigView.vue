@@ -40,7 +40,7 @@
 import { computed, onMounted } from 'vue'
 import Icon from '@/components/Icon.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
-import { useAuthStore } from '@/store/modules/auth'
+import { useAuthStore } from '@/stores/auth'
 import DefaultConfigTab from '@/components/signconfig/DefaultConfigTab.vue'
 import AccountTaskConfigTab from '@/components/signconfig/AccountTaskConfigTab.vue'
 import MyResourcesTab from '@/components/signconfig/MyResourcesTab.vue'

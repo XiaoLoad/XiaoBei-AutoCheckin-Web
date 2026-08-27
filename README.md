@@ -16,7 +16,7 @@ Web端/
 │       ├── main.js          # 入口
 │       ├── App.vue
 │       ├── router/          # 路由（按页面划分）
-│       ├── store/           # 状态管理（Pinia）
+│       ├── stores/          # 状态管理（Pinia，按业务域拆分）
 │       ├── api/             # 接口层（axios 封装 + 模块接口）
 │       ├── utils/           # 通用工具
 │       ├── components/      # 公共组件
@@ -61,6 +61,22 @@ python run.py                 # http://127.0.0.1:5000
 > 多 worker 会各自注册同一批 cron 任务，导致同一账号重复打卡。未来横向扩容 Web 时，
 > 先将 Web 进程置 `SCHEDULER_ENABLED=0`，由独立常驻进程接管调度。
 > 调度相关环境变量（并发线程池 / 补跑宽限等）见 `backend/.env.example` 的「定时任务调度器」段。
+
+### 数据库迁移
+
+表结构以 `backend/migrations/` 迁移链为唯一事实源（Alembic / Flask-Migrate），应用启动时自动对齐：
+
+- 空库 → 执行 `upgrade` 从 baseline 全量建表；
+- 历史 `create_all` 建的既有库（无 `alembic_version` 表）→ 自动 `stamp head` 收编纳管，不改结构；
+- 已纳管库 → 应用尚未执行的迁移。
+
+日常改 models 后生成迁移（backend 目录下）：
+
+```bash
+export FLASK_APP=app.py
+flask db migrate -m "说明变更内容"    # 对比 models 与数据库，生成迁移脚本
+flask db upgrade                     # 应用到本地库（应用启动时也会自动执行）
+```
 
 ### 前后端联通
 

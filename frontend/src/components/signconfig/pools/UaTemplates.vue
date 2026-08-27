@@ -151,7 +151,7 @@ import Icon from '@/components/Icon.vue'
 import BasePagination from '@/components/BasePagination.vue'
 import BaseModal from '@/components/BaseModal.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
-import { useAuthStore } from '@/store/modules/auth'
+import { useAuthStore } from '@/stores/auth'
 
 const store = useSignConfigStore()
 const auth = useAuthStore()

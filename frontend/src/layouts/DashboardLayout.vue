@@ -125,7 +125,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRoute, useRouter, RouterLink, RouterView } from 'vue-router'
-import { useAuthStore } from '@/store/modules/auth'
+import { useAuthStore } from '@/stores/auth'
 import { hasRole } from '@/directives/permission'
 import Icon from '@/components/Icon.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'

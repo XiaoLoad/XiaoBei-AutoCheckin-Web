@@ -2,7 +2,7 @@
 // 后端接入时只需改 api/signConfig.js，本 store 与视图无需变动。
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import { useAuthStore } from '@/store/modules/auth'
+import { useAuthStore } from '@/stores/auth'
 import { toast } from '@/utils/toast'
 import * as api from '@/api/signConfig'
 

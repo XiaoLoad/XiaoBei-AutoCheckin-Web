@@ -172,7 +172,7 @@
 <script setup>
 import { reactive, ref } from 'vue'
 import { useRouter, useRoute, RouterLink } from 'vue-router'
-import { useAuthStore } from '@/store/modules/auth'
+import { useAuthStore } from '@/stores/auth'
 import { useLoginAnimations } from '@/composables/useLoginAnimations'
 import BaseCheckbox from '@/components/BaseCheckbox.vue'
 

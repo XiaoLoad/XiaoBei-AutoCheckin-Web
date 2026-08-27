@@ -129,7 +129,7 @@ import Icon from '@/components/Icon.vue'
 import BasePagination from '@/components/BasePagination.vue'
 import BaseModal from '@/components/BaseModal.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
-import { useAuthStore } from '@/store/modules/auth'
+import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps({
   // 外部锁定作用域：传入后隐藏切换器并固定为该系统/用户池（用于「系统资源」只显示系统池、「我的资源」只显示我的池）

@@ -25,7 +25,7 @@
 <script setup>
 import { computed } from 'vue'
 import Icon from '@/components/Icon.vue'
-import { useAuthStore } from '@/store/modules/auth'
+import { useAuthStore } from '@/stores/auth'
 import { useSignConfigStore } from '@/stores/signConfig'
 import LocationPool from '@/components/signconfig/pools/LocationPool.vue'
 import ImageLibrary from '@/components/signconfig/pools/ImageLibrary.vue'

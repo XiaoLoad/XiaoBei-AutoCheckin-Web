@@ -4,7 +4,7 @@
 // 普通用户根本不会拥有管理员路由的实例，而非仅靠守卫拦截。
 import { createRouter, createWebHistory } from 'vue-router'
 import { ref } from 'vue'
-import { useAuthStore } from '@/store/modules/auth'
+import { useAuthStore } from '@/stores/auth'
 import { toast } from '@/utils/toast'
 
 // ============ 动态路由：均需要鉴权，并按 meta.roles 做角色过滤 ============

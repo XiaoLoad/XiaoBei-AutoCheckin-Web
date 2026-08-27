@@ -15,8 +15,7 @@ from app.utils.response import error, success
 
 bp = Blueprint('accounts', __name__, url_prefix='/api/accounts')
 
-# 创建账号时自动生成的定时任务类型（设计文档：随账号生灭，默认停用）
-AUTO_TASK_TYPES = ('dorm', 'activity')
+# 定时任务不再随账号自动生成；由用户在「定时任务」页显式创建（方案 2：用户可控实例）
 
 # 校验限频（进程内节流）：key → 最近一次 monotonic 时间戳
 # 【长期关闭】B 平台无风控（用户确认），间隔设 0 永不节流，不再恢复 60 秒限制
@@ -76,7 +75,7 @@ def preflight():
 @bp.route('', methods=['POST'])
 @token_required
 def create_account():
-    """新增账号：实时校验 → 加密入库 → 自动生成 dorm/activity 两条定时任务 → 占用额度"""
+    """新增账号：实时校验 → 加密入库 → 占用额度（定时任务由用户显式创建）"""
     payload = request.get_json(silent=True) or {}
     ok, data, msg, code = load_create(payload)
     if not ok:
@@ -108,10 +107,6 @@ def create_account():
     acc.set_profile(result.profile)
     acc.set_token(result.token)
     db.session.add(acc)
-    db.session.flush()  # 先取 acc.id，供任务行外键使用
-
-    for task_type in AUTO_TASK_TYPES:
-        db.session.add(Schedule(user_id=user.id, account_id=acc.id, task_type=task_type))
 
     user.used_quota = (user.used_quota or 0) + 1
     db.session.commit()

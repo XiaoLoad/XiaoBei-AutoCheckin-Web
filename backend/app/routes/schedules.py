@@ -5,8 +5,8 @@ import json
 from flask import Blueprint, request
 
 from app.extensions import db
-from app.models import ConfigSet, Schedule
-from app.schemas.schedule_schema import load_update
+from app.models import BAccount, ConfigSet, Schedule
+from app.schemas.schedule_schema import load_create, load_update
 from app.utils.auth import token_required
 from app.utils.response import error, success
 from app.utils.schedule_utils import compute_next_run
@@ -21,6 +21,53 @@ def list_schedules():
     items = (Schedule.query.filter_by(user_id=request.current_user.id)
              .order_by(Schedule.account_id, Schedule.task_type).all())
     return success({'items': [s.to_dict() for s in items]})
+
+
+@bp.route('', methods=['POST'])
+@token_required
+def create_schedule():
+    """显式创建定时任务实例（账号 × 任务类型）；同账号同类型已存在则幂等返回已有"""
+    payload = request.get_json(silent=True) or {}
+    ok, data, msg, code = load_create(payload)
+    if not ok:
+        return error(message=msg, code=code, status=400)
+
+    user = request.current_user
+    acc = BAccount.query.filter_by(id=data['account_id'], user_id=user.id).first()
+    if not acc:
+        return error(message='账号不存在', code=4040, status=404)
+    if not acc.enabled:
+        return error(message='账号未启用，无法创建定时任务', code=4407, status=400)
+
+    existing = Schedule.query.filter_by(
+        user_id=user.id, account_id=acc.id, task_type=data['task_type']).first()
+    if existing:
+        return success(existing.to_dict(), message='该任务已存在')
+
+    s = Schedule(
+        user_id=user.id,
+        account_id=acc.id,
+        task_type=data['task_type'],
+        mode='follow',
+        enabled=False,
+        config_set_id=None,
+    )
+    db.session.add(s)
+    db.session.commit()
+    return success(s.to_dict(), message='创建成功', status=201)
+
+
+@bp.route('/<int:sched_id>', methods=['DELETE'])
+@token_required
+def delete_schedule(sched_id):
+    """删除定时任务实例（校验归属）。
+    注：模块 D 落地后，若任务处于启用态，删除前需先移除调度器已注册的 job。"""
+    s = Schedule.query.filter_by(id=sched_id, user_id=request.current_user.id).first()
+    if not s:
+        return error(message='任务不存在', code=4040, status=404)
+    db.session.delete(s)
+    db.session.commit()
+    return success(message='删除成功')
 
 
 @bp.route('/<int:sched_id>', methods=['PUT'])

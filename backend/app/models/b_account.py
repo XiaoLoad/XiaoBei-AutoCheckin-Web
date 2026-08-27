@@ -69,6 +69,23 @@ class BAccount(db.Model):
     def set_profile(self, profile: dict):
         self.profile_json = json.dumps(profile, ensure_ascii=False)
 
+    def sign_tasks(self):
+        """该账号已添加至定时任务的签到类型及启用态（按 dorm/activity 固定顺序）。
+        用于账号列表「类型」列与配置页账号树徽标动态派生，不依赖账号自身的 type 字段。"""
+        from app.models.schedule import Schedule
+
+        rows = Schedule.query.filter_by(account_id=self.id).all()
+        out = []
+        for t in ('dorm', 'activity'):
+            s = next((x for x in rows if x.task_type == t), None)
+            out.append({
+                'type': t,
+                'enabled': bool(s.enabled) if s else False,
+                'exists': s is not None,
+                'configSetId': s.config_set_id if (s and s.config_set_id is not None) else None,
+            })
+        return out
+
     def to_dict(self):
         """输出前端 Account 契约形状（types.js），组件零改动对接"""
         return {
@@ -78,6 +95,7 @@ class BAccount(db.Model):
             'type': self.type,
             'enabled': bool(self.enabled),
             'profile': self.profile,
+            'signTasks': self.sign_tasks(),
             'lastSignIn': {
                 'time': self.last_sign_at.strftime('%Y-%m-%d %H:%M') if self.last_sign_at else '',
                 'status': self.last_sign_status or 'never',

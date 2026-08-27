@@ -63,39 +63,25 @@
                 <p v-if="errors.password" class="mt-1 text-xs text-danger">{{ errors.password }}</p>
               </div>
 
-              <div class="grid grid-cols-2 gap-4">
-                <div>
-                  <label class="mb-1.5 block text-sm font-medium text-ink-soft">签到类型</label>
-                  <BaseSelect
-                    v-model="form.type"
-                    placeholder="签到类型"
-                    :options="[
-                      { label: '寝室', value: 'dorm' },
-                      { label: '活动', value: 'activity' },
-                      { label: '通用', value: 'general' }
-                    ]"
-                  />
-                </div>
-                <div>
-                  <label class="mb-1.5 block text-sm font-medium text-ink-soft">状态</label>
-                  <button
-                    type="button"
-                    class="flex h-[46px] w-full items-center justify-between rounded-xl border border-ink/10 bg-cloud/60 px-4 text-sm transition"
-                    :class="form.enabled ? 'text-success' : 'text-ink-muted'"
-                    @click="form.enabled = !form.enabled"
+              <div>
+                <label class="mb-1.5 block text-sm font-medium text-ink-soft">状态</label>
+                <button
+                  type="button"
+                  class="flex h-[46px] w-full items-center justify-between rounded-xl border border-ink/10 bg-cloud/60 px-4 text-sm transition"
+                  :class="form.enabled ? 'text-success' : 'text-ink-muted'"
+                  @click="form.enabled = !form.enabled"
+                >
+                  <span>{{ form.enabled ? '启用' : '禁用' }}</span>
+                  <span
+                    class="relative h-5 w-9 rounded-full transition"
+                    :class="form.enabled ? 'bg-success' : 'bg-ink/25'"
                   >
-                    <span>{{ form.enabled ? '启用' : '禁用' }}</span>
                     <span
-                      class="relative h-5 w-9 rounded-full transition"
-                      :class="form.enabled ? 'bg-success' : 'bg-ink/25'"
-                    >
-                      <span
-                        class="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all"
-                        :class="form.enabled ? 'left-[18px]' : 'left-0.5'"
-                      />
-                    </span>
-                  </button>
-                </div>
+                      class="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all"
+                      :class="form.enabled ? 'left-[18px]' : 'left-0.5'"
+                    />
+                  </span>
+                </button>
               </div>
             </div>
 
@@ -186,7 +172,6 @@
 <script setup>
 import { reactive, ref, watch } from 'vue'
 import Icon from '@/components/Icon.vue'
-import BaseSelect from '@/components/BaseSelect.vue'
 import { fetchProfile } from '@/api/accounts'
 
 const props = defineProps({
@@ -202,7 +187,6 @@ function emptyForm() {
   return {
     account: '',
     password: '',
-    type: 'dorm',
     enabled: true,
     profile: { name: '', college: '', major: '', className: '', studentNo: '' }
   }
@@ -223,7 +207,6 @@ function resetForm() {
   if (props.mode === 'edit' && props.account) {
     form.account = props.account.account || ''
     form.password = ''
-    form.type = props.account.type || 'dorm'
     form.enabled = !!props.account.enabled
     form.profile = {
       name: '',
@@ -303,7 +286,6 @@ async function onSubmit() {
 
   const payload = {
     account: form.account,
-    type: form.type,
     enabled: form.enabled,
     profile: { ...form.profile }
   }

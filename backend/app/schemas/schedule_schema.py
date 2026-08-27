@@ -29,6 +29,19 @@ def _clean_custom(raw):
     return True, cfg
 
 
+def load_create(payload):
+    """显式创建定时任务实例：accountId(整数) + taskType(dorm|activity)。
+    返回 (ok, data, message, code)"""
+    payload = payload or {}
+    account_id = payload.get('accountId')
+    task_type = payload.get('taskType')
+    if not isinstance(account_id, int) or isinstance(account_id, bool):
+        return False, None, 'accountId 应为整数', 4410
+    if task_type not in ('dorm', 'activity'):
+        return False, None, 'taskType 仅支持 dorm 或 activity', 4411
+    return True, {'account_id': account_id, 'task_type': task_type}, '', 0
+
+
 def load_update(payload):
     """更新定时任务：mode / configSetId / custom / enabled 均可选；提供任意一项即参与更新。
     返回 (ok, data, message, code)"""

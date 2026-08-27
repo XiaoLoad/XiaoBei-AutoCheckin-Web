@@ -123,8 +123,8 @@
               </td>
               <!-- 签到类型 -->
               <td class="px-3 py-3 align-top">
-                <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap" :class="typeMeta(item.type).cls">
-                  {{ typeMeta(item.type).label }}
+                <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap" :class="typeMeta(item).cls">
+                  {{ typeMeta(item).label }}
                 </span>
               </td>
               <!-- 上一次签到（时间 / 状态） -->
@@ -189,8 +189,8 @@
             <div class="min-w-0">
               <p class="truncate font-semibold text-ink">{{ item.account }}</p>
               <div class="mt-1.5 flex flex-wrap items-center gap-1.5 whitespace-nowrap">
-                <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium" :class="typeMeta(item.type).cls">
-                  {{ typeMeta(item.type).label }}
+                <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium" :class="typeMeta(item).cls">
+                  {{ typeMeta(item).label }}
                 </span>
                 <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium" :class="item.enabled ? 'bg-success/10 text-success' : 'bg-ink/5 text-ink-muted'">
                   <span class="h-1.5 w-1.5 rounded-full" :class="item.enabled ? 'bg-success' : 'bg-ink/30'" />
@@ -330,11 +330,16 @@ const enabledOptions = [
   { label: '禁用', value: 'false' }
 ]
 
-// 签到类型映射
-function typeMeta(type) {
-  if (type === 'activity') return { label: '活动', cls: 'bg-info/10 text-info' }
-  if (type === 'general') return { label: '通用', cls: 'bg-ink/10 text-ink-soft' }
-  return { label: '寝室', cls: 'bg-brand/10 text-brand' }
+// 签到类型映射：动态基于「已添加至定时任务且启用」的签到类型派生
+// 两者都启用 → 通用；仅寝室 → 寝室签到；仅活动 → 活动签到；都未添加 → 暂未设置
+function typeMeta(item) {
+  const st = item.signTasks || []
+  const dorm = st.some((t) => t.type === 'dorm' && t.enabled)
+  const activity = st.some((t) => t.type === 'activity' && t.enabled)
+  if (dorm && activity) return { label: '通用', cls: 'bg-ink/10 text-ink-soft' }
+  if (dorm) return { label: '寝室签到', cls: 'bg-brand/10 text-brand' }
+  if (activity) return { label: '活动签到', cls: 'bg-info/10 text-info' }
+  return { label: '暂未设置', cls: 'bg-ink/5 text-ink-muted' }
 }
 
 // 上一次签到状态映射

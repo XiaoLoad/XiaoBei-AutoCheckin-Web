@@ -80,7 +80,20 @@
       <!-- 加载中 -->
       <div v-if="store.loading" class="flex flex-1 items-center justify-center text-ink-muted">加载中…</div>
 
-      <!-- 空态 -->
+      <!-- 完全无任务：引导到签到配置 · 账号任务配置 Tab 添加 -->
+      <div v-else-if="store.schedules.length === 0" class="flex flex-1 flex-col items-center justify-center gap-3 text-ink-muted">
+        <Icon name="clock" :size="32" class="opacity-50" />
+        <span>还没有定时任务，请先在「签到配置 · 账号任务配置」中添加</span>
+        <button
+          type="button"
+          class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-dark"
+          @click="goToSignConfig"
+        >
+          前往签到配置
+        </button>
+      </div>
+
+      <!-- 筛选后无结果 -->
       <div v-else-if="filtered.length === 0" class="flex flex-1 flex-col items-center justify-center gap-2 text-ink-muted">
         <Icon name="clock" :size="30" class="opacity-50" />
         <span>没有符合条件的定时任务</span>
@@ -96,6 +109,7 @@
             :config-meta="store.configMetaOf(s.accountId, s.taskType)"
             @toggle="store.toggle"
             @open-settings="openDrawer"
+            @delete="store.removeTask"
           />
         </div>
       </div>
@@ -129,6 +143,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { gsap } from 'gsap'
+import { useRouter } from 'vue-router'
 import { useSchedulesStore } from '@/stores/schedules'
 import { useSignConfigStore } from '@/stores/signConfig'
 import ScheduleCard from '@/components/schedules/ScheduleCard.vue'
@@ -139,6 +154,12 @@ import Icon from '@/components/Icon.vue'
 
 const store = useSchedulesStore()
 const signConfigStore = useSignConfigStore()
+const router = useRouter()
+// 空态引导：跳转至「签到配置 · 账号任务配置」Tab 添加定时任务
+function goToSignConfig() {
+  signConfigStore.setActiveTab('tasks')
+  router.push({ name: 'sign-config' })
+}
 const grid = ref(null)
 const searchQuery = ref('')
 const typeFilter = ref('all')

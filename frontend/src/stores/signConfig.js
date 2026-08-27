@@ -68,9 +68,23 @@ export const useSignConfigStore = defineStore('signConfig', () => {
   const userConfigSets = ref([])
   const activeSetId = ref('')
 
-  // 任务实例与配置套的绑定：key = `${accountId}:${type}` → { scheduleId, configSetId }
+  // 任务实例与配置套的绑定：key = `${accountId}:${type}` → { scheduleId, configSetId, enabled }
   // configSetId 为 null 表示未绑定（localStorage 不再存任务配置，见模块 C）
   const scheduleBindings = ref({})
+
+  // 配置套「已保存快照」：configSetId → 深拷贝的配置，用于判断当前编辑是否脏（有无未保存改动）。
+  // 仅比对当前任务所绑定配置套的内容，因此共享同一配置套的多任务互不干扰。
+  const savedSnapshots = ref({})
+  function snapshotSets() {
+    const map = {}
+    for (const s of userConfigSets.value) map[s.id] = JSON.parse(JSON.stringify(s.config))
+    savedSnapshots.value = map
+  }
+  function refreshSnapshot(id) {
+    const s = userConfigSets.value.find((x) => x.id === id)
+    if (!s) return
+    savedSnapshots.value = { ...savedSnapshots.value, [s.id]: JSON.parse(JSON.stringify(s.config)) }
+  }
 
   // 资源池
   const systemLocations = ref([])
@@ -110,17 +124,49 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     return src ? src.config : null
   })
 
-  // 账号树：账号 → 寝室/活动 两个任务节点
+  // 当前编辑对象所隶属的配置套 id：已绑定则用绑定套，未绑定则回退默认配置套。
+  // 未绑定时 taskConfig 即默认套配置，编辑它本质就是在改默认套，脏检测同样应生效。
+  const activeConfigSetId = computed(() => boundSetId.value || defaultSetId.value)
+  // 当前任务「是否脏」：当前显示配置相对其所属配置套的已保存快照有改动时为 true。
+  // 用于：保存按钮是否可点（无改动禁用）、添加至定时任务是否放行（未保存禁止推送）。
+  const isDirty = computed(() => {
+    const setId = activeConfigSetId.value
+    const cfg = taskConfig.value
+    if (!setId || !cfg) return false
+    const snap = savedSnapshots.value[setId]
+    if (!snap) return false
+    return JSON.stringify(cfg) !== JSON.stringify(snap)
+  })
+
+  // 当前账号×类型的调度实例状态：是否已创建实例 / 是否启用 / 实例与绑定 id
+  const taskScheduleState = computed(() => {
+    const b = scheduleBindings.value[taskConfigKey.value]
+    return {
+      hasInstance: !!(b && b.scheduleId),
+      enabled: !!(b && b.enabled),
+      scheduleId: b ? b.scheduleId : null,
+      configSetId: b ? b.configSetId : null
+    }
+  })
+
+  // 账号树：账号 → 寝室/活动 两个任务节点；节点 enabled 基于该账号已添加至定时任务且启用的签到类型
   const accountTree = computed(() =>
-    accounts.value.map((a) => ({
-      ...a,
-      tasks: taskTypes.value.map((t) => ({
-        accountId: a.id,
-        type: t.value,
-        label: t.label,
-        key: `${a.id}:${t.value}`
-      }))
-    }))
+    accounts.value.map((a) => {
+      const st = a.signTasks || []
+      return {
+        ...a,
+        tasks: taskTypes.value.map((t) => {
+          const node = st.find((s) => s.type === t.value)
+          return {
+            accountId: a.id,
+            type: t.value,
+            label: t.label,
+            key: `${a.id}:${t.value}`,
+            enabled: !!(node && node.enabled)
+          }
+        })
+      }
+    })
   )
 
   // 引用型配置的可选项（带来源前缀，便于在 BaseSelect 中区分系统/用户资源）
@@ -184,6 +230,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
       accounts.value = meta.accounts
       taskTypes.value = meta.taskTypes
       userConfigSets.value = sets.userConfigSets
+      snapshotSets()
       activeSetId.value = userConfigSets.value[0]?.id || ''
       systemLocations.value = pools.systemLocations
       userLocations.value = pools.userLocations
@@ -221,6 +268,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     try {
       const saved = await api.saveConfigSet({ id: activeSet.value.id, name: activeSet.value.name, config: activeSet.value.config })
       userConfigSets.value = saved
+      refreshSnapshot(activeSet.value.id)
     } finally {
       saving.value = false
     }
@@ -259,15 +307,16 @@ export const useSignConfigStore = defineStore('signConfig', () => {
   }
 
   // ── 任务实例配置保存 ──
-  // 任务配置即配置套配置（follow 模型）：保存即写回所绑定的配置套；未绑定则提示先应用配置套
+  // 任务配置即配置套配置（follow 模型）：保存即写回「当前编辑所隶属的配置套」
+  // （已绑定用绑定套，未绑定用默认套）。若任务已启用定时，调用方会先弹出覆盖确认。
   async function saveTaskConfig() {
     if (!selectedAccountId.value) return
-    const b = scheduleBindings.value[taskConfigKey.value]
-    if (!b || !b.configSetId) {
-      toast('请先点击「应用到此任务」绑定配置套后再保存', 'error')
+    const setId = boundSetId.value || defaultSetId.value
+    if (!setId) {
+      toast('暂无可用配置套，无法保存', 'error')
       return
     }
-    const set = userConfigSets.value.find((s) => s.id === b.configSetId)
+    const set = userConfigSets.value.find((s) => s.id === setId)
     if (!set) return
     const errs = validateConfig(set.config)
     if (Object.keys(errs).length) {
@@ -280,28 +329,33 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     try {
       const saved = await api.saveConfigSet({ id: set.id, name: set.name, config: set.config })
       userConfigSets.value = saved
+      refreshSnapshot(set.id)
       toast('配置已保存到配置套', 'success')
     } finally {
       saving.value = false
     }
   }
-  // 将某配置套应用到当前任务：写入后端 Schedule.config_set_id（后端自动置 mode=follow）
+  // 将某配置套应用到当前任务：若调度实例尚不存在则先创建（幂等），再写入 config_set_id（后端自动置 mode=follow）。
+  // 这样「用户添加账号 → 选配置套回填 → 保存推送」即可创建定时任务，无需先建实例。
   async function applySetToTask(setId) {
     const setIdStr = String(setId)
     const set = userConfigSets.value.find((s) => s.id === setIdStr)
     if (!set || !selectedAccountId.value) return
-    const b = scheduleBindings.value[taskConfigKey.value]
-    if (!b) {
-      toast('该账号暂未生成调度实例，无法绑定配置套', 'error')
-      return
-    }
+    const key = taskConfigKey.value
+    const b = scheduleBindings.value[key]
     saving.value = true
     try {
-      await api.bindScheduleConfigSet(b.scheduleId, setIdStr)
+      let scheduleId = b && b.scheduleId
+      if (!scheduleId) {
+        const created = await api.createSchedule({ accountId: Number(selectedAccountId.value), taskType: selectedTaskType.value })
+        scheduleId = created.id
+      }
+      await api.bindScheduleConfigSet(scheduleId, setIdStr)
       scheduleBindings.value = {
         ...scheduleBindings.value,
-        [taskConfigKey.value]: { scheduleId: b.scheduleId, configSetId: setIdStr }
+        [key]: { scheduleId, configSetId: setIdStr, enabled: false }
       }
+      toast('已套用配置并创建定时任务实例', 'success')
     } catch (e) {
       toast(e.message || '应用配置套失败', 'error')
     } finally {
@@ -325,6 +379,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     saving.value = true
     try {
       userConfigSets.value = (await api.fetchConfigSets()).userConfigSets
+      snapshotSets()
       formErrors.value = {}
     } finally {
       saving.value = false
@@ -495,6 +550,8 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     taskConfig,
     taskStatus,
     taskConfigMetaOf,
+    isDirty,
+    taskScheduleState,
     accountTree,
     locationOptions,
     credentialOptions,

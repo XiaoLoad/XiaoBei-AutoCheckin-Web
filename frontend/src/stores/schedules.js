@@ -120,6 +120,61 @@ export const useSchedulesStore = defineStore('schedules', () => {
     return { total, enabled, accountOff, stopped, dormEnabled, activityEnabled, dormTotal, activityTotal }
   })
 
+  // 显式创建任务实例（账号 × 任务类型）
+  async function addTask(payload) {
+    saving.value = true
+    try {
+      const created = await api.createSchedule(payload)
+      const i = schedules.value.findIndex((s) => s.id === created.id)
+      if (i === -1) schedules.value.push(created)
+      else schedules.value[i] = created
+      toast('定时任务已创建', 'success')
+      return created
+    } catch (e) {
+      toast(e.message || '创建失败', 'error')
+      return null
+    } finally {
+      saving.value = false
+    }
+  }
+
+  // 删除任务实例
+  async function removeTask(id) {
+    saving.value = true
+    try {
+      await api.deleteSchedule(id)
+      schedules.value = schedules.value.filter((s) => s.id !== id)
+      toast('定时任务已删除', 'success')
+    } catch (e) {
+      toast(e.message || '删除失败', 'error')
+    } finally {
+      saving.value = false
+    }
+  }
+
+  // 配置页「添加至定时任务」：为指定账号×类型创建（幂等）并立即启用、绑定配置套
+  async function activateTask(accountId, taskType, configSetId) {
+    saving.value = true
+    try {
+      const created = await api.createSchedule({ accountId: Number(accountId), taskType })
+      const updated = await api.updateSchedule({
+        id: created.id,
+        enabled: true,
+        configSetId: configSetId == null ? null : Number(configSetId)
+      })
+      const i = schedules.value.findIndex((s) => s.id === updated.id)
+      if (i !== -1) schedules.value[i] = updated
+      else schedules.value.push(updated)
+      toast('已添加至定时任务并启用', 'success')
+      return updated
+    } catch (e) {
+      toast(e.message || '添加失败', 'error')
+      return null
+    } finally {
+      saving.value = false
+    }
+  }
+
   return {
     loading,
     saving,
@@ -131,6 +186,9 @@ export const useSchedulesStore = defineStore('schedules', () => {
     load,
     toggle,
     saveSettings,
+    addTask,
+    removeTask,
+    activateTask,
     stats
   }
 })

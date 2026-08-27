@@ -34,10 +34,19 @@ export const useAccountsStore = defineStore('accounts', () => {
   )
 
   // 模糊搜索 + 三项筛选（前端演示）
+  // 类型筛选基于「已添加至定时任务且启用」的签到类型派生（dorm/activity/general），
+  // 不再依赖账号自身的 type 字段（该字段已废弃展示用途）。
   const filtered = computed(() => {
     const kw = keyword.value.trim().toLowerCase()
     return accounts.value.filter((a) => {
-      if (typeFilter.value && a.type !== typeFilter.value) return false
+      if (typeFilter.value) {
+        const st = a.signTasks || []
+        const dorm = st.some((t) => t.type === 'dorm' && t.enabled)
+        const act = st.some((t) => t.type === 'activity' && t.enabled)
+        if (typeFilter.value === 'dorm' && !dorm) return false
+        if (typeFilter.value === 'activity' && !act) return false
+        if (typeFilter.value === 'general' && !(dorm && act)) return false
+      }
       if (enabledFilter.value !== '' && String(a.enabled) !== enabledFilter.value) return false
       if (signFilter.value) {
         const st = (a.lastSignIn && a.lastSignIn.status) || 'never'

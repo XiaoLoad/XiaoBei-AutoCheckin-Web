@@ -62,8 +62,36 @@
       未绑定配置套，无法开启（请先在「签到配置」绑定）
     </p>
 
-    <!-- 操作 -->
-    <div class="mt-auto flex items-center justify-end pt-2.5">
+    <!-- 操作：删除（带二次确认）+ 定时设置 -->
+    <div class="mt-auto flex items-center justify-between gap-2 pt-2.5">
+      <!-- 删除：常态显示入口，点击后切换为二次确认，避免误删 -->
+      <div class="flex items-center gap-1">
+        <button
+          v-if="!confirming"
+          type="button"
+          class="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-sm font-medium text-danger/80 transition hover:bg-danger/10"
+          @click="confirming = true"
+        >
+          <Icon name="trash" :size="14" />删除
+        </button>
+        <template v-else>
+          <button
+            type="button"
+            class="inline-flex h-8 items-center rounded-lg bg-danger px-2.5 text-sm font-medium text-white transition hover:bg-danger/90"
+            @click="confirmDelete"
+          >
+            确认删除
+          </button>
+          <button
+            type="button"
+            class="inline-flex h-8 items-center rounded-lg px-2 text-sm font-medium text-ink-muted transition hover:bg-cloud"
+            @click="confirming = false"
+          >
+            取消
+          </button>
+        </template>
+      </div>
+
       <button
         type="button"
         class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ink/10 px-3 text-sm font-medium text-ink-soft transition hover:bg-cloud"
@@ -84,13 +112,20 @@ const props = defineProps({
   schedule: { type: Object, required: true },
   configMeta: { type: Object, required: true }
 })
-defineEmits(['toggle', 'open-settings'])
+const emit = defineEmits(['toggle', 'open-settings', 'delete'])
 
 const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 const root = ref(null)
 const accent = ref(null)
 const knob = ref(null)
 const switching = ref(false)
+// 删除二次确认态：点击「删除」后展开确认/取消，避免误触
+const confirming = ref(false)
+
+function confirmDelete() {
+  confirming.value = false
+  emit('delete', props.schedule.id)
+}
 
 const statusText = computed(() => {
   if (!props.schedule.accountEnabled) return '账号未启用'

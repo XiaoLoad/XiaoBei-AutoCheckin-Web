@@ -46,7 +46,8 @@ export async function fetchConfigMeta() {
       studentNo: (a.profile && a.profile.studentNo) || '',
       className: (a.profile && a.profile.className) || '',
       platform: a.platform || 'B 打卡平台',
-      status: a.enabled ? 'enabled' : 'disabled'
+      status: a.enabled ? 'enabled' : 'disabled',
+      signTasks: a.signTasks || []
     })),
     taskTypes: [
       { value: 'dorm', label: '寝室签到' },
@@ -195,4 +196,4 @@ export async function fetchImageBlobUrl(id) {
 }
 
 // 任务实例与配置套的绑定（config_set_id）由 /api/schedules 提供；此处再导出供 signConfig store 复用
-export { fetchScheduleBindings, bindScheduleConfigSet } from './schedules'
+export { fetchScheduleBindings, bindScheduleConfigSet, createSchedule, deleteSchedule } from './schedules'

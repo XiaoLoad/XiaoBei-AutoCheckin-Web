@@ -55,6 +55,20 @@ export async function toggleSchedule(id, enabled) {
   return mapItem(data)
 }
 
+// 显式创建定时任务实例（账号 × 任务类型）
+export async function createSchedule(payload) {
+  const data = await request({
+    url: '/schedules', method: 'post',
+    data: { accountId: payload.accountId, taskType: payload.taskType }
+  })
+  return mapItem(data)
+}
+
+// 删除定时任务实例
+export async function deleteSchedule(id) {
+  await request({ url: `/schedules/${id}`, method: 'delete' })
+}
+
 // ── 任务实例与配置套的绑定（真实 /api/schedules）──
 // 返回 { `${accountId}:${taskType}`: { scheduleId, configSetId } }，configSetId 为 null 表示未绑定
 export async function fetchScheduleBindings() {
@@ -63,7 +77,8 @@ export async function fetchScheduleBindings() {
   for (const s of (data.items || [])) {
     map[`${s.accountId}:${s.taskType}`] = {
       scheduleId: String(s.id),
-      configSetId: s.configSetId == null ? null : String(s.configSetId)
+      configSetId: s.configSetId == null ? null : String(s.configSetId),
+      enabled: !!s.enabled
     }
   }
   return map

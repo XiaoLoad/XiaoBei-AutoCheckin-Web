@@ -171,6 +171,84 @@
         </div>
       </div>
 
+      <!-- 批量选择操作栏：有选中项时出现（GSAP 高度+透明度过渡，避免布局跳变） -->
+      <Transition :css="false" @enter="onBarEnter" @leave="onBarLeave">
+        <div v-if="selectedIds.size" class="overflow-hidden">
+          <div class="flex flex-wrap items-center gap-2 rounded-xl border border-brand/20 bg-brand/5 px-3 py-2 text-sm">
+        <label class="inline-flex cursor-pointer select-none items-center gap-1.5 text-ink-soft">
+          <input
+            type="checkbox"
+            class="h-4 w-4 rounded border-ink/30 text-brand focus:ring-brand/20"
+            :checked="allOnPageSelected"
+            :indeterminate.prop="someOnPageSelected && !allOnPageSelected"
+            @change="toggleSelectAllOnPage"
+          />
+          <span>已选 <span class="font-medium text-brand">{{ selectedIds.size }}</span> 张</span>
+        </label>
+        <div class="ml-auto flex flex-wrap items-center gap-1.5">
+          <button type="button" class="rounded-lg border border-ink/15 bg-white px-2.5 py-1.5 text-xs text-ink-soft transition hover:bg-cloud" @click="selectAll">全选</button>
+          <button type="button" class="rounded-lg border border-ink/15 bg-white px-2.5 py-1.5 text-xs text-ink-soft transition hover:bg-cloud" @click="invertSelect">反选</button>
+          <button type="button" class="rounded-lg border border-ink/15 bg-white px-2.5 py-1.5 text-xs text-ink-soft transition hover:bg-cloud" @click="clearSelect">取消选择</button>
+          <span class="mx-0.5 hidden h-4 w-px bg-ink/15 sm:inline-block" />
+          <template v-if="view === 'trash'">
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded-lg border border-ink/15 bg-white px-2.5 py-1.5 text-xs text-ink-soft transition hover:bg-cloud disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="batchRunning"
+              @click="batchRestore"
+            >
+              <Icon name="refresh" :size="13" />恢复
+            </button>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded-lg bg-danger px-2.5 py-1.5 text-xs font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="batchRunning"
+              @click="confirmBatchPurge"
+            >
+              <Icon name="trash" :size="13" />永久删除
+            </button>
+          </template>
+          <template v-else>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded-lg border border-ink/15 bg-white px-2.5 py-1.5 text-xs text-ink-soft transition hover:bg-cloud disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="batchRunning"
+              @click="openBatchMove"
+            >
+              <Icon name="layers" :size="13" />移动到分组
+            </button>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded-lg border border-ink/15 bg-white px-2.5 py-1.5 text-xs text-ink-soft transition hover:bg-cloud disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="batchRunning"
+              @click="confirmBatchTrash"
+            >
+              <Icon name="trash" :size="13" />移入回收站
+            </button>
+            <button
+              v-if="view === 'active'"
+              type="button"
+              class="inline-flex items-center gap-1 rounded-lg border border-ink/15 bg-white px-2.5 py-1.5 text-xs text-ink-soft transition hover:bg-cloud disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="batchRunning"
+              @click="batchMarkUsed"
+            >
+              <Icon name="check-circle" :size="13" />标记已用
+            </button>
+            <button
+              v-if="view === 'used'"
+              type="button"
+              class="inline-flex items-center gap-1 rounded-lg border border-ink/15 bg-white px-2.5 py-1.5 text-xs text-ink-soft transition hover:bg-cloud disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="batchRunning"
+              @click="batchRestore"
+            >
+              <Icon name="refresh" :size="13" />批量恢复
+            </button>
+          </template>
+          </div>
+          </div>
+        </div>
+      </Transition>
+
       <input ref="fileInput" type="file" accept="image/jpeg,image/png,image/webp" multiple class="hidden" @change="onFilePicked" />
 
       <p class="text-[11px] leading-relaxed text-ink-muted/80">
@@ -181,16 +259,37 @@
         <div v-if="pagedList.length === 0" class="flex h-full items-center justify-center text-sm text-ink-muted">
           {{ view === 'trash' ? '回收站为空' : view === 'used' ? '已使用列表为空' : '当前分组暂无图片' }}
         </div>
-      <div v-else class="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+      <TransitionGroup
+        v-else
+        tag="div"
+        name="xb-grid"
+        :css="false"
+        class="relative grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5"
+        @before-leave="onCardBeforeLeave"
+        @enter="onCardEnter"
+        @leave="onCardLeave"
+      >
         <div
           v-for="img in pagedList"
           :key="img.id"
-          class="group overflow-hidden rounded-xl border border-ink/10 bg-white"
+          class="group overflow-hidden rounded-xl border bg-white"
+          :class="isSelected(img) ? 'border-brand ring-2 ring-brand/40' : 'border-ink/10'"
           :draggable="!img.inTrash"
           @dragstart="onDragStart(img, $event)"
           @dragend="onDragEnd"
         >
           <div class="relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-cloud to-brand/10">
+            <!-- 多选勾选框 -->
+            <button
+              type="button"
+              class="absolute left-1.5 top-1.5 z-10 grid h-6 w-6 place-items-center rounded-md border transition"
+              :class="isSelected(img) ? 'border-brand bg-brand text-white' : 'border-white/70 bg-white/80 text-transparent hover:bg-white'"
+              :aria-pressed="isSelected(img)"
+              :title="isSelected(img) ? '取消选择' : '选择'"
+              @click.stop="onToggleSelect(img, $event)"
+            >
+              <Icon name="check" :size="14" />
+            </button>
             <img
               v-if="urls[img.id]"
               :src="urls[img.id]"
@@ -213,7 +312,7 @@
             </div>
             <span
               v-if="groupNameOf(img)"
-              class="absolute left-1.5 top-1.5 rounded-md bg-black/45 px-1.5 py-0.5 text-[10px] text-white"
+              class="absolute bottom-1.5 left-1.5 rounded-md bg-black/45 px-1.5 py-0.5 text-[10px] text-white"
             >{{ groupNameOf(img) }}</span>
             <span v-if="!img.inTrash" class="absolute right-1.5 top-1.5 rounded-md bg-black/45 px-1.5 py-0.5 text-[10px] text-white opacity-0 transition group-hover:opacity-100">
               拖动到左侧分组可移动
@@ -244,7 +343,7 @@
             </template>
           </div>
         </div>
-      </div>
+      </TransitionGroup>
       </div>
 
       <div v-if="total > 0" class="mt-auto flex justify-center border-t border-ink/5 pt-3">
@@ -288,6 +387,56 @@
           </div>
         </div>
       </transition>
+
+      <!-- 批量操作进度与结果浮层：锚定在右侧卡片内右下角（与上传面板同角，二者互斥） -->
+      <transition name="fade">
+        <div
+          v-if="batchPanel.show"
+          class="absolute bottom-3 right-3 z-30 w-80 max-w-[calc(100%-1.5rem)] overflow-hidden rounded-2xl dash-card shadow-xl"
+        >
+          <div class="flex items-center justify-between gap-2 border-b border-ink/5 px-3 py-2">
+            <span class="text-xs font-medium text-ink-soft">{{ batchPanel.title }}</span>
+            <button
+              type="button"
+              class="grid h-5 w-5 place-items-center rounded text-ink-muted transition hover:bg-cloud hover:text-ink"
+              aria-label="关闭"
+              @click="batchPanel.show = false"
+            >
+              <Icon name="close" :size="12" />
+            </button>
+          </div>
+          <div class="px-3 py-2">
+            <div class="h-1.5 w-full overflow-hidden rounded-full bg-ink/10">
+              <div class="h-full rounded-full bg-brand transition-all duration-200" :style="{ width: (batchPanel.total ? (batchPanel.done / batchPanel.total * 100) : 0) + '%' }" />
+            </div>
+            <p class="mt-1.5 text-[11px] text-ink-muted">{{ batchPanel.done }} / {{ batchPanel.total }}</p>
+            <div v-if="batchPanel.failed.length" class="xb-scroll mt-2 max-h-32 space-y-1 overflow-auto">
+              <p class="text-[11px] font-medium text-danger">以下 {{ batchPanel.failed.length }} 张失败：</p>
+              <p v-for="f in batchPanel.failed" :key="f.id" class="truncate text-[10px] text-ink-muted" :title="f.error">#{{ f.id }}：{{ f.error }}</p>
+            </div>
+          </div>
+        </div>
+      </transition>
+
+      <!-- 批量移入回收站后的撤销条：底部居中，8 秒后自动消失 -->
+      <transition name="fade">
+        <div
+          v-if="undoState.visible"
+          class="absolute bottom-3 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-2xl dash-card px-4 py-2.5 text-sm shadow-xl"
+        >
+          <Icon name="trash" :size="15" class="text-ink-muted" />
+          <span class="text-ink-soft">已移入回收站 {{ undoState.ids.length }} 张</span>
+          <button type="button" class="font-medium text-brand hover:underline" @click="undoBatchTrash">撤销</button>
+          <button
+            type="button"
+            class="grid h-5 w-5 place-items-center rounded text-ink-muted transition hover:bg-cloud hover:text-ink"
+            aria-label="关闭"
+            @click="undoState.visible = false"
+          >
+            <Icon name="close" :size="12" />
+          </button>
+        </div>
+      </transition>
     </div>
 
     <!-- 回收站删除二次确认 -->
@@ -301,6 +450,66 @@
       :confirming="deleting"
       @confirm="confirmDelete"
     />
+
+    <!-- 批量移动到分组 -->
+    <ConfirmModal
+      v-model="showBatchMove"
+      title="移动到分组"
+      icon="layers"
+      confirm-text="移动"
+      :confirming="batchMoving"
+      :close-on-overlay="!batchMoving"
+      :close-on-esc="!batchMoving"
+      @confirm="confirmBatchMove"
+    >
+      <div class="space-y-2">
+        <p class="text-xs text-ink-muted">将选中的 {{ selectedIds.size }} 张图片移动到：</p>
+        <BaseSelect v-model="batchMoveTarget" :options="moveOptions" :searchable="true" size="sm" placeholder="选择目标分组" />
+        <div v-if="creatingGroup" class="flex items-center gap-1.5">
+          <input
+            v-model="newGroupName"
+            type="text"
+            placeholder="新分组名"
+            class="min-w-0 flex-1 rounded-lg border border-ink/10 bg-white px-2.5 py-2 text-xs text-ink outline-none transition placeholder:text-ink-muted focus:border-brand focus:ring-2 focus:ring-brand/10"
+            @keyup.enter="createAndSelectGroup"
+          />
+          <button type="button" class="rounded-lg bg-brand px-3 py-2 text-xs font-medium text-white transition hover:bg-brand-dark" @click="createAndSelectGroup">确定</button>
+          <button type="button" class="rounded-lg border border-ink/15 bg-white px-3 py-2 text-xs text-ink-soft transition hover:bg-cloud" @click="creatingGroup = false; newGroupName = ''">取消</button>
+        </div>
+        <button v-else type="button" class="text-xs text-brand hover:underline" @click="creatingGroup = true">+ 新建分组</button>
+      </div>
+    </ConfirmModal>
+
+    <!-- 批量移入回收站（二次确认） -->
+    <ConfirmModal
+      v-model="showBatchTrash"
+      title="移入回收站"
+      icon="trash"
+      danger
+      confirm-text="移入回收站"
+      :confirming="batchRunning"
+      :close-on-overlay="!batchRunning"
+      :close-on-esc="!batchRunning"
+      @confirm="confirmBatchTrashOk"
+    >
+      <p>确认将选中的 <span class="font-medium text-ink">{{ selectedIds.size }}</span> 张图片移入回收站吗？移入后仍可在「回收站」恢复，本次操作完成后也提供撤销。</p>
+    </ConfirmModal>
+
+    <!-- 回收站批量永久删除（高风险确认，明确不可恢复） -->
+    <ConfirmModal
+      v-model="showBatchPurge"
+      title="永久删除"
+      icon="alert"
+      danger
+      confirm-text="永久删除"
+      :confirming="batchRunning"
+      :close-on-overlay="!batchRunning"
+      :close-on-esc="!batchRunning"
+      @confirm="confirmBatchPurgeOk"
+    >
+      <p class="font-medium text-danger">此操作不可恢复！</p>
+      <p class="mt-1">确认永久删除选中的 <span class="font-medium text-ink">{{ selectedIds.size }}</span> 张图片吗？删除后将从磁盘移除且无法找回。</p>
+    </ConfirmModal>
   </div>
 </template>
 
@@ -315,6 +524,7 @@ import ConfirmModal from '@/components/ConfirmModal.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
 import { fetchImageBlobUrl } from '@/api/signConfig'
 import toast from '@/utils/toast'
+import gsap from 'gsap'
 
 const store = useSignConfigStore()
 const view = ref('active')
@@ -324,9 +534,232 @@ const views = [
   { value: 'trash', label: '回收站' }
 ]
 
+// ── 批量选择：selectedIds 为当前选中图片 id 集合（跨分页保持）；lastAnchorId 用于 Shift 连续选 ──
+const selectedIds = ref(new Set())
+const lastAnchorId = ref(null)
+const isSelected = (img) => selectedIds.value.has(img.id)
+const allOnPageSelected = computed(() =>
+  pagedList.value.length > 0 && pagedList.value.every((i) => selectedIds.value.has(i.id))
+)
+const someOnPageSelected = computed(() => pagedList.value.some((i) => selectedIds.value.has(i.id)))
+function toggleOne(id) {
+  const s = selectedIds.value
+  if (s.has(id)) s.delete(id)
+  else s.add(id)
+}
+function onToggleSelect(img, e) {
+  if (e && e.shiftKey && lastAnchorId.value != null) {
+    const ids = pagedList.value.map((i) => i.id)
+    const a = ids.indexOf(lastAnchorId.value)
+    const b = ids.indexOf(img.id)
+    if (a !== -1 && b !== -1) {
+      const [lo, hi] = a < b ? [a, b] : [b, a]
+      for (let k = lo; k <= hi; k++) selectedIds.value.add(ids[k])
+      return
+    }
+  }
+  // 普通点击 / Ctrl 跳选 / Shift 锚点失效：切换当前项并设为新锚点
+  toggleOne(img.id)
+  lastAnchorId.value = img.id
+}
+function toggleSelectAllOnPage() {
+  const s = selectedIds.value
+  if (allOnPageSelected.value) pagedList.value.forEach((i) => s.delete(i.id))
+  else pagedList.value.forEach((i) => s.add(i.id))
+}
+function selectAll() {
+  const s = selectedIds.value
+  list.value.forEach((i) => s.add(i.id))
+}
+function invertSelect() {
+  const s = selectedIds.value
+  list.value.forEach((i) => (s.has(i.id) ? s.delete(i.id) : s.add(i.id)))
+}
+function clearSelect() {
+  selectedIds.value.clear()
+  lastAnchorId.value = null
+}
+
+// ── 批量操作：进度面板 + 部分失败汇总；无批量接口，循环单图端点逐张 try/catch ──
+const batchRunning = ref(false)
+const batchPanel = ref({ show: false, title: '', done: 0, total: 0, failed: [] })
+async function runBatch(ids, fn) {
+  const total = ids.length
+  batchPanel.value = { show: true, title: '处理中…', done: 0, total, failed: [] }
+  batchRunning.value = true
+  const successIds = []
+  const failed = []
+  try {
+    for (let i = 0; i < total; i++) {
+      const id = ids[i]
+      try {
+        await fn(id)
+        successIds.push(id)
+      } catch (err) {
+        failed.push({ id, error: (err && err.message) || '操作失败' })
+      }
+      batchPanel.value.done = i + 1
+    }
+    batchPanel.value.title = failed.length
+      ? `完成（成功 ${successIds.length} · 失败 ${failed.length}）`
+      : `已完成 ${successIds.length} 张`
+  } finally {
+    batchRunning.value = false
+  }
+  if (!failed.length) {
+    setTimeout(() => {
+      if (!batchPanel.value.failed.length && batchPanel.value.total === total) batchPanel.value.show = false
+    }, 1500)
+  }
+  return { successIds, failed }
+}
+
+// 批量移动到分组（含就地新建分组）
+const showBatchMove = ref(false)
+const batchMoveTarget = ref('')
+const creatingGroup = ref(false)
+const newGroupName = ref('')
+const batchMoving = ref(false)
+function openBatchMove() {
+  if (!selectedIds.value.size) return
+  batchMoveTarget.value = ''
+  creatingGroup.value = false
+  newGroupName.value = ''
+  showBatchMove.value = true
+}
+async function createAndSelectGroup() {
+  const name = newGroupName.value.trim()
+  if (!name) {
+    toast('请填写分组名称', 'error')
+    return
+  }
+  const groups = await store.createImageGroup(name)
+  const last = groups[groups.length - 1]
+  if (last) batchMoveTarget.value = String(last.id)
+  creatingGroup.value = false
+  newGroupName.value = ''
+}
+async function confirmBatchMove() {
+  const target = batchMoveTarget.value === '' ? null : Number(batchMoveTarget.value)
+  const ids = [...selectedIds.value]
+  batchMoving.value = true
+  try {
+    const { successIds, failed } = await runBatch(ids, (id) => store.moveImage(id, target))
+    showBatchMove.value = false
+    clearSelect()
+    const gname = target == null ? '未分组' : (store.imageGroups.find((g) => g.id === target)?.name || '分组')
+    if (failed.length) toast(`已移动 ${successIds.length} 张，${failed.length} 张失败`, 'error')
+    else toast(`已移动 ${successIds.length} 张到「${gname}」`, 'success')
+  } finally {
+    batchMoving.value = false
+  }
+}
+
+// 批量移入回收站（二次确认 + 完成后撤销条）
+const showBatchTrash = ref(false)
+const undoState = ref({ visible: false, ids: [], timer: null })
+function confirmBatchTrash() {
+  if (!selectedIds.value.size) return
+  showBatchTrash.value = true
+}
+async function confirmBatchTrashOk() {
+  const ids = [...selectedIds.value]
+  showBatchTrash.value = false
+  const { successIds, failed } = await runBatch(ids, (id) => store.trashImage(id))
+  clearSelect()
+  if (successIds.length) {
+    undoState.value.ids = successIds
+    undoState.value.visible = true
+    if (undoState.value.timer) clearTimeout(undoState.value.timer)
+    undoState.value.timer = setTimeout(() => { undoState.value.visible = false }, 8000)
+  }
+  if (failed.length) toast(`已移入回收站 ${successIds.length} 张，${failed.length} 张失败`, 'error')
+  else if (successIds.length) toast(`已移入回收站 ${successIds.length} 张`, 'success')
+}
+async function undoBatchTrash() {
+  const ids = undoState.value.ids
+  undoState.value.visible = false
+  if (undoState.value.timer) clearTimeout(undoState.value.timer)
+  if (!ids.length) return
+  const { failed } = await runBatch(ids, (id) => store.restoreImage(id))
+  if (failed.length) toast(`撤销失败 ${failed.length} 张`, 'error')
+  else toast(`已撤销，恢复 ${ids.length} 张至图库`, 'success')
+}
+
+// 回收站批量永久删除（高风险确认）
+const showBatchPurge = ref(false)
+function confirmBatchPurge() {
+  if (!selectedIds.value.size) return
+  showBatchPurge.value = true
+}
+async function confirmBatchPurgeOk() {
+  const ids = [...selectedIds.value]
+  showBatchPurge.value = false
+  const { successIds, failed } = await runBatch(ids, (id) => store.deleteImage(id))
+  clearSelect()
+  if (failed.length) toast(`已删除 ${successIds.length} 张，${failed.length} 张失败`, 'error')
+  else toast(`已永久删除 ${successIds.length} 张`, 'success')
+}
+
+// 批量标记已使用（active 视图；可逆，无需确认）
+async function batchMarkUsed() {
+  if (!selectedIds.value.size) return
+  const ids = [...selectedIds.value]
+  const { successIds, failed } = await runBatch(ids, (id) => store.markUsed(id))
+  clearSelect()
+  if (failed.length) toast(`已标记 ${successIds.length} 张，${failed.length} 张失败`, 'error')
+  else toast(`已标记 ${successIds.length} 张为已使用`, 'success')
+}
+
+// 批量恢复（已使用/回收站视图）：恢复至图库；列表、分组计数与空状态随 store 刷新自动同步
+async function batchRestore() {
+  if (!selectedIds.value.size) return
+  const ids = [...selectedIds.value]
+  const { successIds, failed } = await runBatch(ids, (id) => store.restoreImage(id))
+  clearSelect()
+  if (failed.length) toast(`已恢复 ${successIds.length} 张，${failed.length} 张失败`, 'error')
+  else toast(`已恢复 ${successIds.length} 张至图库`, 'success')
+}
+
+// ── GSAP 过渡：批量操作栏显隐（高度+透明度，消除布局跳变）──
+function onBarEnter(el, done) {
+  gsap.killTweensOf(el)
+  gsap.fromTo(el, { height: 0, opacity: 0 }, {
+    height: el.scrollHeight, opacity: 1, duration: 0.25, ease: 'power2.out',
+    onComplete: () => { el.style.height = ''; el.style.opacity = ''; done() }
+  })
+}
+function onBarLeave(el, done) {
+  gsap.killTweensOf(el)
+  gsap.to(el, { height: 0, opacity: 0, duration: 0.18, ease: 'power2.in', onComplete: done })
+}
+
+// ── GSAP 过渡：网格卡片进入/离开；重排补位由 .xb-grid-move 的 FLIP 过渡完成 ──
+function onCardEnter(el, done) {
+  gsap.killTweensOf(el)
+  gsap.fromTo(el, { opacity: 0, y: 10, scale: 0.97 }, {
+    opacity: 1, y: 0, scale: 1, duration: 0.28, ease: 'power2.out',
+    clearProps: 'transform,opacity', onComplete: done
+  })
+}
+function onCardBeforeLeave(el) {
+  // 离场卡片钉在原位并脱离文档流，其余卡片经 FLIP 平滑补位（grid 容器须为 relative）
+  const { offsetLeft, offsetTop, offsetWidth, offsetHeight } = el
+  Object.assign(el.style, {
+    position: 'absolute', left: `${offsetLeft}px`, top: `${offsetTop}px`,
+    width: `${offsetWidth}px`, height: `${offsetHeight}px`, margin: '0'
+  })
+}
+function onCardLeave(el, done) {
+  gsap.killTweensOf(el)
+  gsap.to(el, { opacity: 0, scale: 0.96, duration: 0.2, ease: 'power2.in', onComplete: done })
+}
+
 // ── 分组（左栏）：groupFilter 为 'all' | 'ungrouped' | 分组 id（数字）；
 // 分组名由用户自建（如寝室号"3栋507"），同寝室账号共用同一分组 ──
 const groupFilter = ref('all')
+// 切换视图/分组时清空批量选择，避免跨视图误操作（须在 groupFilter 声明后注册，避免 TDZ）
+watch([view, groupFilter], () => { clearSelect() })
 const groupQuery = ref('')
 const creating = ref(false)
 const newName = ref('')
@@ -372,6 +805,24 @@ const list = computed(() => {
   if (groupFilter.value === 'ungrouped') return pool.filter((i) => i.groupId == null)
   return pool.filter((i) => i.groupId === groupFilter.value)
 })
+
+// 选中项离开当前列表（移动/删除/恢复等数据变化）时同步清理：立即从选中集合移除并更新计数；
+// 全部失效时自动退出批量选择，避免出现无法操作的空选中态
+watch(
+  () => list.value.map((i) => i.id).join('|'),
+  () => {
+    if (!selectedIds.value.size) return
+    const present = new Set(list.value.map((i) => i.id))
+    let removed = false
+    for (const id of [...selectedIds.value]) {
+      if (!present.has(id)) {
+        selectedIds.value.delete(id)
+        removed = true
+      }
+    }
+    if (removed && selectedIds.value.size === 0) clearSelect()
+  }
+)
 
 // 新建/重命名分组
 async function confirmCreate() {
@@ -652,7 +1103,10 @@ async function openPreview(img) {
   lightbox.init()
   lightbox.loadAndOpen(index)
 }
-onBeforeUnmount(() => { lightbox?.destroy() })
+onBeforeUnmount(() => {
+  lightbox?.destroy()
+  if (undoState.value.timer) clearTimeout(undoState.value.timer)
+})
 
 function toTrash(id) { store.trashImage(id) }
 function restore(id) { store.restoreImage(id) }
@@ -679,3 +1133,11 @@ async function confirmDelete() {
   }
 }
 </script>
+
+<style scoped>
+/* TransitionGroup FLIP：网格重排（卡片移动/删除/恢复/翻页）时位移平滑过渡；
+   离场卡片的绝对定位让位由 onCardBeforeLeave 钩子负责，进入/离开透明度由 GSAP 驱动 */
+.xb-grid-move {
+  transition: transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+</style>

@@ -21,19 +21,19 @@ const dynamicRoutes = [
     name: 'sign-records',
     component: () => import('@/views/SignRecordsView.vue'),
     // [权限判断] 签到记录为平台用户（普通用户）专属页面：管理员无 B 平台账号，无需该页
-    meta: { title: '签到记录', requiresAuth: true, roles: ['user'], group: '运营管理', icon: 'calendar', order: 1 }
+    meta: { title: '签到记录', requiresAuth: true, roles: ['user'], group: '运营管理', icon: 'calendar', order: 2 }
   },
   {
     path: '/sign-config',
     name: 'sign-config',
     component: () => import('@/views/SignConfigView.vue'),
-    meta: { title: '签到配置', requiresAuth: true, roles: ['admin', 'user'], group: '运营管理', icon: 'sliders', order: 2 }
+    meta: { title: '签到配置', requiresAuth: true, roles: ['admin', 'user'], group: '运营管理', icon: 'sliders', order: 3 }
   },
   {
     path: '/accounts',
     name: 'accounts',
     component: () => import('@/views/AccountManagementView.vue'),
-    meta: { title: '账号管理', requiresAuth: true, roles: ['user'], group: '运营管理', icon: 'authorize', order: 3 }
+    meta: { title: '账号管理', requiresAuth: true, roles: ['user'], group: '运营管理', icon: 'authorize', order: 1 }
   },
   {
     path: '/schedules',
@@ -43,11 +43,18 @@ const dynamicRoutes = [
     meta: { title: '定时任务', requiresAuth: true, roles: ['user'], group: '运营管理', icon: 'clock', order: 4 }
   },
   {
+    path: '/task-logs',
+    name: 'task-logs',
+    component: () => import('@/views/TaskLogsView.vue'),
+    // 任务日志：平台用户（普通用户）专属页面，暂为占位实现
+    meta: { title: '任务日志', requiresAuth: true, roles: ['user'], group: '运营管理', icon: 'records', order: 5 }
+  },
+  {
     path: '/users',
     name: 'users',
     component: () => import('@/views/UserManagementView.vue'),
-    // [权限判断] 用户管理（含权限管理）仅管理员可访问；排序置于平台资源池上方
-    meta: { title: '用户管理', requiresAuth: true, roles: ['admin'], group: '运营管理', icon: 'users', order: 1 }
+    // [权限判断] 用户管理（含权限管理）仅管理员可访问；order 0 使其始终排在运营管理分组最前（普通用户不可见，仅影响管理员视图）
+    meta: { title: '用户管理', requiresAuth: true, roles: ['admin'], group: '运营管理', icon: 'users', order: 0 }
   },
   {
     path: '/settings',

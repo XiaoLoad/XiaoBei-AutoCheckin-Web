@@ -542,6 +542,15 @@ export const useSignConfigStore = defineStore('signConfig', () => {
       saving.value = false
     }
   }
+  // 手动标记为已使用（图库页演示/手动流转；recycle 策略消费后也落到 used 状态）
+  async function markUsed(id) {
+    saving.value = true
+    try {
+      imageLibrary.value = await api.markImageUsed(id)
+    } finally {
+      saving.value = false
+    }
+  }
   // 上传图片：走真实归一化管线，成功后刷新图库数组（groupId 指定上传目标分组）
   async function uploadImage(file, groupId = null) {
     saving.value = true
@@ -729,6 +738,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     trashImage,
     restoreImage,
     deleteImage,
+    markUsed,
     uploadImage,
     createImageGroup,
     renameImageGroup,

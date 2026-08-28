@@ -75,6 +75,8 @@ class PoolImage(db.Model):
     filename = db.Column(db.String(255))
     size = db.Column(db.Integer, default=0)
     mime = db.Column(db.String(64))
-    status = db.Column(db.String(16), nullable=False, default='active')  # active | trash
+    status = db.Column(db.String(16), nullable=False, default='active')  # active | used | trash
+    # active 图库可正常使用；used 已使用（轮回策略消费后移入，保留不进回收站、不受 7 天清理）；
+    # trash 回收站（主动删除移入，超期物理清除）
     trashed_at = db.Column(db.DateTime)   # 移入回收站时刻；恢复清空，超期物理清除依据
     created_at = db.Column(db.DateTime, default=now_cst)

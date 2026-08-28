@@ -185,6 +185,11 @@ export async function deleteImage(id) {
   await request({ url: `/pools/images/${id}`, method: 'delete' })
   return (await refreshPools()).imageLibrary
 }
+// 手动标记为已使用（图库页「标记已用」按钮；真实消费由调度器按 config.image.strategy 调后端 consume_image）
+export async function markImageUsed(id) {
+  await request({ url: `/pools/images/${id}/used`, method: 'post' })
+  return (await refreshPools()).imageLibrary
+}
 
 // 图库分组（相册）：用户自建自管，名称通常为寝室号；同寝室账号共用同一分组
 export async function createImageGroup(name) {

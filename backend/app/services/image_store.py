@@ -103,3 +103,30 @@ def list_active_ids(user_id, group_id=None):
     if group_id is not None:
         q = q.filter_by(group_id=group_id)
     return [i.id for i in q.order_by(PoolImage.id.desc()).all()]
+
+
+def consume_image(image_id, user_id, strategy):
+    """消费图片流转（供调度器在真实签到提交时按 config.image.strategy 调用）。
+    recycle 循环复用 → used（保留、不入回收站、不受 7 天清理影响，可轮回取用）；
+    trash 用后入回收站 → trash（可 7 天内恢复）；
+    delete 用后删除 → 物理删除文件与记录；
+    缺省/未知策略 → trash（可恢复，避免误删）。
+
+    关键：recycle 不再走 trash，从而与回收站 7 天自动删除解耦，解决「轮回使用却被清理」的冲突。"""
+    from app.extensions import db
+    from app.models import PoolImage
+
+    img = PoolImage.query.filter_by(id=image_id, user_id=user_id).first()
+    if not img:
+        return None
+    if strategy == 'recycle':
+        img.status = 'used'
+        img.trashed_at = None
+    elif strategy == 'delete':
+        delete_file(img.user_id, img.filename)
+        db.session.delete(img)
+    else:  # 'trash' 或未知：落回收站，沿用原可恢复语义
+        img.status = 'trash'
+        img.trashed_at = now_cst()
+    db.session.commit()
+    return img

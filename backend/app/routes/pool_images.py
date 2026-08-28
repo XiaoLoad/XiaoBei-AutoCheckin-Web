@@ -20,7 +20,8 @@ _MAX_GROUP_NAME = 64
 
 def _img_dict(i):
     return {'id': i.id, 'name': i.orig_name, 'sizeKb': round((i.size or 0) / 1024),
-            'mime': i.mime, 'groupId': i.group_id, 'inTrash': i.status == 'trash'}
+            'mime': i.mime, 'groupId': i.group_id,
+            'inTrash': i.status == 'trash', 'used': i.status == 'used'}
 
 
 def _owned_image(image_id, user):
@@ -177,6 +178,19 @@ def restore_image(image_id):
     img.trashed_at = None
     db.session.commit()
     return success(_img_dict(img), message='已恢复')
+
+
+@bp.route('/images/<int:image_id>/used', methods=['POST'])
+@token_required
+def mark_image_used(image_id):
+    """手动标记为已使用（图库页演示/手动流转）；真实消费由调度器按 config.image.strategy 调 consume_image"""
+    img = _owned_image(image_id, request.current_user)
+    if not img:
+        return error(message='图片不存在', code=4040, status=404)
+    img.status = 'used'
+    img.trashed_at = None
+    db.session.commit()
+    return success(_img_dict(img), message='已标记为已使用')
 
 
 @bp.route('/images/<int:image_id>', methods=['DELETE'])

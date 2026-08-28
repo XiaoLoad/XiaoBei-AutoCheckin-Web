@@ -1,7 +1,7 @@
 <template>
   <div class="flex min-h-0 gap-3">
     <!-- 左：分组侧栏（相册式管理 + 拖拽投放目标） -->
-    <aside class="flex w-52 shrink-0 flex-col overflow-hidden rounded-2xl dash-card">
+    <aside class="flex max-h-[72vh] w-52 shrink-0 flex-col overflow-hidden rounded-2xl dash-card">
       <div class="border-b border-ink/5 p-2">
         <div class="relative">
           <Icon name="search" :size="13" class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
@@ -157,12 +157,13 @@
       <input ref="fileInput" type="file" accept="image/jpeg,image/png" multiple class="hidden" @change="onFilesPicked" />
 
       <p class="text-[11px] leading-relaxed text-ink-muted/80">
-        上传自动压缩至 ≤180KB（B 平台提交口径）；回收站保留 7 天；点击图片打开灯箱预览，可缩放、左右切换。
+        上传自动压缩至 ≤180KB（B 平台提交口径）；轮回使用的图片消费后进入「已使用」保留不删；图库中「删除」会移入回收站，回收站内「删除」才永久移除（保留 7 天后也会自动清除）；点击图片打开灯箱预览，可缩放、左右切换。
       </p>
 
-      <div v-if="pagedList.length === 0" class="dash-card flex min-h-[240px] flex-1 items-center justify-center text-sm text-ink-muted">
-        {{ view === 'trash' ? '回收站为空' : '当前分组暂无图片' }}
-      </div>
+      <div class="xb-scroll min-h-[56vh] max-h-[72vh] overflow-y-auto overflow-x-hidden rounded-xl bg-cloud/40 px-1.5 py-1.5">
+        <div v-if="pagedList.length === 0" class="flex min-h-[52vh] items-center justify-center text-sm text-ink-muted">
+          {{ view === 'trash' ? '回收站为空' : view === 'used' ? '已使用列表为空' : '当前分组暂无图片' }}
+        </div>
       <div v-else class="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5">
         <div
           v-for="img in pagedList"
@@ -211,20 +212,40 @@
               <button class="shrink-0 text-[11px] text-brand hover:underline" @click="confirmMove">确定</button>
               <button class="shrink-0 text-[11px] text-ink-muted hover:underline" @click="movingId = null">取消</button>
             </template>
+            <template v-else-if="view === 'used'">
+              <button class="text-[11px] text-info hover:underline" @click="restore(img.id)">恢复至图库</button>
+              <button class="text-[11px] text-ink-muted hover:text-brand" @click="startMove(img)">移动</button>
+            </template>
+            <template v-else-if="view === 'active'">
+              <button class="text-[11px] text-ink-muted hover:text-brand" @click="startMove(img)">移动</button>
+              <button class="text-[11px] text-ink-muted hover:text-brand" @click="markUsed(img.id)">标记已用</button>
+              <button class="text-[11px] text-danger hover:underline" @click="toTrash(img.id)">删除</button>
+            </template>
             <template v-else>
-              <button v-if="!img.inTrash" class="text-[11px] text-ink-muted hover:text-brand" @click="startMove(img)">移动</button>
-              <button v-if="!img.inTrash" class="text-[11px] text-ink-muted hover:text-danger" @click="toTrash(img.id)">回收站</button>
-              <button v-else class="text-[11px] text-info hover:underline" @click="restore(img.id)">恢复</button>
-              <button class="text-[11px] text-danger hover:underline" @click="remove(img.id)">删除</button>
+              <button class="text-[11px] text-info hover:underline" @click="restore(img.id)">恢复</button>
+              <button class="text-[11px] text-danger hover:underline" @click="askDelete(img)">删除</button>
             </template>
           </div>
         </div>
+      </div>
       </div>
 
       <div v-if="total > 0" class="mt-auto flex justify-center border-t border-ink/5 pt-3">
         <BasePagination :page="page" :page-size="pageSize" :total="total" :page-size-options="[12, 24, 48, 96]" @update:page="page = $event" @update:pageSize="onPageSizeChange" />
       </div>
     </div>
+
+    <!-- 回收站删除二次确认 -->
+    <ConfirmModal
+      v-model="showDelConfirm"
+      title="确认删除图片"
+      :message="pendingDelete ? `「${pendingDelete.name}」删除后将从磁盘永久移除且不可恢复，确定要删除吗？` : ''"
+      icon="trash"
+      danger
+      confirm-text="删除"
+      :confirming="deleting"
+      @confirm="confirmDelete"
+    />
   </div>
 </template>
 
@@ -235,6 +256,7 @@ import PhotoSwipe from 'photoswipe'
 import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import BasePagination from '@/components/BasePagination.vue'
+import ConfirmModal from '@/components/ConfirmModal.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
 import { fetchImageBlobUrl } from '@/api/signConfig'
 import toast from '@/utils/toast'
@@ -243,6 +265,7 @@ const store = useSignConfigStore()
 const view = ref('active')
 const views = [
   { value: 'active', label: '图库' },
+  { value: 'used', label: '已使用' },
   { value: 'trash', label: '回收站' }
 ]
 
@@ -264,11 +287,19 @@ const matchesGroupQuery = groupQueryHit
 const visibleGroups = computed(() => store.imageGroups.filter((g) => groupQueryHit(g.name)))
 const groupsEmpty = computed(() => visibleGroups.value.length === 0)
 
-const activeImgs = computed(() => store.imageLibrary.filter((i) => !i.inTrash))
+// 当前视图下的图片池（视图感知：图库=active，已使用=used，回收站=trash）
+const viewPool = computed(() => {
+  const v = view.value
+  return store.imageLibrary.filter((i) => {
+    if (v === 'trash') return i.inTrash
+    if (v === 'used') return i.used
+    return !i.inTrash && !i.used
+  })
+})
 const counts = computed(() => {
-  const byGroup = { all: activeImgs.value.length, ungrouped: 0 }
+  const byGroup = { all: viewPool.value.length, ungrouped: 0 }
   for (const g of store.imageGroups) byGroup[g.id] = 0
-  for (const i of activeImgs.value) {
+  for (const i of viewPool.value) {
     if (i.groupId == null) byGroup.ungrouped += 1
     else if (byGroup[i.groupId] != null) byGroup[i.groupId] += 1
   }
@@ -281,9 +312,8 @@ const groupNameOf = (img) => {
 }
 
 const list = computed(() => {
-  const inTrash = view.value === 'trash'
-  const pool = store.imageLibrary.filter((i) => (inTrash ? i.inTrash : !i.inTrash))
-  if (inTrash || groupFilter.value === 'all') return pool
+  const pool = viewPool.value
+  if (groupFilter.value === 'all') return pool
   if (groupFilter.value === 'ungrouped') return pool.filter((i) => i.groupId == null)
   return pool.filter((i) => i.groupId === groupFilter.value)
 })
@@ -477,4 +507,25 @@ onBeforeUnmount(() => { lightbox?.destroy() })
 function toTrash(id) { store.trashImage(id) }
 function restore(id) { store.restoreImage(id) }
 function remove(id) { store.deleteImage(id) }
+function markUsed(id) { store.markUsed(id) }
+
+// 回收站删除二次确认：确认后物理删除（不可恢复）
+const pendingDelete = ref(null)
+const showDelConfirm = ref(false)
+const deleting = ref(false)
+function askDelete(img) {
+  pendingDelete.value = img
+  showDelConfirm.value = true
+}
+async function confirmDelete() {
+  if (!pendingDelete.value) return
+  deleting.value = true
+  try {
+    await remove(pendingDelete.value.id)
+    showDelConfirm.value = false
+    pendingDelete.value = null
+  } finally {
+    deleting.value = false
+  }
+}
 </script>

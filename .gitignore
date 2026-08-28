@@ -2,6 +2,7 @@
 node_modules/
 dist/
 dist_build_check/
+.build-check/
 dist-ssr/
 .vite/
 

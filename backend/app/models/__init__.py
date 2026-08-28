@@ -5,13 +5,13 @@ from app.models.token_blacklist import TokenBlacklist
 from app.models.system_config import SystemConfig
 from app.models.b_account import BAccount
 from app.models.config_set import ConfigSet
-from app.models.pools import PoolLocation, PoolCredential, PoolUa, PoolImage
+from app.models.pools import PoolLocation, PoolCredential, PoolUa, PoolImage, ImageGroup
 from app.models.schedule import Schedule
 from app.models.sign_record import SignRecord
 
 __all__ = [
     'db', 'User', 'TokenBlacklist', 'SystemConfig',
     'BAccount', 'ConfigSet',
-    'PoolLocation', 'PoolCredential', 'PoolUa', 'PoolImage',
+    'PoolLocation', 'PoolCredential', 'PoolUa', 'PoolImage', 'ImageGroup',
     'Schedule', 'SignRecord',
 ]

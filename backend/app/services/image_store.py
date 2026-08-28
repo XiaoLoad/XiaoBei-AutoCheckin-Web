@@ -91,3 +91,15 @@ def purge_expired_trash(days=7):
         db.session.delete(img)
     db.session.commit()
     return len(stale)
+
+
+def list_active_ids(user_id, group_id=None):
+    """签到取图预留：按用户（可选按分组）取 active 图片 id 列表（新→旧）。
+    签到图片提交链路落地时，配置 image.groupId 即按此过滤取图；
+    group_id 为 None 表示不分组过滤（全部图库）。"""
+    from app.models import PoolImage
+
+    q = PoolImage.query.filter_by(user_id=user_id, status='active')
+    if group_id is not None:
+        q = q.filter_by(group_id=group_id)
+    return [i.id for i in q.order_by(PoolImage.id.desc()).all()]

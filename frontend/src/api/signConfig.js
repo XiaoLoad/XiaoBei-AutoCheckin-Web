@@ -20,7 +20,8 @@ export function makeConfig() {
     remarks: [], // 值型：备注列表，每任务独立，后台随机取一条
     image: {
       enabled: false, // 是否上传图片
-      strategy: 'recycle' // 图片策略：recycle 循环复用 / delete 用后删除 / trash 用后入回收站可恢复
+      strategy: 'recycle', // 图片策略：recycle 循环复用 / delete 用后删除 / trash 用后入回收站可恢复
+      groupId: '' // 图片来源分组（'' = 全部图库）；同寝室账号选同一分组即共用照片
     },
     push: {
       channels: [], // 推送通道多选：serverchan / pushplus / email
@@ -102,6 +103,7 @@ export async function fetchPools() {
     systemLocations: locations.filter((l) => l.isSystem),
     userLocations: locations.filter((l) => !l.isSystem),
     imageLibrary: (p.images || []).map((i) => ({ ...i })),
+    imageGroups: (p.imageGroups || []).map((g) => ({ ...g })),
     credentials: (p.credentials || []).map((c) => ({ ...c, type: c.channel })),
     uaTemplates: (p.uas || []).map((u) => ({
       id: String(u.id), name: u.remark || '', ua: u.content, isSystem: !!u.isSystem
@@ -160,10 +162,11 @@ export async function deleteCredential(id) {
   return (await refreshPools()).credentials
 }
 
-// 图库：真实上传 / 回收站 / 删除
-export async function uploadImage(file) {
+// 图库：真实上传（可指定分组）/ 回收站 / 删除
+export async function uploadImage(file, groupId = null) {
   const fd = new FormData()
   fd.append('file', file)
+  if (groupId != null) fd.append('groupId', String(groupId))
   await request({
     url: '/pools/images', method: 'post', data: fd,
     headers: { 'Content-Type': 'multipart/form-data' }, timeout: 30000
@@ -180,6 +183,28 @@ export async function restoreImage(id) {
 }
 export async function deleteImage(id) {
   await request({ url: `/pools/images/${id}`, method: 'delete' })
+  return (await refreshPools()).imageLibrary
+}
+
+// 图库分组（相册）：用户自建自管，名称通常为寝室号；同寝室账号共用同一分组
+export async function createImageGroup(name) {
+  await request({ url: '/pools/image-groups', method: 'post', data: { name } })
+  return (await refreshPools()).imageGroups
+}
+export async function renameImageGroup(id, name) {
+  await request({ url: `/pools/image-groups/${id}`, method: 'put', data: { name } })
+  return (await refreshPools()).imageGroups
+}
+export async function deleteImageGroup(id) {
+  await request({ url: `/pools/image-groups/${id}`, method: 'delete' })
+  const p = await refreshPools()
+  return { imageGroups: p.imageGroups, imageLibrary: p.imageLibrary }
+}
+export async function moveImageToGroup(id, groupId = null) {
+  await request({
+    url: `/pools/images/${id}/group`, method: 'put',
+    data: { groupId: groupId == null ? null : Number(groupId) }
+  })
   return (await refreshPools()).imageLibrary
 }
 

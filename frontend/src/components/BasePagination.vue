@@ -11,7 +11,7 @@
       <!-- 每页条数 -->
       <div class="flex items-center gap-1.5 text-sm text-ink-muted">
         <span class="whitespace-nowrap">每页</span>
-        <div class="w-20">
+        <div class="w-28">
           <BaseSelect
             :model-value="pageSize"
             :options="sizeOptions"

@@ -5,7 +5,8 @@ import json
 from flask import Blueprint, request
 
 from app.extensions import db
-from app.models import ConfigSet, PoolCredential, PoolImage, PoolLocation, PoolUa
+from app.models import (ConfigSet, ImageGroup, PoolCredential, PoolImage,
+                        PoolLocation, PoolUa)
 from app.schemas.pools_schema import (load_credential, load_credential_update,
                                       load_location, load_ua,
                                       mask_fields, required_missing)
@@ -31,6 +32,8 @@ def aggregate():
              .order_by(PoolCredential.id.asc()).all())
     imgs = (PoolImage.query.filter_by(user_id=user.id)
             .order_by(PoolImage.id.desc()).all())
+    groups = (ImageGroup.query.filter_by(user_id=user.id)
+              .order_by(ImageGroup.id.asc()).all())
 
     def cred_dict(c):
         try:
@@ -44,7 +47,9 @@ def aggregate():
         'locations': [l.to_dict() for l in locs],
         'images': [{'id': i.id, 'name': i.orig_name,
                     'sizeKb': round((i.size or 0) / 1024), 'mime': i.mime,
+                    'groupId': i.group_id,
                     'inTrash': i.status == 'trash'} for i in imgs],
+        'imageGroups': [{'id': g.id, 'name': g.name} for g in groups],
         'credentials': [cred_dict(c) for c in creds],
         'uas': [u.to_dict() for u in uas],
     })

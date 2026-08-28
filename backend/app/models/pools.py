@@ -53,11 +53,24 @@ class PoolUa(db.Model):
                 'isSystem': bool(self.is_system)}
 
 
+class ImageGroup(db.Model):
+    """图库分组（相册）：用户自建自管，名称通常为寝室号（如"3栋507"）。
+    同寝室的多账号配置选同一分组即共用图库；不同寝室各建各的组实现隔离。"""
+    __tablename__ = 'image_groups'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    name = db.Column(db.String(64), nullable=False)
+    created_at = db.Column(db.DateTime, default=now_cst)
+
+
 class PoolImage(db.Model):
     __tablename__ = 'pool_images'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    # 所属分组；NULL = 未分组（不上传时选组则归此，分组删除后也回落到未分组）
+    group_id = db.Column(db.Integer, db.ForeignKey('image_groups.id'), index=True)
     orig_name = db.Column(db.String(255))
     filename = db.Column(db.String(255))
     size = db.Column(db.Integer, default=0)

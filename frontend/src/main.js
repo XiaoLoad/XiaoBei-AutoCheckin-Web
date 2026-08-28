@@ -5,6 +5,8 @@ import App from './App.vue'
 import router, { syncInitialRoutes } from './router'
 import permission from '@/directives/permission'
 import './assets/main.css'
+// PhotoSwipe 灯箱样式全局加载：组件级按需注入在 dev/HMR 下偶发不生效（灯箱无样式、图片拉伸铺满）
+import 'photoswipe/dist/photoswipe.css'
 
 const app = createApp(App)
 

@@ -90,6 +90,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
   const systemLocations = ref([])
   const userLocations = ref([])
   const imageLibrary = ref([])
+  const imageGroups = ref([])
   const credentials = ref([])
   const uaTemplates = ref([])
 
@@ -233,6 +234,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
       systemLocations.value = pools.systemLocations
       userLocations.value = pools.userLocations
       imageLibrary.value = pools.imageLibrary
+      imageGroups.value = pools.imageGroups || []
       credentials.value = pools.credentials
       uaTemplates.value = pools.uaTemplates
 
@@ -540,11 +542,48 @@ export const useSignConfigStore = defineStore('signConfig', () => {
       saving.value = false
     }
   }
-  // 上传图片：走真实归一化管线，成功后刷新图库数组
-  async function uploadImage(file) {
+  // 上传图片：走真实归一化管线，成功后刷新图库数组（groupId 指定上传目标分组）
+  async function uploadImage(file, groupId = null) {
     saving.value = true
     try {
-      imageLibrary.value = await api.uploadImage(file)
+      imageLibrary.value = await api.uploadImage(file, groupId)
+    } finally {
+      saving.value = false
+    }
+  }
+
+  // ── 图库分组（相册）：同寝室账号共用一组，不同寝室各建各的组 ──
+  async function createImageGroup(name) {
+    saving.value = true
+    try {
+      imageGroups.value = await api.createImageGroup(name)
+      return imageGroups.value
+    } finally {
+      saving.value = false
+    }
+  }
+  async function renameImageGroup(id, name) {
+    saving.value = true
+    try {
+      imageGroups.value = await api.renameImageGroup(id, name)
+    } finally {
+      saving.value = false
+    }
+  }
+  async function deleteImageGroup(id) {
+    saving.value = true
+    try {
+      const { imageGroups: groups, imageLibrary: lib } = await api.deleteImageGroup(id)
+      imageGroups.value = groups
+      imageLibrary.value = lib
+    } finally {
+      saving.value = false
+    }
+  }
+  async function moveImage(id, groupId = null) {
+    saving.value = true
+    try {
+      imageLibrary.value = await api.moveImageToGroup(id, groupId)
     } finally {
       saving.value = false
     }
@@ -648,6 +687,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     systemLocations,
     userLocations,
     imageLibrary,
+    imageGroups,
     credentials,
     uaTemplates,
     activeTab,
@@ -690,6 +730,10 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     restoreImage,
     deleteImage,
     uploadImage,
+    createImageGroup,
+    renameImageGroup,
+    deleteImageGroup,
+    moveImage,
     saveCredential,
     deleteCredential,
     saveUaTemplate,

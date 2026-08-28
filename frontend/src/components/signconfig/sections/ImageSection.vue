@@ -12,6 +12,11 @@
       <GCollapse :show="config.image.enabled">
         <div class="space-y-2 pt-1">
           <div>
+            <label class="mb-1 block text-xs font-medium text-ink-muted">图片来源分组</label>
+            <BaseSelect v-model="config.image.groupId" :options="groupOptions" :searchable="true" size="sm" class="w-72" />
+            <p class="mt-1 text-xs text-ink-muted">只使用所选分组内的照片；同寝室账号选同一分组即共用。分组在「我的资源 → 图库」中管理。</p>
+          </div>
+          <div>
             <label class="mb-1 block text-xs font-medium text-ink-muted">图片策略</label>
             <BaseSelect v-model="config.image.strategy" :options="strategyOptions" size="sm" class="w-72" />
           </div>
@@ -53,4 +58,9 @@ const strategyOptions = [
 ]
 const activeCount = computed(() => store.imageLibrary.filter((i) => !i.inTrash).length)
 const trashCount = computed(() => store.imageLibrary.filter((i) => i.inTrash).length)
+// 图片来源分组选项：'' = 全部图库（兼容未分组的历史配置），其余为用户自建分组（如寝室号）
+const groupOptions = computed(() => [
+  { label: '全部图库', value: '' },
+  ...store.imageGroups.map((g) => ({ label: g.name, value: g.id }))
+])
 </script>

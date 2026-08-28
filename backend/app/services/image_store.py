@@ -10,6 +10,7 @@
 import datetime
 import io
 import os
+import random
 import uuid
 
 from flask import current_app
@@ -217,3 +218,77 @@ def consume_image(image_id, user_id, strategy):
         img.trashed_at = now_cst()
     db.session.commit()
     return img
+
+
+def consume_next_image(user_id, group_id=None, strategy='trash'):
+    """按取图范围随机消费一张图片（并发安全，供调度器打卡成功后调用）。
+
+    范围：group_id None=全部图库，否则限定分组（对齐 config.image.groupId 的 '' 口径）。
+    随机性：对范围内 active 图片 id 洗牌后逐一尝试。
+    防冲突：用「原子 UPDATE ... WHERE status='active'」抢占，命中 rowcount==1 才算消费成功；
+    多账号同分钟并发随机到同一张时，只有一个任务命中，其余自动改试下一张，无需显式加锁。
+    策略：recycle → used（轮回复用）；trash → 回收站；delete → 物理删除；未知 → trash。
+    recycle 轮回语义：范围内 active 取尽后，将范围内 used 整批放回 active（转入已使用的图片
+    重新可用），再取一轮；trash/delete 池空即无图可消费，不回池。
+
+    返回被消费图片的 id；范围内无可用图片返回 None。"""
+    from sqlalchemy import delete as sa_delete
+    from sqlalchemy import update
+
+    from app.extensions import db
+    from app.models import PoolImage
+
+    def _active_ids():
+        q = db.session.query(PoolImage.id).filter(
+            PoolImage.user_id == user_id, PoolImage.status == 'active')
+        if group_id is not None:
+            q = q.filter(PoolImage.group_id == group_id)
+        return [r.id for r in q.all()]
+
+    def _try_consume_once():
+        ids = _active_ids()
+        random.shuffle(ids)
+        for img_id in ids:
+            occupy = [PoolImage.id == img_id, PoolImage.status == 'active']
+            if strategy == 'delete':
+                row = db.session.get(PoolImage, img_id)
+                if row is None:
+                    continue
+                filename = row.filename  # 先取文件名，commit 后对象过期无法再惰性读取
+                res = db.session.execute(
+                    sa_delete(PoolImage).where(*occupy)
+                    .execution_options(synchronize_session=False))
+                db.session.commit()
+                if res.rowcount == 1:
+                    delete_file(user_id, filename)
+                    return img_id
+            else:
+                recycle = strategy == 'recycle'
+                res = db.session.execute(
+                    update(PoolImage).where(*occupy)
+                    .values(status='used' if recycle else 'trash',
+                            trashed_at=None if recycle else now_cst())
+                    .execution_options(synchronize_session=False))
+                db.session.commit()
+                if res.rowcount == 1:
+                    return img_id
+        return None
+
+    consumed = _try_consume_once()
+    if consumed is not None:
+        return consumed
+    if strategy != 'recycle':
+        return None
+
+    # recycle 回池：范围内 used 整批放回 active（used→active 幂等，并发重复回池无害）
+    reclaim = [PoolImage.user_id == user_id, PoolImage.status == 'used']
+    if group_id is not None:
+        reclaim.append(PoolImage.group_id == group_id)
+    res = db.session.execute(
+        update(PoolImage).where(*reclaim)
+        .values(status='active', trashed_at=None)
+        .execution_options(synchronize_session=False))
+    db.session.commit()
+    if res.rowcount == 0:
+        return None
+    return _try_consume_once()

@@ -22,6 +22,7 @@ from app.models.user import now_cst
 from app.services.b_platform import get_adapter
 from app.services.b_platform.base import BPlatformError
 from app.services.crypto import decrypt
+from app.services.image_store import consume_next_image
 from app.utils.schedule_utils import compute_next_run, extract_schedule_time
 
 log = logging.getLogger('scheduler')
@@ -268,6 +269,31 @@ def _execute(schedule):
     # 成功/跳过/失败都走推送分发；是否真发由配置套 notify 开关决定
     if outcome is not None:
         dispatch_push(resolved, schedule, acc, outcome, reason)
+
+    # 打卡成功才消费图库图片：随机取一张，按配置策略流转（跳过/失败不消费）
+    if outcome == 'success':
+        _consume_configured_image(schedule, resolved)
+
+
+def _consume_configured_image(schedule, resolved):
+    """按配置套 image 配置消费一张图库图片。
+    enabled 未开启直接跳过；groupId ''=全部图库，否则限定分组；strategy：recycle 轮回
+    （用尽整批回池）/ trash 回收站 / delete 删除，未知兜底 trash。无图仅记日志，不影响主链路。"""
+    cfg = (resolved or {}).get('image')
+    if not isinstance(cfg, dict) or not cfg.get('enabled'):
+        return
+    raw_group = cfg.get('groupId')
+    try:
+        group_id = int(raw_group) if raw_group not in (None, '', 0) else None
+    except (TypeError, ValueError):
+        group_id = None
+    strategy = cfg.get('strategy') if cfg.get('strategy') in ('recycle', 'trash', 'delete') else 'trash'
+    consumed = consume_next_image(schedule.user_id, group_id, strategy)
+    if consumed is None:
+        log.warning('任务 %s 签到成功但取图范围内无可用图片（范围=%s，策略=%s）',
+                    schedule.id, f'分组{group_id}' if group_id else '全部图库', strategy)
+    else:
+        log.info('任务 %s 消费图片 #%s（策略=%s）', schedule.id, consumed, strategy)
 
 
 def _commit_result(schedule, acc, status, fail_reason=''):

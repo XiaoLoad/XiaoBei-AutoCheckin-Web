@@ -73,164 +73,74 @@
       </div>
     </div>
 
-    <!-- 列表卡片：桌面表格 + 移动卡片，卡片 flex-1 内部滚动，底部固定分页 -->
+    <!-- 列表卡片：账号卡片网格（桌面/移动同一套），卡片 flex-1 内部滚动，底部固定分页 -->
     <div class="dash-card fade-up flex flex-1 min-h-0 flex-col overflow-hidden rounded-2xl">
-      <!-- 桌面表格（≥1024）；relative 供空状态绝对定位铺满并垂直居中 -->
-      <div class="xb-scroll relative hidden min-h-0 flex-1 overflow-auto lg:block">
-        <table class="w-full table-fixed text-left text-sm">
-          <colgroup>
-            <col class="w-[14%]" />
-            <col class="w-[30%]" />
-            <col class="w-[10%]" />
-            <col class="w-[15%]" />
-            <col class="w-[12%]" />
-            <col class="w-[19%]" />
-          </colgroup>
-          <thead>
-            <tr class="border-b border-ink/10 text-ink-muted">
-              <th class="sticky top-0 z-10 bg-white px-3 py-2.5 font-medium align-middle whitespace-nowrap">账号</th>
-              <th class="sticky top-0 z-10 bg-white px-3 py-2.5 font-medium align-middle whitespace-nowrap">个人信息</th>
-              <th class="sticky top-0 z-10 bg-white px-3 py-2.5 font-medium align-middle whitespace-nowrap">签到类型</th>
-              <th class="sticky top-0 z-10 bg-white px-3 py-2.5 font-medium align-middle whitespace-nowrap">上一次签到</th>
-              <th class="sticky top-0 z-10 bg-white px-3 py-2.5 font-medium align-middle whitespace-nowrap">启用状态</th>
-              <th class="sticky top-0 z-10 bg-white pl-5 pr-3 py-2.5 text-left font-medium align-middle whitespace-nowrap">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="loading" class="border-b border-ink/5">
-              <td colspan="6" class="px-3 py-12 text-center text-ink-muted">加载中…</td>
-            </tr>
-            <tr
-              v-for="item in pagedRows"
-              v-else
-              :key="item.id"
-              class="border-b border-ink/5 transition last:border-0 hover:bg-cloud/40"
-            >
-              <!-- 账号 -->
-              <td class="px-3 py-3 align-top">
-                <p class="truncate font-medium text-ink">{{ item.account }}</p>
-              </td>
-              <!-- 个人信息：完整展示，允许换行，增大行高 -->
-              <td class="px-3 py-3 align-top">
-                <template v-if="item.profile && item.profile.name">
-                  <p class="font-medium text-ink break-words">{{ item.profile.name }}</p>
-                  <p class="mt-0.5 text-xs tabular-nums text-ink-muted">{{ item.profile.studentNo || '—' }}</p>
-                  <p class="mt-0.5 text-xs leading-relaxed text-ink-muted break-words">
-                    {{ [item.profile.college, item.profile.major, item.profile.className].filter(Boolean).join(' · ') || '—' }}
-                  </p>
-                </template>
-                <span v-else class="text-xs text-ink-muted">未获取</span>
-              </td>
-              <!-- 签到类型 -->
-              <td class="px-3 py-3 align-top">
-                <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap" :class="typeMeta(item).cls">
-                  {{ typeMeta(item).label }}
-                </span>
-              </td>
-              <!-- 上一次签到（时间 / 状态） -->
-              <td class="px-3 py-3 align-top">
-                <p class="tabular-nums text-ink-soft">{{ item.lastSignIn && item.lastSignIn.time ? item.lastSignIn.time : '—' }}</p>
-                <div class="mt-1 flex items-center gap-1.5 whitespace-nowrap text-xs font-medium" :class="signMeta(item).cls">
-                  <span class="h-1.5 w-1.5 rounded-full" :class="signMeta(item).dot" />
-                  {{ signMeta(item).label }}
-                </div>
-              </td>
-              <!-- 启用状态 -->
-              <td class="px-3 py-3 align-top">
-                <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap" :class="item.enabled ? 'bg-success/10 text-success' : 'bg-ink/5 text-ink-muted'">
-                  <span class="h-1.5 w-1.5 rounded-full" :class="item.enabled ? 'bg-success' : 'bg-ink/30'" />
-                  {{ item.enabled ? '启用' : '禁用' }}
-                </span>
-              </td>
-              <!-- 操作 -->
-              <td class="px-3 py-3 align-top">
-                <div class="flex flex-nowrap items-center justify-start gap-1">
-                  <button class="inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1.5 text-[13px] font-medium text-brand transition hover:bg-brand/10" @click="store.openEdit(item)">
-                    <Icon name="edit" :size="14" />编辑
-                  </button>
-                  <button class="inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1.5 text-[13px] font-medium text-ink-muted transition hover:bg-cloud" @click="store.onToggle(item)">
-                    <Icon :name="item.enabled ? 'x-circle' : 'check-circle'" :size="14" />{{ item.enabled ? '禁用' : '启用' }}
-                  </button>
-                  <button class="inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1.5 text-[13px] font-medium text-danger transition hover:bg-danger/10" @click="store.askDelete(item)">
-                    <Icon name="trash" :size="14" />删除
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- 加载态 -->
+      <div v-if="loading" class="flex flex-1 items-center justify-center text-sm text-ink-muted">加载中…</div>
 
-        <!-- 空状态：绝对定位铺满表格容器，垂直水平居中（空列表无滚动，定位稳定） -->
-        <div
-          v-if="!loading && pagedRows.length === 0"
-          class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 px-4 text-center text-sm text-ink-muted"
-        >
-          <Icon name="user" :size="28" class="opacity-50" />
-          <span>暂无账号，点击「新增账号」添加你的第一个 B 平台账号。</span>
-        </div>
-      </div>
-
-      <!-- 移动端卡片列表（<1024） -->
-      <div v-if="loading" class="flex flex-1 items-center justify-center text-sm text-ink-muted lg:hidden">加载中…</div>
-      <div v-else-if="filtered.length === 0" class="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center text-ink-muted lg:hidden">
+      <!-- 空状态：铺满容器垂直水平居中 -->
+      <div v-else-if="filtered.length === 0" class="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center text-sm text-ink-muted">
         <Icon name="user" :size="28" class="opacity-50" />
-        <span>暂无账号，点击「新增账号」添加。</span>
+        <span>暂无账号，点击「新增账号」添加你的第一个 B 平台账号。</span>
       </div>
-      <div
-        v-else
-        class="xb-scroll min-h-0 flex-1 space-y-3 overflow-auto p-3 lg:hidden"
-      >
-        <div
-          v-for="item in pagedRows"
-          :key="item.id"
-          class="rounded-xl border border-ink/10 bg-white p-4"
-        >
-          <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0">
-              <p class="truncate font-semibold text-ink">{{ item.account }}</p>
-              <div class="mt-1.5 flex flex-wrap items-center gap-1.5 whitespace-nowrap">
-                <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium" :class="typeMeta(item).cls">
-                  {{ typeMeta(item).label }}
-                </span>
-                <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium" :class="item.enabled ? 'bg-success/10 text-success' : 'bg-ink/5 text-ink-muted'">
-                  <span class="h-1.5 w-1.5 rounded-full" :class="item.enabled ? 'bg-success' : 'bg-ink/30'" />
-                  {{ item.enabled ? '启用' : '禁用' }}
-                </span>
-              </div>
-            </div>
-          </div>
 
-          <!-- 个人信息预留区（完整展示，允许换行） -->
-          <div class="mt-3 rounded-xl bg-cloud/50 px-3 py-2.5 text-sm">
-            <template v-if="item.profile && item.profile.name">
-              <div class="flex items-center justify-between gap-2">
-                <span class="font-medium text-ink-soft break-words">{{ item.profile.name }}</span>
-                <span class="shrink-0 text-xs text-ink-muted tabular-nums">{{ item.profile.studentNo || '—' }}</span>
+      <!-- 账号卡片网格：1 列（小屏）/ 2 列（sm）/ 3 列（xl） -->
+      <div v-else class="xb-scroll min-h-0 flex-1 overflow-auto p-3 sm:p-4">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <article
+            v-for="item in pagedRows"
+            :key="item.id"
+            class="flex flex-col rounded-xl border border-ink/10 bg-white p-4 transition hover:border-brand/40"
+          >
+            <!-- 头部：头像（圆环色=上次签到状态）+ 姓名/账号 + 启用状态 -->
+            <div class="flex items-center gap-3">
+              <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand/10 text-sm font-medium text-brand ring-2" :class="ringCls(item)">
+                {{ avatarChar(item) }}
               </div>
-              <p class="mt-0.5 text-xs leading-relaxed text-ink-muted break-words">
-                {{ [item.profile.college, item.profile.major, item.profile.className].filter(Boolean).join(' · ') || '—' }}
-              </p>
-            </template>
-            <span v-else class="text-xs text-ink-muted">个人信息：登录后自动获取</span>
-          </div>
-
-          <!-- 上一次签到 -->
-          <div class="mt-3 flex items-center justify-between">
-            <span class="text-xs text-ink-muted">上一次签到</span>
-            <div class="flex items-center gap-2">
-              <span class="tabular-nums text-sm text-ink-soft">{{ item.lastSignIn && item.lastSignIn.time ? item.lastSignIn.time : '—' }}</span>
-              <span class="inline-flex items-center gap-1 text-xs font-medium" :class="signMeta(item).cls">
-                <span class="h-1.5 w-1.5 rounded-full" :class="signMeta(item).dot" />
-                {{ signMeta(item).label }}
+              <div class="min-w-0 flex-1">
+                <p class="break-words text-sm font-medium text-ink">{{ (item.profile && item.profile.name) || '未命名' }}</p>
+                <p class="mt-0.5 break-all text-xs text-ink-muted">{{ item.account }}</p>
+              </div>
+              <span class="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium" :class="item.enabled ? 'bg-success/10 text-success' : 'bg-ink/5 text-ink-muted'">
+                <span class="h-1.5 w-1.5 rounded-full" :class="item.enabled ? 'bg-success' : 'bg-ink/30'" />
+                {{ item.enabled ? '启用' : '禁用' }}
               </span>
             </div>
-          </div>
 
-          <div class="mt-3 flex items-center gap-2">
-            <button class="flex-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand transition hover:bg-brand/10" @click="store.openEdit(item)">编辑</button>
-            <button class="flex-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-cloud" @click="store.onToggle(item)">{{ item.enabled ? '禁用' : '启用' }}</button>
-            <button class="flex-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-danger transition hover:bg-danger/10" @click="store.askDelete(item)">删除</button>
-          </div>
+            <!-- 字段清单：标签 + 完整值（items-baseline 保证标签与值首行文字基线对齐；值允许换行，不截断） -->
+            <dl class="mt-3 space-y-2 border-t border-ink/5 pt-3 text-xs">
+              <div class="flex items-baseline gap-2">
+                <dt class="w-16 shrink-0 leading-5 text-ink-muted">学号</dt>
+                <dd class="min-w-0 flex-1 break-words leading-5 tabular-nums text-ink-soft">{{ (item.profile && item.profile.studentNo) || '—' }}</dd>
+              </div>
+              <div class="flex items-baseline gap-2">
+                <dt class="w-16 shrink-0 leading-5 text-ink-muted">院系班级</dt>
+                <dd class="min-w-0 flex-1 break-words leading-5 text-ink-soft">{{ deptText(item) || '登录后自动获取' }}</dd>
+              </div>
+              <div class="flex items-baseline gap-2">
+                <dt class="w-16 shrink-0 leading-5 text-ink-muted">签到类型</dt>
+                <dd class="min-w-0 flex-1 leading-5">
+                  <span class="inline-flex items-center rounded-full px-2 py-0.5 font-medium" :class="typeMeta(item).cls">{{ typeMeta(item).label }}</span>
+                </dd>
+              </div>
+              <div class="flex items-baseline gap-2">
+                <dt class="w-16 shrink-0 leading-5 text-ink-muted">上次签到</dt>
+                <dd class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5 gap-y-1 leading-5">
+                  <span class="leading-5 tabular-nums text-ink-soft">{{ (item.lastSignIn && item.lastSignIn.time) || '—' }}</span>
+                  <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium" :class="signMeta(item).tag">
+                    <span class="h-1.5 w-1.5 rounded-full" :class="signMeta(item).dot" />{{ signMeta(item).label }}
+                  </span>
+                </dd>
+              </div>
+            </dl>
+
+            <!-- 操作行：右对齐 -->
+            <div class="mt-2.5 flex items-center justify-end gap-1 border-t border-ink/5 pt-2">
+              <button class="rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand transition hover:bg-brand/10" @click="store.openEdit(item)">编辑</button>
+              <button class="rounded-lg px-2.5 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-cloud" @click="store.onToggle(item)">{{ item.enabled ? '禁用' : '启用' }}</button>
+              <button class="rounded-lg px-2.5 py-1.5 text-xs font-medium text-danger transition hover:bg-danger/10" @click="store.askDelete(item)">删除</button>
+            </div>
+          </article>
         </div>
       </div>
 
@@ -315,13 +225,13 @@ const typeOptions = [
   { label: '全部', value: '' },
   { label: '寝室', value: 'dorm' },
   { label: '活动', value: 'activity' },
-  { label: '通用', value: 'general' }
+  { label: '寝室 + 活动', value: 'general' }
 ]
 const signOptions = [
   { label: '全部', value: '' },
-  { label: '成功', value: 'success' },
-  { label: '失败', value: 'fail' },
-  { label: '跳过', value: 'skip' },
+  { label: '签到成功', value: 'success' },
+  { label: '签到失败', value: 'fail' },
+  { label: '已跳过', value: 'skip' },
   { label: '从未签到', value: 'never' }
 ]
 const enabledOptions = [
@@ -331,25 +241,47 @@ const enabledOptions = [
 ]
 
 // 签到类型映射：动态基于「已添加至定时任务且启用」的签到类型派生
-// 两者都启用 → 通用；仅寝室 → 寝室签到；仅活动 → 活动签到；都未添加 → 暂未设置
+// 两者都启用 → 寝室 + 活动；仅寝室 → 寝室签到；仅活动 → 活动签到；都未添加 → 未配置任务
 function typeMeta(item) {
   const st = item.signTasks || []
   const dorm = st.some((t) => t.type === 'dorm' && t.enabled)
   const activity = st.some((t) => t.type === 'activity' && t.enabled)
-  if (dorm && activity) return { label: '通用', cls: 'bg-ink/10 text-ink-soft' }
+  if (dorm && activity) return { label: '寝室 + 活动', cls: 'bg-ink/10 text-ink-soft' }
   if (dorm) return { label: '寝室签到', cls: 'bg-brand/10 text-brand' }
   if (activity) return { label: '活动签到', cls: 'bg-info/10 text-info' }
-  return { label: '暂未设置', cls: 'bg-ink/5 text-ink-muted' }
+  return { label: '未配置任务', cls: 'bg-ink/5 text-ink-muted' }
 }
 
-// 上一次签到状态映射
+// 上一次签到状态映射：label 用完整措辞（软标签内展示），tag 为标签底色
 function signMeta(item) {
   const s = item.lastSignIn
   const status = (s && s.status) || 'never'
-  if (status === 'success') return { label: '成功', cls: 'text-success', dot: 'bg-success' }
-  if (status === 'fail') return { label: '失败', cls: 'text-danger', dot: 'bg-danger' }
-  if (status === 'skip') return { label: '跳过', cls: 'text-warning', dot: 'bg-warning' }
-  return { label: '从未签到', cls: 'text-ink-muted', dot: 'bg-ink/30' }
+  if (status === 'success') return { label: '签到成功', cls: 'text-success', tag: 'bg-success/10 text-success', dot: 'bg-success' }
+  if (status === 'fail') return { label: '签到失败', cls: 'text-danger', tag: 'bg-danger/10 text-danger', dot: 'bg-danger' }
+  if (status === 'skip') return { label: '已跳过', cls: 'text-warning', tag: 'bg-warning/10 text-warning', dot: 'bg-warning' }
+  return { label: '从未签到', cls: 'text-ink-muted', tag: 'bg-ink/5 text-ink-muted', dot: 'bg-ink/30' }
+}
+
+// 头像圆环颜色编码上次签到状态：绿=成功 / 红=失败 / 黄=跳过 / 灰=从未签到
+function ringCls(item) {
+  const status = (item.lastSignIn && item.lastSignIn.status) || 'never'
+  return (
+    { success: 'ring-success/60', fail: 'ring-danger/60', skip: 'ring-warning/60', never: 'ring-ink/15' }[status] ||
+    'ring-ink/15'
+  )
+}
+
+// 头像字符：优先姓名首字，否则取账号首字
+function avatarChar(item) {
+  const n = (item.profile && item.profile.name) || item.account || '?'
+  return n.slice(0, 1)
+}
+
+// 院系行完整文案（truncate 后经 title 悬停查看全文）
+function deptText(item) {
+  const p = item.profile
+  if (!p) return ''
+  return [p.college, p.major, p.className].filter(Boolean).join(' · ')
 }
 
 // 首次加载（store 内部负责拉取与状态管理）
@@ -371,7 +303,7 @@ store.load()
     animation: none;
   }
 }
-/* 预留滚动条宽度，防止纵向滚动时表头与内容列错位 */
+/* 预留滚动条宽度，避免出现纵向滚动条时内容区宽度抖动 */
 .xb-scroll {
   scrollbar-gutter: stable;
 }

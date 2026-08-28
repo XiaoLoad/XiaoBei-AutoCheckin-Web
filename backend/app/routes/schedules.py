@@ -90,14 +90,22 @@ def update_schedule(sched_id):
 
     if 'mode' in data:
         s.mode = data['mode']
+    if 'config' in data:
+        # 写入任务自持完整配置：standalone 模式权威来源；并默认与配置套解绑
+        s.set_config(data['config'])
+        s.mode = 'standalone'
+        if 'config_set_id' not in data or data.get('config_set_id') is None:
+            s.config_set_id = None
     if 'config_set_id' in data:
         if data['config_set_id'] is not None:
             cs = ConfigSet.query.filter_by(id=data['config_set_id'], user_id=request.current_user.id).first()
             if not cs:
                 return error(message='配置套不存在或不可用', code=4400, status=400)
-        s.config_set_id = data['config_set_id']
-    # 应用配置套即跟随模式：仅传 config_set_id 时自动置 follow（前端"应用到此任务"只发 configSetId）
-    if 'config_set_id' in data and data['config_set_id'] is not None and 'mode' not in data:
+        # 仅传 config_set_id（未带 config）维持 follow 关联；带 config 时由上方逻辑处理
+        if 'config' not in data:
+            s.config_set_id = data['config_set_id']
+    # 应用配置套即跟随模式：仅传 config_set_id（无 config）时自动置 follow（前端"应用到此任务"只发 configSetId）
+    if 'config_set_id' in data and data['config_set_id'] is not None and 'mode' not in data and 'config' not in data:
         s.mode = 'follow'
     if 'custom' in data:
         s.custom_json = json.dumps(data['custom'], ensure_ascii=False)
@@ -108,7 +116,10 @@ def update_schedule(sched_id):
 
     # 开启前校验：保证任务有可执行配置，否则拒绝（与前端 4401/4402 呼应）
     if s.enabled:
-        if s.mode == 'follow':
+        if s.mode == 'standalone':
+            if not s.has_own_config:
+                return error(message='独立任务缺少配置，请先保存配置再启用', code=4401, status=400)
+        elif s.mode == 'follow':
             if not s.config_set_id:
                 return error(message='跟随配置套模式下开启任务必须先绑定配置套', code=4401, status=400)
             cs = ConfigSet.query.filter_by(id=s.config_set_id, user_id=request.current_user.id).first()

@@ -202,8 +202,12 @@ def _run(schedule_id):
 
 
 def _resolve(schedule):
-    """解析任务真实执行配置。follow = 配置套 + 字段级覆盖浅合并（overrides 顶层键替换套内同键，
-    未覆盖键继续跟随配置套）；custom 取内联。缺配置返回 None。"""
+    """解析任务真实执行配置。
+    standalone（config_json 非空）= 任务自持完整配置，权威来源；
+    follow = 配置套 + 字段级覆盖浅合并（overrides 顶层键替换套内同键，未覆盖键继续跟随配置套）；
+    custom = 内联 time-only。缺配置返回 None。"""
+    if schedule.has_own_config:
+        return schedule.config or {}
     if schedule.mode == 'follow':
         if not schedule.config_set_id:
             return None

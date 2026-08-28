@@ -36,11 +36,12 @@ export function weekdayRangeText(wd) {
 // configMeta: 配置套元信息（含 time），用于 follow 模式的星期与起始小时。
 export function computeNextRun(mode, custom, configMeta) {
   const now = new Date()
-  const wd = mode === 'follow' ? configMeta?.time?.weekdays || [] : custom?.weekdays || []
+  // follow / standalone 均从配置元信息（time.weekdays / time.signTime）读取触发时刻；custom 用自身 hour/minute
+  const wd = mode === 'custom' ? custom?.weekdays || [] : configMeta?.time?.weekdays || []
   if (!wd.length) return null
-  // follow 模式采纳配置套的「定时签到时间」(signTime，精确到时分)；custom 模式用自身 hour/minute
-  const hour = mode === 'follow' ? configMeta?.time?.signTime?.hour ?? configMeta?.time?.startHour ?? 8 : custom?.hour ?? 8
-  const minute = mode === 'follow' ? configMeta?.time?.signTime?.minute ?? 0 : custom?.minute ?? 0
+  // follow / standalone 采纳配置元信息的「定时签到时间」(signTime，精确到时分)；custom 模式用自身 hour/minute
+  const hour = mode === 'custom' ? custom?.hour ?? 8 : configMeta?.time?.signTime?.hour ?? configMeta?.time?.startHour ?? 8
+  const minute = mode === 'custom' ? custom?.minute ?? 0 : configMeta?.time?.signTime?.minute ?? 0
   for (let d = 0; d <= 14; d++) {
     const cand = new Date(now)
     cand.setDate(now.getDate() + d)
@@ -69,11 +70,12 @@ export function formatNextRun(date) {
 // 模式摘要文案（卡片 chip / 抽屉预览使用）
 export function nextRunSummary(mode, custom, configMeta) {
   const jitter = (n) => (n ? `（随机±${n}分）` : '')
-  if (mode === 'follow') {
+  if (mode !== 'custom') {
     const wd = configMeta?.time?.weekdays || []
     const st = configMeta?.time?.signTime || { hour: 8, minute: 0 }
     const j = configMeta?.time?.randomDelayMax ?? 0
-    return `跟随配置套：每周${weekdayRangeText(wd)} ${pad(st.hour)}:${pad(st.minute)} 起${jitter(j)}`
+    const prefix = mode === 'standalone' ? '本任务配置' : '跟随配置套'
+    return `${prefix}：每周${weekdayRangeText(wd)} ${pad(st.hour)}:${pad(st.minute)} 起${jitter(j)}`
   }
   const wd = custom?.weekdays || []
   return `自定义：每周${weekdayRangeText(wd)} ${pad(custom?.hour ?? 8)}:${pad(custom?.minute ?? 0)}${jitter(custom?.randomDelayMax)}`

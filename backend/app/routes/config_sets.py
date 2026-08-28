@@ -74,6 +74,7 @@ def update_set(set_id):
         if s.is_default:
             ConfigSet.enforce_single_default(request.current_user.id, s.id)
     db.session.commit()
+    # 配置套仅为模板：保存只更新配置套本身，不回写已绑定任务（任务持自有快照，互不影响）
     return success(s.to_dict(), message='保存成功')
 
 
@@ -83,10 +84,8 @@ def delete_set(set_id):
     s = ConfigSet.query.filter_by(id=set_id, user_id=request.current_user.id).first()
     if not s:
         return error(message='配置套不存在', code=4040, status=404)
-    refs = Schedule.query.filter_by(config_set_id=s.id).count()
-    if refs:
-        return error(message=f'该配置套被 {refs} 个定时任务引用，请先解除关联',
-                     code=4204, data={'refs': refs}, status=409)
+    # 任务已自持配置快照且解绑（config_set_id 仅作源自标签），删除配置套不再受引用限制
+    Schedule.query.filter_by(config_set_id=s.id).update({'config_set_id': None})
     db.session.delete(s)
     db.session.commit()
     return success(message='删除成功')

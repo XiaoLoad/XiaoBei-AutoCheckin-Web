@@ -1,5 +1,6 @@
 # 定时任务：账号 × 任务类型（dorm/activity 各一行，随账号自动生灭，无 POST/DELETE）
-# mode=follow 时经 config_set_id 引用配置套；custom 时用 custom_json 的时刻
+# mode=follow 时经 config_set_id 引用配置套（实时跟随）；standalone 时以 config_json 为任务自持完整配置
+# （绑定/套用配置套即把配置快照复制进 config_json 并解绑，配置套此后仅为模板）
 import json
 
 from app.extensions import db
@@ -13,12 +14,15 @@ class Schedule(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     account_id = db.Column(db.Integer, db.ForeignKey('b_accounts.id'), nullable=False, index=True)
     task_type = db.Column(db.String(16), nullable=False)                 # dorm | activity
-    mode = db.Column(db.String(16), nullable=False, default='follow')    # follow | custom
+    mode = db.Column(db.String(16), nullable=False, default='follow')    # follow | custom | standalone
     custom_json = db.Column(db.Text)      # {"hour":8,"minute":0,"weekdays":[1..7],"randomDelayMax":5}
     config_set_id = db.Column(db.Integer, db.ForeignKey('config_sets.id'))
     # 字段级覆盖（follow 模式）：顶层配置键 → 替换值，如 {"time": {...}}；
     # 执行时与所绑配置套浅合并，未覆盖的键继续跟随配置套
     overrides_json = db.Column(db.Text)
+    # 任务自持完整配置（standalone 模式权威来源）：时间/位置/备注/图片/推送/高级等全量字段。
+    # 绑定或套用配置套时由后端把配置套解析结果快照复制到此列，并解绑 config_set_id（仅留作源自标签）。
+    config_json = db.Column(db.Text)
     next_run_at = db.Column(db.DateTime, nullable=True)  # 下次执行时间缓存（调度器维护，便于前端展示）
     enabled = db.Column(db.Boolean, nullable=False, default=False)
     last_run_at = db.Column(db.DateTime)
@@ -39,6 +43,19 @@ class Schedule(db.Model):
     def overrides(self) -> dict:
         return json.loads(self.overrides_json) if self.overrides_json else {}
 
+    @property
+    def config(self) -> dict:
+        """任务自持完整配置（standalone 权威来源）；为空时返回 {}。"""
+        return json.loads(self.config_json) if self.config_json else {}
+
+    def set_config(self, cfg: dict):
+        self.config_json = json.dumps(cfg, ensure_ascii=False)
+
+    @property
+    def has_own_config(self) -> bool:
+        """是否已持有自持配置（standalone 判定依据：config_json 非空即视为独立配置）。"""
+        return bool(self.config_json)
+
     def to_dict(self):
         from app.models.b_account import BAccount
         acc = db.session.get(BAccount, self.account_id)
@@ -57,6 +74,7 @@ class Schedule(db.Model):
             'className': profile.get('className') or '',
             'mode': self.mode,
             'configSetId': self.config_set_id,
+            'config': self.config,
             'custom': self.custom,
             'overrides': self.overrides,
             'enabled': bool(self.enabled),

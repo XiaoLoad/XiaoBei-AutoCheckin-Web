@@ -196,6 +196,7 @@ import { ref, computed, watch, reactive } from 'vue'
 import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
+import { useSchedulesStore } from '@/stores/schedules'
 import { toast } from '@/utils/toast'
 import TimeSection from '@/components/signconfig/sections/TimeSection.vue'
 import LocationSection from '@/components/signconfig/sections/LocationSection.vue'
@@ -206,6 +207,15 @@ import AdvancedSection from '@/components/signconfig/sections/AdvancedSection.vu
 import MasonryGrid from '@/components/signconfig/MasonryGrid.vue'
 
 const store = useSignConfigStore()
+// 配置套变更需同步刷新定时任务视图（卡片的「下一次执行」取自任务实例，而非配置套）
+const schedulesStore = useSchedulesStore()
+async function refreshSchedulesView() {
+  try {
+    await schedulesStore.load()
+  } catch (e) {
+    /* 当前不在定时任务页时也无需刷新 */
+  }
+}
 
 // ── 左树：搜索 + 折叠 ──
 const search = ref('')
@@ -260,13 +270,10 @@ const blockHint = computed(() => Object.values(store.validateConfig(store.taskCo
 const headerHint = computed(() =>
   enabled.value
     ? '任务运行中：保存修改立即生效，暂停后可随时再次启用'
-    : '配置跟随所选配置套；自定义内容保存时将派生为专属新套'
+    : '配置复制自所选配置套；保存修改将写入本任务并取消关联配置套'
 )
-// 保存目标配置套名（写回所属套：已绑定用绑定套，未绑定用下拉所选/默认套）
-const saveTargetName = computed(() => {
-  const set = store.userConfigSets.find((s) => s.id === store.effectiveBindSetId)
-  return set ? set.name : ''
-})
+// 保存目标：本任务自持配置（与配置套解绑，互不影响）
+const saveTargetName = computed(() => '本任务（独立配置）')
 
 // 配置套下拉：仅本地选择/预览，不自动关联；关联由「套用此配置套」显式触发
 const showBindConfirm = ref(false)
@@ -278,7 +285,7 @@ const bindPick = computed({
   }
 })
 const bindHint = computed(() =>
-  hasInstance.value ? '运行中换绑需二次确认' : '选择后点「套用」关联本任务；自定义内容保存时派生为专属新套'
+  hasInstance.value ? '运行中换绑需二次确认' : '选择后点「套用」将配置复制到本任务'
 )
 async function onBindApply() {
   if (!bindPick.value) {
@@ -287,6 +294,7 @@ async function onBindApply() {
   }
   if (!hasInstance.value) {
     if (await store.applyBind()) await store.load()
+    await refreshSchedulesView()
     return
   }
   if (enabled.value) {
@@ -296,33 +304,39 @@ async function onBindApply() {
     return
   }
   if (await store.bindSet(bindPick.value)) await store.load()
+  await refreshSchedulesView()
 }
 async function confirmBind() {
   showBindConfirm.value = false
   if (await store.bindSet(pendingBindId.value)) await store.load()
+  await refreshSchedulesView()
 }
 
 // 启用：先落盘未保存改动（确保启用的是所见配置），再创建/绑定并开启调度
 async function onEnable() {
   if (store.isDirty) await store.saveTaskConfig()
   if (await store.enableTask()) await store.load()
+  await refreshSchedulesView()
 }
 // 暂停：仅关闭调度，保留实例与绑定
 async function onPause() {
   if (await store.pauseTask()) await store.load()
+  await refreshSchedulesView()
 }
 
 // 保存配置：若任务已启用，先提示覆盖确认
 const showSaveConfirm = ref(false)
-function onSaveConfig() {
+async function onSaveConfig() {
   if (taskState.value.hasInstance && taskState.value.enabled) {
     showSaveConfirm.value = true
     return
   }
-  store.saveTaskConfig()
+  await store.saveTaskConfig()
+  await refreshSchedulesView()
 }
 async function confirmSave() {
   showSaveConfirm.value = false
   await store.saveTaskConfig()
+  await refreshSchedulesView()
 }
 </script>

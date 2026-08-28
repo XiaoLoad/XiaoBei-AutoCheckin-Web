@@ -45,14 +45,19 @@ def load_create(payload):
 
 
 def load_update(payload):
-    """更新定时任务：mode / configSetId / custom / enabled 均可选；提供任意一项即参与更新。
+    """更新定时任务：mode / configSetId / config / custom / enabled / overrides 均可选；提供任意一项即参与更新。
     返回 (ok, data, message, code)"""
     payload = payload or {}
     data = {}
     if 'mode' in payload:
-        if payload['mode'] not in ('follow', 'custom'):
-            return False, None, 'mode 仅支持 follow 或 custom', 4403
+        if payload['mode'] not in ('follow', 'custom', 'standalone'):
+            return False, None, 'mode 仅支持 follow / custom / standalone', 4403
         data['mode'] = payload['mode']
+    if 'config' in payload:
+        # 任务自持完整配置（standalone 权威来源）：整体透传，由路由写入 config_json
+        if not isinstance(payload['config'], dict):
+            return False, None, 'config 应为配置对象', 4414
+        data['config'] = payload['config']
     if 'configSetId' in payload:
         v = payload['configSetId']
         if v is not None and not isinstance(v, int):

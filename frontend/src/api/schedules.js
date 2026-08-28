@@ -27,6 +27,7 @@ function mapItem(it) {
     className: it.className || '',
     mode: it.mode || 'follow',
     configSetId: it.configSetId == null ? null : it.configSetId,
+    config: it.config || null,
     custom: normalizeCustom(it.custom),
     overrides: it.overrides || {},
     enabled: !!it.enabled,
@@ -81,6 +82,7 @@ export async function fetchScheduleBindings() {
     map[`${s.accountId}:${s.taskType}`] = {
       scheduleId: String(s.id),
       configSetId: s.configSetId == null ? null : String(s.configSetId),
+      config: s.config || null,
       enabled: !!s.enabled,
       overrides: s.overrides || {},
       nextRunAt: s.nextRunAt || '',

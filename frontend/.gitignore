@@ -1,6 +1,8 @@
 node_modules
 dist
 dist-ssr
+# 临时构建验证目录（vite build --outDir .build-check*，避免清空 dist 触发安全删除）
+.build-check*
 *.local
 .DS_Store
 .env

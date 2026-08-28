@@ -116,24 +116,39 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     const b = scheduleBindings.value[taskConfigKey.value]
     return b && b.configSetId ? b.configSetId : null
   })
-  // 任务配置即其跟随配置套的配置（follow 模型）：
-  // 已绑定 → 绑定套配置；未绑定 → 下拉所选套（回退默认套），编辑即编辑该套
-  const taskConfig = computed(() => {
-    const set = userConfigSets.value.find((s) => s.id === effectiveBindSetId.value)
-    return set ? set.config : null
-  })
+  // 任务自持配置草稿：账号任务配置界面编辑的是「本任务配置」的副本，
+  // 保存时写回任务实例并解绑配置套（快照复制模型），绝不直接改共享配置套。
+  const taskConfigDraft = ref(null)
+  const draftSourceSnapshot = ref(null)
+  function setName(id) {
+    const s = userConfigSets.value.find((x) => x.id === id)
+    return s ? s.name : '已删除配置套'
+  }
+  function initTaskDraft() {
+    const key = taskConfigKey.value
+    const b = scheduleBindings.value[key]
+    let src = null
+    if (b && b.config) {
+      src = b.config                         // 任务已自持配置（套用/保存后）
+    } else {
+      const setId = effectiveBindSetId.value
+      const set = userConfigSets.value.find((s) => s.id === setId)
+      src = set ? set.config : null          // 仍跟随：预览绑定/所选套（只读源）
+    }
+    taskConfigDraft.value = src ? JSON.parse(JSON.stringify(src)) : null
+    draftSourceSnapshot.value = src ? JSON.parse(JSON.stringify(src)) : null
+  }
+  // 任务配置即当前编辑草稿（深拷贝自来源，修改仅作用于本任务，不影响共享配置套）
+  const taskConfig = computed(() => taskConfigDraft.value)
 
   // 当前编辑对象所隶属的配置套 id：已绑定用绑定套；未绑定用下拉所选套，回退默认套。
-  // 与 taskConfig 同源，脏检测/保存目标均以此为准。
   const activeConfigSetId = computed(() => effectiveBindSetId.value)
-  // 当前任务「是否脏」：当前显示配置相对其所属配置套的已保存快照有改动时为 true。
-  // 用于：保存按钮是否可点（无改动禁用）、添加至定时任务是否放行（未保存禁止推送）。
+  // 当前任务「是否脏」：草稿相对来源快照有改动时为 true（保存按钮可点 / 启用前校验）。
   const isDirty = computed(() => {
-    const setId = activeConfigSetId.value
-    const cfg = taskConfig.value
-    if (!setId || !cfg) return false
-    const snap = savedSnapshots.value[setId]
-    if (!snap) return false
+    const cfg = taskConfigDraft.value
+    if (!cfg) return false
+    const snap = draftSourceSnapshot.value
+    if (!snap) return true
     return JSON.stringify(cfg) !== JSON.stringify(snap)
   })
 
@@ -194,13 +209,19 @@ export const useSignConfigStore = defineStore('signConfig', () => {
   })
   const setOptions = computed(() => userConfigSets.value.map((s) => ({ label: s.name, value: s.id })))
 
-  // 任务状态：沿用某配置套 / 未关联（follow 模型下任务配置即配置套配置，无独立修改态）
+  // 任务状态：自持配置且解绑 / 自持配置且保留源自标签 / 仍跟随配置套 / 未关联
   const taskStatus = computed(() => {
     const b = scheduleBindings.value[taskConfigKey.value]
-    if (!b || !b.configSetId) return { text: '未关联配置套', cls: 'bg-ink/10 text-ink-muted' }
-    const set = userConfigSets.value.find((s) => s.id === b.configSetId)
-    if (!set) return { text: '原配置套已删除', cls: 'bg-ink/10 text-ink-muted' }
-    return { text: `沿用「${set.name}」`, cls: 'bg-info/10 text-info' }
+    if (b && b.config) {
+      if (b.configSetId) return { text: `基于「${setName(b.configSetId)}」自定义`, cls: 'bg-info/10 text-info' }
+      return { text: '自定义配置（已解绑配置套）', cls: 'bg-info/10 text-info' }
+    }
+    if (b && b.configSetId) {
+      const set = userConfigSets.value.find((s) => s.id === b.configSetId)
+      if (!set) return { text: '原配置套已删除', cls: 'bg-ink/10 text-ink-muted' }
+      return { text: `沿用「${set.name}」`, cls: 'bg-info/10 text-info' }
+    }
+    return { text: '未关联配置套', cls: 'bg-ink/10 text-ink-muted' }
   })
 
   // 供定时任务页「跟随配置套」预览：解析某任务绑定配置套的时间/位置元信息
@@ -238,8 +259,9 @@ export const useSignConfigStore = defineStore('signConfig', () => {
       credentials.value = pools.credentials
       uaTemplates.value = pools.uaTemplates
 
-      // 任务实例绑定（config_set_id / overrides / 运行信息）来自后端 schedules；本地不再持久化任务配置
+      // 任务实例绑定（config_set_id / config / 运行信息）来自后端 schedules；本地不再持久化任务配置
       await refreshBindings()
+      initTaskDraft()
 
       if (accounts.value.length) {
         // 保留当前选择（若仍存在），仅在选择失效时回落到首个账号——避免刷新动作打断用户所在位置
@@ -330,20 +352,17 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     selectedBindSetId.value = id
   }
 
-  // 保存任务配置：任务配置即配置套配置（follow 模型），保存写回当前编辑所隶属的配置套。
-  // [自定义即派生] 目标为默认套（模板，保持纯净）或被其他任务共用的套、或任务尚未关联时，
-  // 改动不写回原套，而是派生一个新配置套并改绑本任务；已是本任务专属套则原地更新。
+  // 保存任务配置：编辑的是「本任务配置」草稿；保存写回任务实例（config_json）并解绑配置套。
+  // 快照复制模型——任务自持完整配置、与配置套互不影响，多账号共用同一配置套也不会串改。
   // 任务已启用时由调用方先弹覆盖确认。
   async function saveTaskConfig() {
     if (!selectedAccountId.value) return
-    const setId = effectiveBindSetId.value
-    if (!setId) {
-      toast('暂无可用配置套，无法保存', 'error')
+    const draft = taskConfigDraft.value
+    if (!draft) {
+      toast('暂无可保存的配置', 'error')
       return
     }
-    const set = userConfigSets.value.find((s) => s.id === setId)
-    if (!set) return
-    const errs = validateConfig(set.config)
+    const errs = validateConfig(draft)
     if (Object.keys(errs).length) {
       formErrors.value = errs
       toast(`保存失败：${Object.values(errs).join('；')}`, 'error')
@@ -352,42 +371,28 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     formErrors.value = {}
     saving.value = true
     try {
-      const b = scheduleBindings.value[taskConfigKey.value]
-      const otherFollowers = Object.values(scheduleBindings.value).filter(
-        (x) => x.configSetId === setId && x.scheduleId !== (b && b.scheduleId)
-      ).length
-      const needFork = set.isDefault || otherFollowers > 0 || !(b && b.scheduleId)
-      if (needFork) {
-        const prevIds = new Set(userConfigSets.value.map((s) => s.id))
-        const saved = await api.saveConfigSet({ name: `${set.name}（自定义）`, config: set.config })
-        const forked = saved.find((s) => !prevIds.has(s.id)) || saved[saved.length - 1]
-        userConfigSets.value = saved
-        refreshSnapshot(forked.id)
-        if (b && b.scheduleId) {
-          await api.updateSchedule({ id: b.scheduleId, configSetId: Number(forked.id) })
-        } else {
-          selectedBindSetId.value = forked.id
-        }
-        await refreshBindings()
-        toast(`已自定义并派生为新配置套「${forked.name}」`, 'success')
-      } else {
-        const saved = await api.saveConfigSet({ id: set.id, name: set.name, config: set.config })
-        userConfigSets.value = saved
-        refreshSnapshot(set.id)
-        toast(`已保存到「${set.name}」`, 'success')
-      }
+      const scheduleId = await _ensureInstance()
+      await api.updateSchedule({ id: scheduleId, config: JSON.parse(JSON.stringify(draft)), configSetId: null })
+      await refreshBindings()
+      userConfigSets.value = (await api.fetchConfigSets()).userConfigSets
+      snapshotSets()
+      initTaskDraft()
+      toast('已保存到本任务（已与配置套解绑）', 'success')
+    } catch (e) {
+      toast(e.message || '保存失败', 'error')
     } finally {
       saving.value = false
     }
   }
 
-  // 放弃未保存修改：重新拉取配置套（任务配置即配置套配置，无独立任务副本）
+  // 放弃未保存修改：以来源（任务自身配置 / 绑定套 / 所选套）重新克隆草稿
   async function resetTaskConfig() {
     if (!selectedAccountId.value) return
     saving.value = true
     try {
       userConfigSets.value = (await api.fetchConfigSets()).userConfigSets
       snapshotSets()
+      initTaskDraft()
       formErrors.value = {}
     } finally {
       saving.value = false
@@ -401,18 +406,37 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     return created.id
   }
 
-  // 启用：实例不存在则创建，绑定当前所选配置套并开启调度（一步到位）
+  // 启用：实例不存在则创建，把当前草稿配置写入任务实例并开启调度（一步到位）。
+  // 保留当前 configSetId 作为「源自」标签（若已解绑则为 null）。
   async function enableTask() {
-    const setId = effectiveBindSetId.value
-    if (!setId || !selectedAccountId.value) {
-      toast('请先选择账号与配置套', 'error')
+    if (!selectedAccountId.value) {
+      toast('请先选择账号', 'error')
       return false
     }
+    const draft = taskConfigDraft.value
+    if (!draft) {
+      toast('请先完善配置', 'error')
+      return false
+    }
+    const errs = validateConfig(draft)
+    if (Object.keys(errs).length) {
+      formErrors.value = errs
+      toast(`启用失败：${Object.values(errs).join('；')}`, 'error')
+      return false
+    }
+    formErrors.value = {}
     saving.value = true
     try {
       const scheduleId = await _ensureInstance()
-      await api.updateSchedule({ id: scheduleId, enabled: true, configSetId: Number(setId) })
+      const b = scheduleBindings.value[taskConfigKey.value]
+      await api.updateSchedule({
+        id: scheduleId,
+        enabled: true,
+        config: JSON.parse(JSON.stringify(draft)),
+        configSetId: b && b.configSetId ? Number(b.configSetId) : null,
+      })
       await refreshBindings()
+      initTaskDraft()
       toast('定时任务已启用', 'success')
       return true
     } catch (e) {
@@ -441,18 +465,25 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     }
   }
 
-  // 换绑：已建实例时立即生效；未建实例仅记本地选择（启用时一并落库）
+  // 换绑：把所选配置套的配置快照复制进本任务实例（覆盖），并保留为源自标签；不影响其他任务。
   async function bindSet(setId) {
     const b = scheduleBindings.value[taskConfigKey.value]
     if (!b || !b.scheduleId) {
       selectBindSet(setId)
       return true
     }
+    const set = userConfigSets.value.find((s) => s.id === setId)
+    if (!set) return false
     saving.value = true
     try {
-      await api.updateSchedule({ id: b.scheduleId, configSetId: setId == null ? null : Number(setId) })
+      await api.updateSchedule({
+        id: b.scheduleId,
+        config: JSON.parse(JSON.stringify(set.config)),
+        configSetId: setId == null ? null : Number(setId),
+      })
       await refreshBindings()
-      toast('已换绑配置套', 'success')
+      initTaskDraft()
+      toast('已换绑并复制配置套到本任务', 'success')
       return true
     } catch (e) {
       toast(e.message || '换绑失败', 'error')
@@ -462,19 +493,26 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     }
   }
 
-  // 手动套用：创建实例（如无）并关联当前所选配置套；不改变启用状态（启用仍由主按钮控制）
+  // 手动套用：创建实例（如无）并把当前所选配置套的配置快照复制进本任务；不改变启用状态。
   async function applyBind() {
     const setId = effectiveBindSetId.value
     if (!setId || !selectedAccountId.value) {
       toast('请先选择账号与配置套', 'error')
       return false
     }
+    const set = userConfigSets.value.find((s) => s.id === setId)
+    if (!set) return false
     saving.value = true
     try {
       const scheduleId = await _ensureInstance()
-      await api.updateSchedule({ id: scheduleId, configSetId: Number(setId) })
+      await api.updateSchedule({
+        id: scheduleId,
+        config: JSON.parse(JSON.stringify(set.config)),
+        configSetId: Number(setId),
+      })
       await refreshBindings()
-      toast('已套用配置套', 'success')
+      initTaskDraft()
+      toast('已套用配置套到本任务', 'success')
       return true
     } catch (e) {
       toast(e.message || '套用失败', 'error')
@@ -666,6 +704,9 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     // 切换任务时清掉未绑定任务的本地选套预览，回落到默认套，避免跨任务串味
     selectedBindSetId.value = ''
   }
+
+  // 切换账号/任务时重新初始化编辑草稿（以任务自身配置或绑定套为来源）
+  watch([selectedAccountId, selectedTaskType], () => initTaskDraft())
 
   // 监听必填字段内容：一旦变化且该项已合法，立刻清掉对应红框/提醒。
   // 放在此处（activeTab / taskConfig 等已初始化之后）注册，避免 watch getter 同步取值时触发 TDZ。

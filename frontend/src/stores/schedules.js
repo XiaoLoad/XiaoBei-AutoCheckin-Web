@@ -11,6 +11,7 @@ import { computeNextRun, formatNextRun, nextRunSummary } from '@/utils/schedule'
 function enableBlockReason(s) {
   if (!s.accountEnabled) return '该平台账号未启用，无法开启定时（请先在「账号管理」启用该账号）'
   if (s.mode === 'follow' && !s.configSetId) return '请先在「签到配置」为该任务绑定配置套后再开启'
+  if (s.mode === 'standalone' && !s.config) return '请先在「签到配置」完善本任务配置后再开启'
   if (s.mode === 'custom') {
     const c = s.custom || {}
     if (!Array.isArray(c.weekdays) || c.weekdays.length === 0) return '请先在「定时设置」中选择执行星期'
@@ -24,8 +25,21 @@ export const useSchedulesStore = defineStore('schedules', () => {
   const saving = ref(false)
   const schedules = ref([])
 
-  // 读取某任务实例的配置套元信息（用于"跟随配置套"预览与下次执行计算）
+  // 读取某任务实例的配置元信息：standalone 任务优先读自身 config；否则回退配置套元信息
   function configMetaOf(accountId, taskType) {
+    const s = schedules.value.find((x) => x.accountId == accountId && x.taskType === taskType)
+    if (s && s.config) {
+      const cfg = s.config
+      const sign = useSignConfigStore()
+      const loc =
+        sign.userLocations.find((l) => l.id === cfg.locationId) ||
+        sign.systemLocations.find((l) => l.id === cfg.locationId)
+      return {
+        time: cfg.time ? JSON.parse(JSON.stringify(cfg.time)) : null,
+        presetSetName: s.configSetId ? '原配置套' : '自定义',
+        locationName: loc ? loc.name : '未设置位置'
+      }
+    }
     return useSignConfigStore().taskConfigMetaOf(accountId, taskType)
   }
   // 计算某任务的"下一次执行" Date

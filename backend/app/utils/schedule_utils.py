@@ -8,7 +8,13 @@ from app.models.user import now_cst
 
 def _extract_schedule_time(schedule):
     """返回 (hour, minute, weekdays[1..7])，缺失返回 (None, None, [])。
-    follow 与调度器 _resolve 同口径：配置套 + 字段级覆盖浅合并后再取 time。"""
+    standalone（config_json 非空）从任务自持配置取 time；follow 与调度器 _resolve 同口径：
+    配置套 + 字段级覆盖浅合并后再取 time；custom 从内联 time-only 取。"""
+    if schedule.has_own_config:
+        cfg = schedule.config or {}
+        t = cfg.get('time') or {}
+        sign_time = t.get('signTime') or {}
+        return sign_time.get('hour'), sign_time.get('minute'), t.get('weekdays') or []
     if schedule.mode == 'follow':
         cfg = {}
         if schedule.config_set_id:

@@ -1,7 +1,7 @@
 <template>
   <div class="flex min-h-0 gap-3">
     <!-- 左：分组侧栏（相册式管理 + 拖拽投放目标） -->
-    <aside class="flex max-h-[72vh] w-52 shrink-0 flex-col overflow-hidden rounded-2xl dash-card">
+    <aside class="flex h-[72vh] w-52 shrink-0 flex-col overflow-hidden rounded-2xl dash-card">
       <div class="border-b border-ink/5 p-2">
         <div class="relative">
           <Icon name="search" :size="13" class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
@@ -32,9 +32,9 @@
             dropKey === 'ungrouped' ? 'ring-2 ring-brand' : ''
           ]"
           @click="groupFilter = 'ungrouped'"
-          @dragover.prevent="dropKey = 'ungrouped'"
-          @dragleave="dropKey === 'ungrouped' && (dropKey = null)"
-          @drop.prevent="onDropTo('ungrouped')"
+          @dragover.prevent="onGroupDragOver('ungrouped', $event)"
+          @dragleave="onGroupDragLeave('ungrouped')"
+          @drop.prevent="onDropTo('ungrouped', $event)"
         >
           <span class="min-w-0 flex-1 truncate">未分组</span>
           <span class="shrink-0 text-[11px] text-ink-muted">{{ counts.ungrouped }}</span>
@@ -49,9 +49,9 @@
             dropKey === g.id ? 'ring-2 ring-brand' : ''
           ]"
           @click="editingGroupId === g.id ? null : (groupFilter = g.id)"
-          @dragover.prevent="dropKey = g.id"
-          @dragleave="dropKey === g.id && (dropKey = null)"
-          @drop.prevent="onDropTo(g.id)"
+          @dragover.prevent="onGroupDragOver(g.id, $event)"
+          @dragleave="onGroupDragLeave(g.id)"
+          @drop.prevent="onDropTo(g.id, $event)"
         >
           <template v-if="editingGroupId === g.id">
             <input
@@ -126,7 +126,24 @@
     </aside>
 
     <!-- 右：图库网格 + 分页 -->
-    <div class="flex min-w-0 flex-1 flex-col gap-3">
+    <div
+      class="relative flex h-[72vh] min-w-0 flex-1 flex-col gap-3"
+      @dragenter.prevent="onFileDragEnter"
+      @dragover.prevent="onFileDragOver"
+      @dragleave="onFileDragLeave"
+      @drop.prevent="onFileDrop"
+    >
+      <!-- 拖拽上传高亮层：仅外部文件拖入时显示 -->
+      <div
+        v-if="isFileDragOver"
+        class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-2xl border-2 border-dashed border-brand bg-brand/10 backdrop-blur-[1px]"
+      >
+        <div class="flex flex-col items-center gap-1.5 text-brand">
+          <Icon name="image" :size="36" />
+          <p class="text-sm font-medium">松开鼠标，上传到「{{ uploadTargetName }}」</p>
+          <p class="text-[11px] text-brand/70">支持 JPG / PNG / WEBP，可批量拖入</p>
+        </div>
+      </div>
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div class="inline-flex rounded-xl bg-cloud p-1 text-sm">
           <button
@@ -154,14 +171,14 @@
         </div>
       </div>
 
-      <input ref="fileInput" type="file" accept="image/jpeg,image/png" multiple class="hidden" @change="onFilesPicked" />
+      <input ref="fileInput" type="file" accept="image/jpeg,image/png,image/webp" multiple class="hidden" @change="onFilePicked" />
 
       <p class="text-[11px] leading-relaxed text-ink-muted/80">
-        上传自动压缩至 ≤180KB（B 平台提交口径）；轮回使用的图片消费后进入「已使用」保留不删；图库中「删除」会移入回收站，回收站内「删除」才永久移除（保留 7 天后也会自动清除）；点击图片打开灯箱预览，可缩放、左右切换。
+        上传自动压缩至 ≤180KB（B 平台提交口径）；也可将图片直接拖拽到此处批量上传；轮回使用的图片消费后进入「已使用」保留不删；图库中「删除」会移入回收站，回收站内「删除」才永久移除（保留 7 天后也会自动清除）；点击图片打开灯箱预览，可缩放、左右切换。
       </p>
 
-      <div class="xb-scroll min-h-[56vh] max-h-[72vh] overflow-y-auto overflow-x-hidden rounded-xl bg-cloud/40 px-1.5 py-1.5">
-        <div v-if="pagedList.length === 0" class="flex min-h-[52vh] items-center justify-center text-sm text-ink-muted">
+      <div class="xb-scroll flex-1 min-h-0 overflow-y-auto overflow-x-hidden rounded-xl bg-cloud/40 px-1.5 py-1.5" :class="{ 'pb-28': uploadList.length }">
+        <div v-if="pagedList.length === 0" class="flex h-full items-center justify-center text-sm text-ink-muted">
           {{ view === 'trash' ? '回收站为空' : view === 'used' ? '已使用列表为空' : '当前分组暂无图片' }}
         </div>
       <div v-else class="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5">
@@ -233,6 +250,44 @@
       <div v-if="total > 0" class="mt-auto flex justify-center border-t border-ink/5 pt-3">
         <BasePagination :page="page" :page-size="pageSize" :total="total" :page-size-options="[12, 24, 48, 96]" @update:page="page = $event" @update:pageSize="onPageSizeChange" />
       </div>
+
+      <!-- 上传进度与结果浮层：锚定在右侧卡片内（absolute），始终贴右下角可见，不被图片滚动推走 -->
+      <transition name="fade">
+        <div
+          v-if="uploadList.length"
+          class="absolute bottom-3 right-3 z-30 w-80 max-w-[calc(100%-1.5rem)] overflow-hidden rounded-2xl dash-card shadow-xl"
+        >
+          <div class="flex items-center justify-between gap-2 border-b border-ink/5 px-3 py-2">
+            <span class="text-xs font-medium text-ink-soft">
+              {{ isUploading ? '上传中…' : `完成（成功 ${doneCount} · 失败 ${errorCount}）` }}
+            </span>
+            <button
+              type="button"
+              class="grid h-5 w-5 place-items-center rounded text-ink-muted transition hover:bg-cloud hover:text-ink"
+              aria-label="关闭"
+              @click="closeUploadPanel"
+            >
+              <Icon name="close" :size="12" />
+            </button>
+          </div>
+          <div class="xb-scroll max-h-64 space-y-1.5 overflow-auto p-2">
+            <div
+              v-for="(it, idx) in uploadList"
+              :key="idx"
+              class="rounded-lg bg-cloud/50 px-2 py-1.5"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <span class="min-w-0 flex-1 truncate text-[11px] text-ink-soft" :title="it.name">{{ it.name }}</span>
+                <span class="shrink-0 text-[10px] font-medium" :class="statusColor(it.status)">{{ statusLabel(it) }}</span>
+              </div>
+              <div v-if="it.status === 'uploading' || it.status === 'queued'" class="mt-1 h-1 w-full overflow-hidden rounded-full bg-ink/10">
+                <div class="h-full rounded-full bg-brand transition-all duration-200" :style="{ width: it.progress + '%' }" />
+              </div>
+              <p v-if="it.status === 'error'" class="mt-0.5 truncate text-[10px] text-danger" :title="it.error">{{ it.error }}</p>
+            </div>
+          </div>
+        </div>
+      </transition>
     </div>
 
     <!-- 回收站删除二次确认 -->
@@ -365,25 +420,111 @@ const uploadTargetName = computed(() => {
 })
 const uploadGroupId = computed(() => (typeof groupFilter.value === 'number' ? groupFilter.value : null))
 
-async function onFilesPicked(e) {
-  const files = Array.from(e.target.files || [])
-  e.target.value = ''
+// 允许的图片类型（后端归一化为 JPEG；前端先按常见格式预校验，不支持 GIF）
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const MAX_SIZE = 5 * 1024 * 1024
+function validateImage(f) {
+  const okType = ALLOWED_TYPES.includes(f.type) || /\.(jpe?g|png|webp)$/i.test(f.name)
+  if (!okType) {
+    toast(`「${f.name}」格式不支持，仅支持 JPG / PNG / WEBP`, 'error')
+    return false
+  }
+  if (f.size > MAX_SIZE) {
+    toast(`「${f.name}」超过 5MB 上限`, 'error')
+    return false
+  }
+  return true
+}
+
+// 上传队列：逐张展示进度与结果（queued/uploading/done/error）
+const uploadList = ref([])
+const showUploadPanel = ref(false)
+const isUploading = computed(() =>
+  uploadList.value.some((i) => i.status === 'uploading' || i.status === 'queued')
+)
+const doneCount = computed(() => uploadList.value.filter((i) => i.status === 'done').length)
+const errorCount = computed(() => uploadList.value.filter((i) => i.status === 'error').length)
+function statusLabel(it) {
+  if (it.status === 'queued') return '等待中'
+  if (it.status === 'uploading') return `${it.progress}%`
+  if (it.status === 'done') return '成功'
+  return '失败'
+}
+function statusColor(status) {
+  return {
+    queued: 'text-ink-muted',
+    uploading: 'text-brand',
+    done: 'text-success',
+    error: 'text-danger'
+  }[status] || 'text-ink-muted'
+}
+function closeUploadPanel() {
+  uploadList.value = []
+  showUploadPanel.value = false
+}
+
+// 统一入口：校验 → 顺序逐张上传（后端单文件接口）→ 实时进度与结果
+async function handleFiles(fileList) {
+  const files = Array.from(fileList || []).filter((f) => validateImage(f))
   if (!files.length) return
   uploading.value = true
+  showUploadPanel.value = true
+  uploadList.value = files.map((f) => ({ name: f.name, status: 'queued', progress: 0, error: '' }))
   let okCount = 0
   try {
-    for (const f of files) {
+    for (let i = 0; i < files.length; i++) {
+      const it = uploadList.value[i]
+      it.status = 'uploading'
       try {
-        await store.uploadImage(f, uploadGroupId.value)
+        await store.uploadImage(files[i], uploadGroupId.value, (p) => { it.progress = p })
+        it.status = 'done'
+        it.progress = 100
         okCount += 1
       } catch (err) {
-        toast(`「${f.name}」上传失败：${err.message || '未知错误'}`, 'error')
+        it.status = 'error'
+        it.error = err.message || '上传失败'
       }
     }
     if (okCount) toast(`已上传 ${okCount} 张图片至「${uploadTargetName.value}」`, 'success')
   } finally {
     uploading.value = false
   }
+}
+
+// 点击选择文件：复用统一入口（兼容原上传方式）
+function onFilePicked(e) {
+  const files = e.target.files
+  e.target.value = ''
+  handleFiles(files)
+}
+
+// ── 拖拽上传（区分外部文件拖拽与内部卡片移动）──
+const isFileDragOver = ref(false)
+let dragDepth = 0
+function hasFiles(e) {
+  const t = e.dataTransfer && e.dataTransfer.types
+  return !!t && Array.from(t).includes('Files')
+}
+function onFileDragEnter(e) {
+  if (!hasFiles(e)) return
+  dragDepth += 1
+  isFileDragOver.value = true
+}
+function onFileDragOver(e) {
+  if (!hasFiles(e)) return
+  e.preventDefault() // 必须阻止默认行为，否则 drop 不触发
+}
+function onFileDragLeave(e) {
+  if (!hasFiles(e)) return
+  dragDepth = Math.max(0, dragDepth - 1)
+  if (dragDepth === 0) isFileDragOver.value = false
+}
+function onFileDrop(e) {
+  if (!hasFiles(e)) return // 内部卡片拖拽走分组移动逻辑，不在此处理
+  e.preventDefault()
+  dragDepth = 0
+  isFileDragOver.value = false
+  handleFiles(e.dataTransfer.files)
 }
 
 // ── 拖拽移动（C1 原生 HTML5）：拖卡片 → 放到左栏分组行 ──
@@ -398,7 +539,16 @@ function onDragEnd() {
   draggingId.value = null
   dropKey.value = null
 }
-async function onDropTo(key) {
+// 分组行的拖拽高亮/投放：仅内部卡片拖拽（非外部文件）才响应，避免文件拖过时被误高亮
+function onGroupDragOver(key, e) {
+  if (hasFiles(e)) return
+  dropKey.value = key
+}
+function onGroupDragLeave(key) {
+  if (dropKey.value === key) dropKey.value = null
+}
+async function onDropTo(key, e) {
+  if (e && hasFiles(e)) return // 文件拖放走上传逻辑，不在此处理
   const img = store.imageLibrary.find((i) => i.id === draggingId.value)
   const target = key === 'ungrouped' ? null : key
   draggingId.value = null

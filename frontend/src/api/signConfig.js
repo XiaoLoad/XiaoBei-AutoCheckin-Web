@@ -163,13 +163,21 @@ export async function deleteCredential(id) {
 }
 
 // 图库：真实上传（可指定分组）/ 回收站 / 删除
-export async function uploadImage(file, groupId = null) {
+// onProgress 透传 axios 上传进度（0~100），用于拖拽/批量上传的进度展示
+export async function uploadImage(file, groupId = null, onProgress) {
   const fd = new FormData()
   fd.append('file', file)
   if (groupId != null) fd.append('groupId', String(groupId))
   await request({
     url: '/pools/images', method: 'post', data: fd,
-    headers: { 'Content-Type': 'multipart/form-data' }, timeout: 30000
+    headers: { 'Content-Type': 'multipart/form-data' }, timeout: 30000,
+    onUploadProgress: onProgress
+      ? (e) => {
+          const total = e.total || file.size || 0
+          const percent = total ? Math.min(99, Math.round((e.loaded / total) * 100)) : 0
+          onProgress(percent)
+        }
+      : undefined
   })
   return (await refreshPools()).imageLibrary
 }

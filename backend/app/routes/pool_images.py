@@ -9,7 +9,7 @@ from app.extensions import db
 from app.models import ImageGroup, PoolImage
 from app.models.user import now_cst
 from app.services.image_store import (IMAGE_LIMIT, ImageError, delete_file,
-                                      normalize_to_jpeg, save_file, user_dir)
+                                      normalize_image, save_file, user_dir)
 from app.utils.auth import token_required
 from app.utils.response import error, success
 
@@ -143,14 +143,14 @@ def upload_image():
         if not _owned_group(group_id, user):
             return error(message='所属分组不存在', code=4040, status=404)
     try:
-        jpeg, _, _ = normalize_to_jpeg(raw)
+        data, _, _, ext, mime = normalize_image(raw)
     except ImageError as e:
         return error(message=str(e), code=4333, status=400)
-    filename = save_file(user.id, jpeg)
+    filename = save_file(user.id, data, ext)
     img = PoolImage(user_id=user.id, group_id=group_id,
                     orig_name=os.path.basename(f.filename)[:255],
-                    filename=filename, size=len(jpeg),
-                    mime='image/jpeg', status='active')
+                    filename=filename, size=len(data),
+                    mime=mime, status='active')
     db.session.add(img)
     db.session.commit()
     return success(_img_dict(img), message='上传成功', status=201)

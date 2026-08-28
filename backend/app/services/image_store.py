@@ -1,8 +1,12 @@
 # 图库文件存储服务：归一化压缩 + 用户分目录落盘 + 回收站扫尾。
-# 归一化口径（旧版已验证算法）：长边 ≤1920px；JPEG 质量 80 起每轮 -10，
-# 仍超限按 0.7 等比缩放循环，直到 ≤180KB（B 平台提交硬性要求）；
+# 设计口径（对齐旧版 XiaoBeiCheck）：上传时「保留原格式」，仅做尺寸收缩与按格式压缩；
+# 提交签到时才按 B 平台口径做格式归一化（见 prepare_submit_image，一律转 JPEG）。
+# 上传不接受 GIF（B 平台仅支持 JPEG，动态图也不可提交），故 normalize_image 直接拒绝，
+# 其余格式仅做尺寸/体积收敛、保留原格式：
+#   - JPEG / WEBP：质量递减直到 ≤180KB；
+#   - PNG：无损 optimize（保留透明通道），提交时再转 JPEG；
+#   - 其余未知格式（BMP/TIFF 等）兜底转 JPEG。
 # exif_transpose 顺带矫正方向并剥离 EXIF（含 GPS 的照片不留服务器）。
-# 上传即归一化：凌晨定时打卡时零压缩开销，也不会出现「到点压缩失败」的惊喜。
 import datetime
 import io
 import os
@@ -15,6 +19,13 @@ from app.models.user import now_cst
 MAX_SIDE = 1920
 TARGET_KB = 180
 IMAGE_LIMIT = 50
+
+# 原格式 → (落盘扩展名, MIME)
+_FMT_MAP = {
+    'JPEG': ('.jpg', 'image/jpeg'),
+    'PNG': ('.png', 'image/png'),
+    'WEBP': ('.webp', 'image/webp'),
+}
 
 
 class ImageError(ValueError):
@@ -31,40 +42,116 @@ def user_dir(user_id):
     return d
 
 
-def normalize_to_jpeg(raw):
+def _downscale(im, max_side=MAX_SIDE):
+    if max(im.size) <= max_side:
+        return im
+    ratio = max_side / max(im.size)
+    new_size = (max(1, round(im.width * ratio)), max(1, round(im.height * ratio)))
+    return im.resize(new_size, Image.LANCZOS)
+
+
+def _save_jpeg(im, out, target=TARGET_KB):
+    out.seek(0)
+    out.truncate(0)
+    quality = 80
+    while True:
+        out.seek(0)
+        out.truncate(0)
+        im.save(out, format='JPEG', quality=quality, optimize=True)
+        if out.tell() <= target * 1024 or quality <= 10:
+            break
+        quality -= 10
+    while out.tell() > target * 1024 and min(im.size) > 50:
+        im = im.resize((max(1, round(im.width * 0.7)), max(1, round(im.height * 0.7))),
+                       Image.LANCZOS)
+        out.seek(0)
+        out.truncate(0)
+        im.save(out, format='JPEG', quality=quality, optimize=True)
+    if out.tell() > target * 1024:
+        raise ImageError('图片无法压缩到 180KB 以内，请更换图片')
+
+
+def _save_webp(im, out, target=TARGET_KB):
+    out.seek(0)
+    out.truncate(0)
+    quality = 82
+    while True:
+        out.seek(0)
+        out.truncate(0)
+        im.save(out, format='WEBP', quality=quality)
+        if out.tell() <= target * 1024 or quality <= 20:
+            break
+        quality -= 8
+    if out.tell() > target * 1024:
+        raise ImageError('图片无法压缩到 180KB 以内，请更换图片')
+
+
+def _save_png(im, out):
+    # 无损 optimize；PNG 体积受内容限制，不强制 ≤180KB（提交时再转 JPEG）
+    out.seek(0)
+    out.truncate(0)
+    im.save(out, format='PNG', optimize=True)
+
+
+def normalize_image(raw):
+    """上传归一化：保留原格式（不强制转 JPEG），仅做尺寸收缩与按格式压缩。
+    返回 (bytes, width, height, ext, mime)：
+      - JPEG / WEBP：质量递减直到 ≤180KB；
+      - PNG：无损 optimize（透明通道保留）；
+      - 其它未知格式：兜底转 JPEG。
+    GIF 不被接受（B 平台仅支持 JPEG），直接报错。"""
     raw_bytes = bytes(raw or b'')
     try:
         im = Image.open(io.BytesIO(raw_bytes))
         im.load()
     except Exception:
         raise ImageError('文件不是有效图片')
+    fmt = (im.format or '').upper()
+    if fmt == 'GIF':
+        raise ImageError('不支持 GIF 格式，请上传 JPG / PNG / WEBP')
+
+    # 转置（矫正方向）+ 收缩，按格式压缩
+    im = ImageOps.exif_transpose(im)
+    im = _downscale(im)
+    ext, mime = _FMT_MAP.get(fmt, ('.jpg', 'image/jpeg'))
+
+    out = io.BytesIO()
+    if fmt == 'JPEG':
+        _save_jpeg(im, out)
+    elif fmt == 'WEBP':
+        _save_webp(im, out)
+    elif fmt == 'PNG':
+        _save_png(im, out)
+    else:
+        im = im.convert('RGB')
+        _save_jpeg(im, out)
+        ext, mime = '.jpg', 'image/jpeg'
+
+    data = out.getvalue()
+    w, h = im.size
+    return data, w, h, ext, mime
+
+
+def prepare_submit_image(raw_bytes, mime):
+    """提交签到前的格式归一化（Module E 真实提交时调用）：B 平台仅接受 JPEG，
+    故无论原始格式（PNG/WEBP/JPEG/未知均含）一律转 JPEG ≤180KB。
+    对应「上传保留原格式、提交时统一转 JPEG」的口径；GIF 已在上传端拒绝，不会到达此处。"""
+    try:
+        im = Image.open(io.BytesIO(bytes(raw_bytes or b'')))
+        im.load()
+    except Exception:
+        raise ImageError('图片无法解析，无法提交')
     im = ImageOps.exif_transpose(im).convert('RGB')
-    if max(im.size) > MAX_SIDE:
-        ratio = MAX_SIDE / max(im.size)
-        im = im.resize((max(1, round(im.width * ratio)), max(1, round(im.height * ratio))),
-                       Image.LANCZOS)
-    quality = 80
-    buf = io.BytesIO()
-    while True:
-        buf = io.BytesIO()
-        im.save(buf, format='JPEG', quality=quality, optimize=True)
-        if buf.tell() <= TARGET_KB * 1024 or quality <= 10:
-            break
-        quality -= 10
-    while buf.tell() > TARGET_KB * 1024 and min(im.size) > 50:
-        im = im.resize((max(1, round(im.width * 0.7)), max(1, round(im.height * 0.7))),
-                       Image.LANCZOS)
-        buf = io.BytesIO()
-        im.save(buf, format='JPEG', quality=quality, optimize=True)
-    if buf.tell() > TARGET_KB * 1024:
-        raise ImageError('图片无法压缩到 180KB 以内，请更换图片')
-    return buf.getvalue(), im.width, im.height
+    im = _downscale(im)
+    out = io.BytesIO()
+    _save_jpeg(im, out)
+    return out.getvalue(), 'image/jpeg', '.jpg'
 
 
-def save_file(user_id, jpeg_bytes):
-    fname = uuid.uuid4().hex + '.jpg'
+def save_file(user_id, img_bytes, ext='.jpg'):
+    fname = uuid.uuid4().hex + ext
     with open(os.path.join(user_dir(user_id), fname), 'wb') as f:
-        f.write(jpeg_bytes)
+        f.write(img_bytes)
     return fname
 
 

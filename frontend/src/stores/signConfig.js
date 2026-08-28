@@ -552,10 +552,11 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     }
   }
   // 上传图片：走真实归一化管线，成功后刷新图库数组（groupId 指定上传目标分组）
-  async function uploadImage(file, groupId = null) {
+  // onProgress 透传单张上传进度（0~100），供图库页批量/拖拽上传展示进度
+  async function uploadImage(file, groupId = null, onProgress) {
     saving.value = true
     try {
-      imageLibrary.value = await api.uploadImage(file, groupId)
+      imageLibrary.value = await api.uploadImage(file, groupId, onProgress)
     } finally {
       saving.value = false
     }

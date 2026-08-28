@@ -12,6 +12,14 @@ def _jpeg_file(w=900, h=700, name='签到图.jpg', noise=True):
     return {'file': (buf, name)}
 
 
+def _gif_file(name='动画.gif', frames=4):
+    imgs = [Image.new('RGB', (200, 150), (i * 60 % 255, 100, 200)) for i in range(frames)]
+    buf = io.BytesIO()
+    imgs[0].save(buf, format='GIF', save_all=True, append_images=imgs[1:], duration=120, loop=0)
+    buf.seek(0)
+    return {'file': (buf, name)}
+
+
 def test_upload_list_trash_restore_delete(app, user_headers):
     c = app.test_client()
     r = c.post('/api/pools/images', data=_jpeg_file(), headers=user_headers,
@@ -20,6 +28,7 @@ def test_upload_list_trash_restore_delete(app, user_headers):
     img = r.get_json()['data']
     assert img['name'] == '签到图.jpg' and img['inTrash'] is False
     assert 0 < img['sizeKb'] <= 180
+    assert img['mime'] == 'image/jpeg'
     iid = img['id']
 
     # 文件流：本人可读，无 token 401
@@ -44,6 +53,17 @@ def test_upload_rejects_non_image_and_404_after_delete(app, user_headers):
     r = c.post('/api/pools/images', data={'file': (io.BytesIO(b'junk'), 'x.png')},
                headers=user_headers, content_type='multipart/form-data')
     assert r.status_code == 400
+
+
+def test_upload_rejects_gif(app, user_headers):
+    """上传端不接受 GIF：返回 400 且不在图库落库"""
+    c = app.test_client()
+    r = c.post('/api/pools/images', data=_gif_file(), headers=user_headers,
+               content_type='multipart/form-data')
+    assert r.status_code == 400, r.get_json()
+    # 图库不新增任何 GIF（tc_user 图库跨运行共享，仅断言本用例未落库）
+    remain = c.get('/api/pools', headers=user_headers).get_json()['data']['images']
+    assert all(not i['name'].endswith('.gif') for i in remain)
 
 
 def test_image_groups_crud_upload_move_and_delete(app, user_headers):

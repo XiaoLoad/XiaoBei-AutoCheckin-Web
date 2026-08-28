@@ -3,6 +3,8 @@ node_modules/
 dist/
 dist_build_check/
 .build-check/
+.build-*/
+.verify-build/
 dist-ssr/
 .vite/
 

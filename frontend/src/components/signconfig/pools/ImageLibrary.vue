@@ -1,7 +1,7 @@
 <template>
   <div class="flex min-h-0 gap-3">
     <!-- 左：分组侧栏（相册式管理 + 拖拽投放目标） -->
-    <aside class="flex w-44 shrink-0 flex-col overflow-hidden rounded-2xl dash-card">
+    <aside class="flex w-52 shrink-0 flex-col overflow-hidden rounded-2xl dash-card">
       <div class="border-b border-ink/5 p-2">
         <div class="relative">
           <Icon name="search" :size="13" class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
@@ -57,12 +57,26 @@
             <input
               v-model="editingName"
               type="text"
-              class="min-w-0 flex-1 rounded-md border border-ink/10 px-1 text-xs text-ink outline-none focus:border-brand"
+              class="min-w-0 flex-1 rounded-lg border border-ink/10 bg-white px-2 py-1.5 text-xs text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/10"
               @keyup.enter="confirmRename"
               @click.stop
             />
-            <Icon name="check" :size="13" class="shrink-0 cursor-pointer text-brand" @click.stop="confirmRename" />
-            <Icon name="close" :size="13" class="shrink-0 cursor-pointer text-ink-muted" @click.stop="editingGroupId = null" />
+            <button
+              type="button"
+              class="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-brand transition hover:bg-brand/10"
+              aria-label="保存"
+              @click.stop="confirmRename"
+            >
+              <Icon name="check" :size="14" />
+            </button>
+            <button
+              type="button"
+              class="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-ink-muted transition hover:bg-cloud"
+              aria-label="取消"
+              @click.stop="editingGroupId = null"
+            >
+              <Icon name="close" :size="14" />
+            </button>
           </template>
           <template v-else>
             <span class="min-w-0 flex-1 truncate" :title="g.name">{{ g.name }}</span>
@@ -74,25 +88,35 @@
           </template>
         </div>
         <!-- 新建分组 -->
-        <div v-if="creating" class="flex items-center gap-1 px-2 py-1.5">
+        <div v-if="creating" class="space-y-1.5 rounded-lg bg-brand/5 p-2">
           <input
             v-model="newName"
             type="text"
             placeholder="分组名，如 3栋507"
-            class="min-w-0 flex-1 rounded-md border border-ink/10 px-1 text-xs text-ink outline-none focus:border-brand"
+            class="w-full rounded-lg border border-ink/10 bg-white px-2.5 py-2 text-xs text-ink outline-none transition placeholder:text-ink-muted focus:border-brand focus:ring-2 focus:ring-brand/10"
             @keyup.enter="confirmCreate"
             @keyup.esc="creating = false"
           />
-          <Icon name="check" :size="13" class="shrink-0 cursor-pointer text-brand" @click="confirmCreate" />
-          <Icon name="close" :size="13" class="shrink-0 cursor-pointer text-ink-muted" @click="creating = false" />
+          <div class="flex items-center gap-1.5">
+            <button
+              type="button"
+              class="flex-1 rounded-lg bg-brand px-3 py-2 text-xs font-medium text-white transition hover:bg-brand-dark active:scale-[0.98]"
+              @click="confirmCreate"
+            >保存</button>
+            <button
+              type="button"
+              class="flex-1 rounded-lg border border-ink/15 bg-white px-3 py-2 text-xs font-medium text-ink-soft transition hover:bg-cloud active:scale-[0.98]"
+              @click="creating = false"
+            >取消</button>
+          </div>
         </div>
         <button
           v-else
           type="button"
-          class="mt-0.5 flex w-full items-center gap-1 rounded-lg border border-dashed border-ink/20 px-2 py-1.5 text-xs text-ink-soft transition hover:border-brand hover:text-brand"
+          class="mt-0.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-ink/20 px-2 py-2 text-xs text-ink-soft transition hover:border-brand hover:text-brand"
           @click="creating = true"
         >
-          <Icon name="plus" :size="12" />新建分组
+          <Icon name="plus" :size="13" />新建分组
         </button>
         <p v-if="groupsEmpty && groupQuery" class="px-2 py-1.5 text-center text-[11px] text-ink-muted">无匹配分组</p>
       </div>
@@ -139,7 +163,7 @@
       <div v-if="pagedList.length === 0" class="dash-card flex min-h-[240px] flex-1 items-center justify-center text-sm text-ink-muted">
         {{ view === 'trash' ? '回收站为空' : '当前分组暂无图片' }}
       </div>
-      <div v-else class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div v-else class="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5">
         <div
           v-for="img in pagedList"
           :key="img.id"
@@ -152,7 +176,7 @@
             <img
               v-if="urls[img.id]"
               :src="urls[img.id]"
-              class="h-full w-full cursor-zoom-in object-cover transition duration-200 group-hover:scale-105"
+              class="h-full w-full cursor-zoom-in object-contain transition duration-200 group-hover:scale-105"
               alt=""
               @click="openPreview(img)"
             />
@@ -198,7 +222,7 @@
       </div>
 
       <div v-if="total > 0" class="mt-auto flex justify-center border-t border-ink/5 pt-3">
-        <BasePagination :page="page" :page-size="pageSize" :total="total" @update:page="page = $event" @update:pageSize="onPageSizeChange" />
+        <BasePagination :page="page" :page-size="pageSize" :total="total" :page-size-options="[12, 24, 48, 96]" @update:page="page = $event" @update:pageSize="onPageSizeChange" />
       </div>
     </div>
   </div>
@@ -394,7 +418,7 @@ function probeSize(src) {
 
 // ── 分页：前端分页（图库上限 50 张），翻页后预览范围与所见一致 ──
 const page = ref(1)
-const pageSize = ref(12)
+const pageSize = ref(24)
 const total = computed(() => list.value.length)
 const pagedList = computed(() => list.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
 watch([groupFilter, view, () => store.imageLibrary.length], () => { page.value = 1 })

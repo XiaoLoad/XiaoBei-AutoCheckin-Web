@@ -1,17 +1,18 @@
 <template>
   <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-    <!-- 总条数 / 当前页 -->
+    <!-- 左：数据概览 -->
     <div class="flex items-center gap-2 text-sm text-ink-muted">
       <span>共 {{ total }} 条</span>
-      <span class="hidden sm:inline">·</span>
+      <span class="hidden text-ink/20 sm:inline">|</span>
       <span class="whitespace-nowrap">第 {{ page }} / {{ totalPages }} 页</span>
     </div>
 
-    <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+    <!-- 右：每页条数 + 翻页 -->
+    <div class="flex flex-wrap items-center justify-start gap-x-4 gap-y-2 sm:justify-end">
       <!-- 每页条数 -->
       <div class="flex items-center gap-1.5 text-sm text-ink-muted">
         <span class="whitespace-nowrap">每页</span>
-        <div class="w-28">
+        <div class="w-20">
           <BaseSelect
             :model-value="pageSize"
             :options="sizeOptions"
@@ -24,7 +25,7 @@
         <span class="whitespace-nowrap">条</span>
       </div>
 
-      <!-- 页码导航 -->
+      <!-- 翻页 -->
       <div class="inline-flex items-center rounded-xl bg-cloud p-1">
         <button
           type="button"

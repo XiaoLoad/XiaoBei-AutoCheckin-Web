@@ -21,23 +21,26 @@
       </div>
     </div>
 
-    <SignConfigSkeleton
-      v-if="store.loading"
-      :tab="effectiveTab"
-      :sub-tab-count="isAdmin ? 2 : 3"
-    />
-    <keep-alive v-else>
-      <DefaultConfigTab v-if="effectiveTab === 'default'" />
-      <AccountTaskConfigTab v-else-if="effectiveTab === 'tasks'" />
-      <MyResourcesTab v-else-if="effectiveTab === 'resources'" />
-    </keep-alive>
+    <div ref="content" class="min-h-0 flex-1 flex flex-col">
+      <SignConfigSkeleton
+        v-if="store.loading"
+        :tab="effectiveTab"
+        :sub-tab-count="isAdmin ? 2 : 3"
+      />
+      <keep-alive v-else>
+        <DefaultConfigTab v-if="effectiveTab === 'default'" />
+        <AccountTaskConfigTab v-else-if="effectiveTab === 'tasks'" />
+        <MyResourcesTab v-else-if="effectiveTab === 'resources'" />
+      </keep-alive>
+    </div>
 
     <div class="h-6 shrink-0 -mt-6" aria-hidden="true"></div>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { gsap } from 'gsap'
 import Icon from '@/components/Icon.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
 import { useAuthStore } from '@/stores/auth'
@@ -49,6 +52,18 @@ import SignConfigSkeleton from '@/components/signconfig/SignConfigSkeleton.vue'
 const store = useSignConfigStore()
 const auth = useAuthStore()
 const isAdmin = computed(() => auth.isAdmin)
+
+// 一级 Tab 切换与数据加载完成后，内容区整体淡入上移，与卡片错峰入场形成层次
+const content = ref(null)
+const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+function animateTab() {
+  if (prefersReduced || !content.value) return
+  gsap.fromTo(
+    content.value,
+    { opacity: 0, y: 14 },
+    { opacity: 1, y: 0, duration: 0.4, ease: 'power2.out', clearProps: 'opacity,transform' }
+  )
+}
 
 // 角色分治：管理员管平台资源（仅系统位置池 + UA 模板）；普通用户用平台（配置套 + 账号任务 + 我的资源）
 const tabs = computed(() =>
@@ -73,7 +88,29 @@ const effectiveTab = computed(() => {
   return vals.includes(store.activeTab) ? store.activeTab : tabs.value[0]?.value || 'default'
 })
 
-onMounted(() => {
+onMounted(async () => {
   store.load()
+  await nextTick()
+  animateTab()
 })
+
+// 切换 Tab：内容区淡入上移
+watch(
+  () => effectiveTab.value,
+  async () => {
+    await nextTick()
+    animateTab()
+  }
+)
+
+// 首屏数据就绪后补播一次（loading 由 true 转 false 时内容才渲染）
+watch(
+  () => store.loading,
+  async (loading) => {
+    if (!loading) {
+      await nextTick()
+      animateTab()
+    }
+  }
+)
 </script>

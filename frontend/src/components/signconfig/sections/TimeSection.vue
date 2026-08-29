@@ -4,35 +4,23 @@
       <div>
         <label class="mb-1.5 block text-xs font-medium text-ink-muted">每日签到时间段</label>
         <div class="flex items-center gap-2">
-          <BaseSelect v-model="config.time.startHour" :options="hourOptions" size="sm" class="w-24" />
+          <BaseSelect v-model="config.time.startHour" :options="hourOptions" size="sm" editable numeric class="w-24" />
           <span class="text-sm text-ink-muted">至</span>
-          <BaseSelect v-model="config.time.endHour" :options="hourOptions" size="sm" class="w-24" />
+          <BaseSelect v-model="config.time.endHour" :options="hourOptions" size="sm" editable numeric class="w-24" />
           <span class="text-sm text-ink-muted">时</span>
         </div>
-        <p class="mt-1.5 text-xs text-ink-muted">部分签到任务仅允许在此时段内签到，属于业务限制，与下方「定时签到时间」相互独立。</p>
+        <p class="mt-1.5 text-xs text-ink-muted">部分签到任务仅允许在此时段内签到，属于业务限制，与下方「定时签到时间」相互独立。可下拉选择或直接键入数字。</p>
       </div>
 
       <div>
         <label class="mb-1.5 block text-xs font-medium text-ink-muted">定时签到时间</label>
         <div class="flex items-center gap-2">
-          <input
-            v-model.number="config.time.signTime.hour"
-            type="number"
-            min="0"
-            max="23"
-            class="w-20 rounded-lg border border-ink/10 bg-white px-3 py-2 text-center text-sm tabular-nums outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
-          />
+          <BaseSelect v-model="config.time.signTime.hour" :options="hourOptions" size="sm" editable numeric class="w-20" />
           <span class="text-sm text-ink-muted">时</span>
-          <input
-            v-model.number="config.time.signTime.minute"
-            type="number"
-            min="0"
-            max="59"
-            class="w-20 rounded-lg border border-ink/10 bg-white px-3 py-2 text-center text-sm tabular-nums outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
-          />
+          <BaseSelect v-model="config.time.signTime.minute" :options="minuteOptions" size="sm" editable numeric class="w-20" />
           <span class="text-sm text-ink-muted">分</span>
         </div>
-        <p class="mt-1.5 text-xs text-ink-muted">调度器在每周选定星期、该时刻附近（叠加随机延时）自动触发；定时任务页默认采纳此时间。</p>
+        <p class="mt-1.5 text-xs text-ink-muted">调度器在每周选定星期、该时刻附近（叠加随机延时）自动触发；定时任务页默认采纳此时间。可下拉选择或直接键入数字。</p>
       </div>
 
       <div>
@@ -99,7 +87,14 @@ const props = defineProps({
   required: { type: Boolean, default: false }
 })
 
-const hourOptions = computed(() => Array.from({ length: 24 }, (_, h) => ({ label: String(h), value: h })))
+// 小时下拉补零显示（01/02…23），与定时任务页 pad() 展示保持一致，提升观感
+const hourOptions = computed(() =>
+  Array.from({ length: 24 }, (_, h) => ({ label: String(h).padStart(2, '0'), value: h }))
+)
+// 分钟下拉同样补零（00/01…59），与小时保持一致
+const minuteOptions = computed(() =>
+  Array.from({ length: 60 }, (_, m) => ({ label: String(m).padStart(2, '0'), value: m }))
+)
 const weekDays = [
   { value: 1, label: '周一' },
   { value: 2, label: '周二' },

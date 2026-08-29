@@ -5,7 +5,7 @@ import json
 from flask import Blueprint, request
 
 from app.extensions import db
-from app.models import BAccount, ConfigSet, Schedule, SignRecord
+from app.models import BAccount, ConfigSet, PoolLocation, Schedule, SignRecord
 from app.schemas.schedule_schema import load_create, load_update
 from app.utils.auth import token_required
 from app.utils.response import error, success
@@ -96,14 +96,22 @@ def update_schedule(sched_id):
         s.mode = 'standalone'
         if 'config_set_id' not in data or data.get('config_set_id') is None:
             s.config_set_id = None
+        # 后端兜底：配置引用的位置必须真实存在（防位置池被清空后旧引用仍被放行启用）
+        raw_loc = (data['config'] or {}).get('locationId')
+        if raw_loc:
+            try:
+                loc = db.session.get(PoolLocation, int(raw_loc))
+            except (TypeError, ValueError):
+                loc = None
+            if not loc or (not loc.is_system and loc.user_id != request.current_user.id):
+                return error(message='所选位置不存在或不可用', code=4403, status=400)
     if 'config_set_id' in data:
         if data['config_set_id'] is not None:
             cs = ConfigSet.query.filter_by(id=data['config_set_id'], user_id=request.current_user.id).first()
             if not cs:
                 return error(message='配置套不存在或不可用', code=4400, status=400)
-        # 仅传 config_set_id（未带 config）维持 follow 关联；带 config 时由上方逻辑处理
-        if 'config' not in data:
-            s.config_set_id = data['config_set_id']
+        # 套用配置套（带 config + configSetId）时同样写入来源标签；纯绑定（仅 configSetId）走 follow 逻辑
+        s.config_set_id = data['config_set_id']
     # 应用配置套即跟随模式：仅传 config_set_id（无 config）时自动置 follow（前端"应用到此任务"只发 configSetId）
     if 'config_set_id' in data and data['config_set_id'] is not None and 'mode' not in data and 'config' not in data:
         s.mode = 'follow'

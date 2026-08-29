@@ -26,7 +26,7 @@
         <p class="truncate">地址：{{ selected.address }}</p>
         <p>经纬度：{{ selected.lat }}, {{ selected.lng }} · 坐标偏移 {{ selected.offset }} 米</p>
       </div>
-      <p v-else class="text-xs text-ink-muted">未指定位置；可在「位置池」中添加平台预设位置或我的位置。</p>
+      <p v-else class="text-xs text-ink-muted">尚未选择位置（必填项）。可在「位置池」中添加平台预设位置或我的位置后从上方下拉选择。</p>
     </div>
   </ConfigSection>
 </template>

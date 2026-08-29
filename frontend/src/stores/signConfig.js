@@ -37,6 +37,30 @@ export const useSignConfigStore = defineStore('signConfig', () => {
   function clearFormErrors() {
     formErrors.value = {}
   }
+  // 资源可用性兜底：配置引用的位置 / 图片必须真实存在于对应资源池，否则提示补全。
+  // 用于「保存配置套」「启用 / 保存任务配置」前，防止位置池或图库被清空后仍能保存或启动。
+  // 失效的旧位置引用在此直接置空，避免把悬空 id 落库。
+  function validateResources(config) {
+    const errs = {}
+    const loc = config.locationId
+    if (loc) {
+      const exists = systemLocations.value.some((l) => l.id === loc) ||
+        userLocations.value.some((l) => l.id === loc)
+      if (!exists) {
+        config.locationId = '' // 旧引用已失效，置空等待用户重新选择
+        errs.location = '原选位置已不存在（位置池可能已清空），请重新选择'
+      }
+    }
+    const hasLocationPool = systemLocations.value.length > 0 || userLocations.value.length > 0
+    if (!hasLocationPool && !config.locationId) {
+      errs.location = errs.location || '位置池暂无数据，请先到「我的资源 → 位置池」添加签到位置'
+    }
+    const img = config.image || {}
+    if (img.enabled && imageLibrary.value.filter((i) => !i.inTrash).length === 0) {
+      errs.image = '已开启图片签到但图库暂无图片，请先到「我的资源 → 图库」上传'
+    }
+    return errs
+  }
   // 当前正在编辑的配置对象：任务页编辑 taskConfig，其余页编辑默认配置套
   function currentEditableConfig() {
     if (activeTab.value === 'tasks') return taskConfig.value
@@ -151,6 +175,14 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     if (!snap) return true
     return JSON.stringify(cfg) !== JSON.stringify(snap)
   })
+  // 当前正在编辑的配置套相对其「已保存快照」是否脏：未改动时禁用「保存配置套」按钮。
+  const activeSetDirty = computed(() => {
+    const s = activeSet.value
+    if (!s) return false
+    const snap = savedSnapshots.value[s.id]
+    if (!snap) return true
+    return JSON.stringify(s.config) !== JSON.stringify(snap)
+  })
 
   // 当前账号×类型的调度实例状态：是否已创建实例 / 是否启用 / 实例与绑定 id
   const taskScheduleState = computed(() => {
@@ -187,7 +219,8 @@ export const useSignConfigStore = defineStore('signConfig', () => {
   const locationOptions = computed(() => {
     const sys = systemLocations.value.map((l) => ({ label: `系统 · ${l.name}`, value: l.id }))
     const mine = userLocations.value.map((l) => ({ label: `我的 · ${l.name}`, value: l.id }))
-    return [{ label: '不指定位置', value: '' }, ...sys, ...mine]
+    // 三方平台签到位置为必填，不指定属错误状态，故下拉不提供「不指定位置」清空项
+    return [...sys, ...mine]
   })
   const credentialOptions = computed(() => credentials.value.map((c) => ({ label: `${c.name}（${c.type}）`, value: c.id })))
   const uaOptions = computed(() => [{ label: '自定义 UA', value: '' }, ...uaTemplates.value.map((u) => ({ label: u.name, value: u.id }))])
@@ -200,10 +233,8 @@ export const useSignConfigStore = defineStore('signConfig', () => {
   const credentialOptionsByChannel = computed(() => {
     const map = {}
     for (const c of channelOptions) {
-      map[c.value] = [
-        { label: '未选择', value: '' },
-        ...credentials.value.filter((x) => x.type === c.value).map((x) => ({ label: x.name, value: x.id }))
-      ]
+      // 凭证为必填项，不提供「未选择」清空项，避免勾选通道却不绑凭证的悬挂状态
+      map[c.value] = credentials.value.filter((x) => x.type === c.value).map((x) => ({ label: x.name, value: x.id }))
     }
     return map
   })
@@ -213,7 +244,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
   const taskStatus = computed(() => {
     const b = scheduleBindings.value[taskConfigKey.value]
     if (b && b.config) {
-      if (b.configSetId) return { text: `基于「${setName(b.configSetId)}」自定义`, cls: 'bg-info/10 text-info' }
+      if (b.configSetId) return { text: `已套用「${setName(b.configSetId)}」`, cls: 'bg-info/10 text-info' }
       return { text: '自定义配置（已解绑配置套）', cls: 'bg-info/10 text-info' }
     }
     if (b && b.configSetId) {
@@ -294,6 +325,12 @@ export const useSignConfigStore = defineStore('signConfig', () => {
       toast(`保存失败：${Object.values(errs).join('；')}`, 'error')
       return
     }
+    const resErrs = validateResources(activeSet.value.config)
+    if (Object.keys(resErrs).length) {
+      formErrors.value = { ...formErrors.value, ...resErrs }
+      toast(`保存失败：${Object.values(resErrs).join('；')}`, 'error')
+      return
+    }
     formErrors.value = {}
     saving.value = true
     try {
@@ -368,6 +405,12 @@ export const useSignConfigStore = defineStore('signConfig', () => {
       toast(`保存失败：${Object.values(errs).join('；')}`, 'error')
       return
     }
+    const resErrs = validateResources(draft)
+    if (Object.keys(resErrs).length) {
+      formErrors.value = { ...formErrors.value, ...resErrs }
+      toast(`保存失败：${Object.values(resErrs).join('；')}`, 'error')
+      return
+    }
     formErrors.value = {}
     saving.value = true
     try {
@@ -422,6 +465,12 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     if (Object.keys(errs).length) {
       formErrors.value = errs
       toast(`启用失败：${Object.values(errs).join('；')}`, 'error')
+      return false
+    }
+    const resErrs = validateResources(draft)
+    if (Object.keys(resErrs).length) {
+      formErrors.value = { ...formErrors.value, ...resErrs }
+      toast(`启用失败：${Object.values(resErrs).join('；')}`, 'error')
       return false
     }
     formErrors.value = {}
@@ -751,6 +800,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     taskStatus,
     taskConfigMetaOf,
     isDirty,
+    activeSetDirty,
     taskScheduleState,
     accountTree,
     locationOptions,

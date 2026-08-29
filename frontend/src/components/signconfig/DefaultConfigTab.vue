@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-1 min-h-0 gap-4">
+  <div ref="root" class="flex flex-1 min-h-0 gap-4">
     <!-- 左：配置套列表（多项命名模板） -->
     <aside class="flex w-56 shrink-0 flex-col overflow-hidden rounded-2xl dash-card xl:w-60">
       <div class="flex shrink-0 items-center justify-between border-b border-ink/5 p-3">
@@ -15,35 +15,56 @@
       </div>
       <div class="xb-scroll flex-1 min-h-0 overflow-auto p-2">
         <p v-if="store.userConfigSets.length === 0" class="px-1 py-8 text-center text-xs text-ink-muted">暂无配置套<br />点击右上角新建</p>
-        <div v-for="s in store.userConfigSets" :key="s.id" class="mb-1">
+        <div v-for="s in store.userConfigSets" :key="s.id" class="xb-set-item mb-1">
           <div
             class="flex items-center gap-1 rounded-lg px-2 py-1.5 transition"
             :class="store.activeSetId === s.id ? 'bg-brand/10 text-brand' : 'text-ink-soft hover:bg-cloud'"
           >
-            <button type="button" class="min-w-0 flex-1 truncate text-left text-sm" @click="store.setActiveSet(s.id)">
+            <button
+              v-if="renamingId !== s.id"
+              type="button"
+              class="min-w-0 flex-1 truncate text-left text-sm"
+              @click="store.setActiveSet(s.id)"
+            >
               {{ s.name }}
             </button>
-            <button type="button" class="shrink-0 rounded p-1 text-ink-muted hover:text-ink-soft" title="重命名" @click="startRename(s)">
+            <input
+              v-else
+              :ref="(el) => setRenameInput(el)"
+              v-model="renameText"
+              type="text"
+              class="min-w-0 flex-1 rounded-md border border-brand/40 bg-white px-2 py-0.5 text-sm text-ink outline-none focus:ring-2 focus:ring-brand/10"
+              @keyup.enter="commitRename(s)"
+              @keyup.esc="cancelRename"
+              @blur="commitRename(s)"
+            />
+            <button
+              v-if="renamingId !== s.id"
+              type="button"
+              class="shrink-0 rounded p-1 text-ink-muted transition hover:text-ink-soft"
+              title="重命名"
+              @click="startRename(s)"
+            >
               <Icon name="edit" :size="13" />
             </button>
             <button
+              v-else
               type="button"
-              class="shrink-0 rounded p-1 text-ink-muted hover:text-danger"
-              title="删除"
-              :disabled="store.userConfigSets.length <= 1"
-              @click="store.deleteConfigSet(s.id)"
+              class="shrink-0 rounded p-1 text-brand transition hover:bg-brand/10"
+              title="确认重命名"
+              @click="commitRename(s)"
+            >
+              <Icon name="check" :size="13" />
+            </button>
+            <button
+              type="button"
+              class="shrink-0 rounded p-1 text-ink-muted transition hover:text-danger"
+              :title="store.userConfigSets.length <= 1 ? '至少保留一个配置套，无法删除' : '删除'"
+              @click="onDelete(s)"
             >
               <Icon name="trash" :size="13" />
             </button>
           </div>
-          <input
-            v-if="renamingId === s.id"
-            v-model="renameText"
-            type="text"
-            class="mb-1 w-full rounded-lg border border-brand/30 bg-white px-2 py-1 text-sm text-ink outline-none focus:ring-2 focus:ring-brand/10"
-            @keyup.enter="commitRename(s)"
-            @blur="commitRename(s)"
-          />
         </div>
       </div>
     </aside>
@@ -52,7 +73,7 @@
     <div class="xb-scroll flex-1 min-h-0 overflow-auto">
       <div v-if="!store.activeSet" class="dash-card flex min-h-[300px] items-center justify-center text-ink-muted">请先在左侧创建配置套</div>
       <template v-else>
-        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div class="xb-reveal mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h3 class="text-sm font-semibold text-ink">正在编辑：{{ store.activeSet.name }}</h3>
             <p class="text-xs text-ink-muted">配置套是一份完整模板；在「账号任务配置」里可指定某任务回填此套。</p>
@@ -69,7 +90,8 @@
             <button
               type="button"
               class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
-              :disabled="store.saving"
+              :disabled="store.saving || !store.activeSetDirty"
+              :title="store.activeSetDirty ? '' : '未修改任何配置项，无需保存'"
               @click="store.saveActiveSet"
             >
               <Icon name="check" :size="14" />{{ store.saving ? '保存中…' : '保存配置套' }}
@@ -77,7 +99,7 @@
           </div>
         </div>
 
-        <div class="rounded-xl border-l-4 border-brand/30 bg-brand/5 px-4 py-3 text-xs leading-relaxed text-ink-soft">
+        <div class="xb-reveal rounded-xl border-l-4 border-brand/30 bg-brand/5 px-4 py-3 text-xs leading-relaxed text-ink-soft">
           这是<strong>你的配置套（命名模板）</strong>。不同 B 账号批次时间规律不同（如一批周三至周五、一批仅周日），可分别建套；填写账号任务时再引用对应套回填，避免重复配置。改完点右上角保存。
         </div>
 
@@ -95,9 +117,11 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onActivated, onUnmounted, watch, nextTick } from 'vue'
+import { gsap } from 'gsap'
 import Icon from '@/components/Icon.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
+import { toast } from '@/utils/toast'
 import TimeSection from '@/components/signconfig/sections/TimeSection.vue'
 import LocationSection from '@/components/signconfig/sections/LocationSection.vue'
 import RemarkSection from '@/components/signconfig/sections/RemarkSection.vue'
@@ -108,11 +132,21 @@ import MasonryGrid from '@/components/signconfig/MasonryGrid.vue'
 
 const store = useSignConfigStore()
 
+// —— 重命名：原地行内编辑，不再在下方弹出独立输入框 ——
 const renamingId = ref('')
 const renameText = ref('')
+function setRenameInput(el) {
+  if (el) {
+    el.focus()
+    el.select()
+  }
+}
 function startRename(s) {
   renamingId.value = s.id
   renameText.value = s.name
+}
+function cancelRename() {
+  renamingId.value = ''
 }
 function commitRename(s) {
   if (renamingId.value !== s.id) return
@@ -120,4 +154,45 @@ function commitRename(s) {
   if (name && name !== s.name) store.renameConfigSet(s.id, name)
   renamingId.value = ''
 }
+// 仅剩一个配置套时禁止删除并给出提示（复用全局 Toast 组件）
+function onDelete(s) {
+  if (store.userConfigSets.length <= 1) {
+    toast('至少保留一个配置套，无法删除', 'warning')
+    return
+  }
+  store.deleteConfigSet(s.id)
+}
+
+// —— 入场动画（GSAP）：侧栏列表、右栏标题/说明、六段卡片错峰淡入 ——
+const root = ref(null)
+let ctx = null
+const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+function reveal() {
+  if (prefersReduced || !root.value) return
+  if (ctx) ctx.revert()
+  ctx = gsap.context(() => {
+    const tl = gsap.timeline({ defaults: { ease: 'power2.out' } })
+    const listItems = gsap.utils.toArray('.xb-set-item')
+    const heads = gsap.utils.toArray('.xb-reveal')
+    const cards = gsap.utils.toArray('.xb-masonry-item')
+    if (listItems.length) tl.fromTo(listItems, { opacity: 0, x: -12 }, { opacity: 1, x: 0, duration: 0.4, stagger: 0.06, clearProps: 'opacity,transform' }, 0)
+    if (heads.length) tl.fromTo(heads, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.45, stagger: 0.08, clearProps: 'opacity,transform' }, 0.05)
+    if (cards.length) tl.fromTo(cards, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, stagger: 0.06, clearProps: 'opacity,transform' }, 0.1)
+  }, root.value)
+}
+onActivated(async () => {
+  await nextTick()
+  reveal()
+})
+// 切换配置套时右栏内容整体刷新，重新播放错峰入场
+watch(
+  () => store.activeSetId,
+  async () => {
+    await nextTick()
+    reveal()
+  }
+)
+onUnmounted(() => {
+  if (ctx) ctx.revert()
+})
 </script>

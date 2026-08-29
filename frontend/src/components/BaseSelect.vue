@@ -1,7 +1,36 @@
 <template>
   <div ref="root" class="xb-select relative inline-block w-full" :class="{ 'pointer-events-none opacity-60': disabled }">
-    <!-- 触发器：替换原生 select，外观沿用 login-input -->
+    <!-- 可输入（combobox）模式：触发器为输入框，既可下拉选择也可直接键入筛选/取值 -->
+    <div
+      v-if="editable"
+      class="xb-select-trigger flex w-full items-center justify-between gap-2 rounded-xl border border-ink/10 bg-white text-left text-sm text-ink outline-none transition focus-within:border-brand focus-within:ring-4 focus-within:ring-brand/10"
+      :class="size === 'sm' ? 'py-1.5 px-2.5' : 'py-2 px-3'"
+    >
+      <input
+        ref="triggerInput"
+        type="text"
+        :inputmode="numeric ? 'numeric' : 'text'"
+        :value="draft"
+        :placeholder="placeholder"
+        class="min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-ink-muted"
+        :disabled="disabled"
+        @focus="onEditableFocus"
+        @input="onEditableInput"
+        @keydown="onEditableKeydown"
+        @blur="onEditableBlur"
+      />
+      <Icon
+        name="chevron-down"
+        :size="16"
+        class="shrink-0 text-ink-muted transition-transform duration-200"
+        :class="open && 'rotate-180'"
+        @click.stop="toggle"
+      />
+    </div>
+
+    <!-- 纯下拉模式（默认）：触发器为按钮 -->
     <button
+      v-else
       type="button"
       class="xb-select-trigger flex w-full items-center justify-between gap-2 rounded-xl border border-ink/10 bg-white text-left text-sm text-ink-soft outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
       :class="size === 'sm' ? 'py-2 px-2.5' : 'py-2.5 px-3'"
@@ -79,7 +108,11 @@ const props = defineProps({
   disabled: { type: Boolean, default: false },
   size: { type: String, default: 'md' }, // md | sm
   // 展开方向：bottom 向下 / top 向上 / auto 按可用空间自适应（默认 bottom，保持旧行为）
-  placement: { type: String, default: 'bottom' }
+  placement: { type: String, default: 'bottom' },
+  // 可输入模式：触发器改为输入框，支持键入筛选/取值（下拉仍可用）；默认关闭，不影响既有纯下拉用法
+  editable: { type: Boolean, default: false },
+  // 可输入模式下键盘为数字键盘（时间等纯数字场景）
+  numeric: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -90,6 +123,7 @@ const highlightedIndex = ref(-1)
 const root = ref(null)
 const list = ref(null)
 const searchInput = ref(null)
+const triggerInput = ref(null)
 const panel = ref(null)
 const panelPlacement = ref(props.placement === 'auto' ? 'bottom' : props.placement)
 // 面板位置（fixed，相对视口）：由触发器 getBoundingClientRect 计算，脱离滚动容器
@@ -108,11 +142,16 @@ const selectedLabel = computed(() => {
   const hit = normalized.value.find((o) => o.value === props.modelValue)
   return hit ? hit.label : ''
 })
+// 可输入模式：草稿文本（未聚焦时与所选 label 同步，聚焦时可键入筛选/取值）
+const draft = ref(selectedLabel.value)
 
 const filteredOptions = computed(() => {
-  if (!props.searchable || !query.value.trim()) return normalized.value
+  if (!props.searchable && !props.editable) return normalized.value
   const kw = query.value.trim().toLowerCase()
-  return normalized.value.filter((o) => o.label.toLowerCase().includes(kw))
+  if (!kw) return normalized.value
+  return normalized.value.filter(
+    (o) => o.label.toLowerCase().includes(kw) || String(o.value).toLowerCase().includes(kw)
+  )
 })
 
 function isSelected(opt) {
@@ -129,11 +168,16 @@ async function openPanel() {
   if (props.disabled || open.value) return
   open.value = true
   query.value = ''
+  if (props.editable) draft.value = selectedLabel.value
   const idx = normalized.value.findIndex((o) => o.value === props.modelValue)
   highlightedIndex.value = idx >= 0 ? idx : 0
   await nextTick()
   refinePlacement()
   if (props.searchable && searchInput.value) searchInput.value.focus()
+  if (props.editable && triggerInput.value) {
+    triggerInput.value.focus()
+    triggerInput.value.select()
+  }
 }
 
 // 面板定位：始终以视口坐标（fixed）渲染在 body 下，按可用空间自动上/下翻转。
@@ -170,12 +214,14 @@ function onScrollClose(e) {
 function select(opt) {
   open.value = false
   query.value = ''
+  if (props.editable) draft.value = opt.label
   emit('update:modelValue', opt.value)
 }
 
 function close() {
   open.value = false
   query.value = ''
+  if (props.editable) draft.value = selectedLabel.value
 }
 
 function scrollActiveIntoView() {
@@ -207,6 +253,77 @@ function onKeydown(e) {
   } else if (e.key === 'Escape') {
     close()
   }
+}
+
+// —— 可输入（combobox）模式的交互 ——
+// 选中项变化时（关闭态）同步草稿文本，保证输入框展示当前所选 label（如补零的「07」）
+watch(selectedLabel, (v) => {
+  if (!open.value) draft.value = v
+})
+
+function onEditableFocus() {
+  if (props.disabled) return
+  openPanel()
+}
+
+function onEditableInput(e) {
+  draft.value = e.target.value
+  query.value = e.target.value
+}
+
+// 把键入文本解析为选项值：优先精确 label 匹配，其次按数字值匹配（时间补零场景），
+// 再退化为唯一筛选结果；均不匹配则回退到当前选择，避免误写非法值。
+function commitDraft() {
+  const t = (draft.value || '').trim()
+  if (!t) {
+    draft.value = selectedLabel.value
+    close()
+    return
+  }
+  const byLabel = normalized.value.find((o) => o.label.toLowerCase() === t.toLowerCase())
+  if (byLabel) {
+    select(byLabel)
+    return
+  }
+  const num = Number(t)
+  if (t !== '' && !Number.isNaN(num)) {
+    const byVal = normalized.value.find((o) => o.value === num || o.value === t)
+    if (byVal) {
+      select(byVal)
+      return
+    }
+  }
+  const f = filteredOptions.value
+  if (f.length === 1) {
+    select(f[0])
+    return
+  }
+  draft.value = selectedLabel.value
+  close()
+}
+
+function onEditableKeydown(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    commitDraft()
+  } else if (e.key === 'Escape') {
+    e.preventDefault()
+    draft.value = selectedLabel.value
+    close()
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    if (!open.value) openPanel()
+    else move(1)
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    if (!open.value) openPanel()
+    else move(-1)
+  }
+}
+
+// 失焦时按键入内容定稿（选不到合法值则回退当前选择）；点击面板内选项时由选项 @click 覆盖。
+function onEditableBlur() {
+  commitDraft()
 }
 
 // 搜索框键盘：上下移动、回车选择、Esc 关闭面板

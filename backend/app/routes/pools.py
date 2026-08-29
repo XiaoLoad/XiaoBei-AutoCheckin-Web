@@ -1,16 +1,18 @@
 # 平台资源池蓝图：四池聚合读取 + 位置池 CRUD。
 # 可见性口径：is_system=1 全员可读、仅 admin 可写；私有行严格 user_id 隔离。
 import json
+from types import SimpleNamespace
 
 from flask import Blueprint, request
 
 from app.extensions import db
-from app.models import (ConfigSet, ImageGroup, PoolCredential, PoolImage,
+from app.models import (BAccount, ConfigSet, ImageGroup, PoolCredential, PoolImage,
                         PoolLocation, PoolUa)
 from app.schemas.pools_schema import (load_credential, load_credential_update,
                                       load_location, load_ua,
                                       mask_fields, required_missing)
 from app.services.crypto import decrypt, encrypt
+from app.services.push_render import build_ctx, send_channel
 from app.utils.auth import admin_required, token_required
 from app.utils.response import error, success
 
@@ -275,3 +277,48 @@ def delete_credential(cred_id):
     db.session.delete(c)
     db.session.commit()
     return success(message='删除成功')
+
+
+def _cred_key_of(channel, fields):
+    """从解密后的字段取出单通道密钥（serverchan/pushplus 用字符串；email 用字段字典）。"""
+    if channel == 'serverchan':
+        return fields.get('serverchanKey') or None
+    if channel == 'pushplus':
+        return fields.get('pushplusToken') or None
+    if channel == 'email':
+        if fields.get('emailSmtp') and fields.get('emailFrom') and fields.get('emailTo'):
+            return {k: fields.get(k) for k in ('emailSmtp', 'emailFrom', 'emailPass', 'emailTo')}
+    return None
+
+
+@bp.route('/credentials/<int:cred_id>/test-push', methods=['POST'])
+@token_required
+def test_push_credential(cred_id):
+    """用该凭证真实发送一条测试推送，验证通道可用性。仅发送凭证自身通道。"""
+    c = PoolCredential.query.filter_by(id=cred_id, user_id=request.current_user.id).first()
+    if not c:
+        return error(message='凭证不存在', code=4040, status=404)
+    try:
+        fields = json.loads(decrypt(c.secret_enc))
+    except Exception:
+        return error(message='凭证密钥解析失败', code=4322, status=400)
+
+    payload = request.get_json(silent=True) or {}
+    template = payload.get('template') or 'html'
+    key = _cred_key_of(c.channel, fields)
+    if key is None:
+        return error(message=f'凭证缺少 {c.channel} 必要字段', code=4321, status=400)
+
+    # 样例上下文：用本人首个账号信息贴近真实效果；无账号则用占位，避免测试受限于是否有账号
+    acc = BAccount.query.filter_by(user_id=request.current_user.id).order_by(BAccount.id.asc()).first()
+    if acc is None:
+        acc = SimpleNamespace(profile={}, account='测试账号')
+    schedule = SimpleNamespace(task_type='dorm')
+    resolved = {'time': {'startHour': 8, 'endHour': 22},
+                'locationId': None,
+                'remarks': ['这是一条测试推送，用于验证通道可用性']}
+    ctx = build_ctx(acc, schedule, resolved, 'success', image_url='')
+    ok, err = send_channel(c.channel, key, ctx, template)
+    if ok:
+        return success(message='测试推送已发送，请查收')
+    return error(message=f'测试推送失败：{err}', code=4324, status=502)

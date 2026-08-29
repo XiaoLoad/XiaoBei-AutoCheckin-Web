@@ -28,7 +28,8 @@ export function makeConfig() {
       useOwnCredential: true, // true=回填"我的凭证"；false=下方直接填写
       credIds: { serverchan: null, pushplus: null, email: null }, // 回填"我的凭证"时各通道各自绑定的凭证 id
       cred: { serverchanKey: '', pushplusToken: '', emailSmtp: '', emailFrom: '', emailPass: '', emailTo: '' },
-      notify: { success: true, skip: true, fail: true } // 各状态推送开关：成功 / 跳过 / 失败
+      notify: { success: true, skip: true, fail: true }, // 各状态推送开关：成功 / 跳过 / 失败
+      template: 'html' // 推送模板：html（默认，优雅卡片）/ txt（纯文本）/ markdown
     },
     advanced: {
       uaTemplateId: null, // 引用型：所选 UA 模板 id（系统级资源池）
@@ -160,6 +161,12 @@ export async function saveCredential(payload) {
 export async function deleteCredential(id) {
   await request({ url: `/pools/credentials/${id}`, method: 'delete' })
   return (await refreshPools()).credentials
+}
+
+// 测试推送：用该凭证真实发送一条样例消息，验证通道可用性（template 默认 html）
+export async function testPushCredential(id, template = 'html') {
+  await request({ url: `/pools/credentials/${id}/test-push`, method: 'post', data: { template } })
+  return true
 }
 
 // 图库：真实上传（可指定分组）/ 回收站 / 删除

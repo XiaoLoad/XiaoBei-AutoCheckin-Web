@@ -25,6 +25,7 @@ from app.services.b_platform import get_adapter
 from app.services.b_platform.base import BPlatformError
 from app.services.crypto import decrypt
 from app.services.image_store import consume_next_image
+from app.services.push_render import build_ctx, send_channel
 from app.utils.schedule_utils import compute_next_run, extract_schedule_time
 
 log = logging.getLogger('scheduler')
@@ -73,6 +74,13 @@ def init_scheduler(app):
     global _app, _started, _atexit_registered
     _app = app
     if os.getenv('SCHEDULER_ENABLED', '1').lower() in ('0', 'false'):
+        return
+    # 开发模式开启 reloader 时，父子两进程都会进入本函数、各起一个调度器 → 任务重复执行。
+    # reloader 仅在真正提供服务的子进程设置 WERKZEUG_RUN_MAIN='true'，父进程不设置，
+    # 故父进程跳过调度器、仅子进程接管（保留热重载，同时消除重复）。非 debug（reloader 关闭）
+    # 或生产多进程场景不受此守卫影响，仍按 SCHEDULER_ENABLED 拆分策略处理。
+    if app.config.get('DEBUG') and os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
+        log.info('reloader 父进程不启动调度器（避免任务重复执行），由子进程接管')
         return
     if _started:
         return
@@ -168,13 +176,15 @@ def _prune_old_sign_records():
 
 def _extract_jitter(schedule):
     """随机延迟上限（分钟）→ 供 CronTrigger jitter 使用（秒）。
-    follow 取合并覆盖后的 time.randomDelayMax；custom 取 schedule.custom.randomDelayMax。"""
-    if schedule.mode == 'follow':
-        resolved = _resolve(schedule)
-        if resolved is None:
-            return 0
-        return int((resolved.get('time') or {}).get('randomDelayMax') or 0)
-    return int((schedule.custom or {}).get('randomDelayMax') or 0)
+    统一从解析后的配置 time.randomDelayMax 取（standalone/follow 二者均落在 _resolve 的完整配置里）；
+    custom 为内联 time-only 扁平结构，随机延迟在 schedule.custom 顶层。旧实现对 standalone 误读
+    schedule.custom（空）导致 jitter=0、多任务整点一起触发，现已修正。"""
+    if schedule.mode == 'custom':
+        return int((schedule.custom or {}).get('randomDelayMax') or 0)
+    resolved = _resolve(schedule)
+    if resolved is None:
+        return 0
+    return int((resolved.get('time') or {}).get('randomDelayMax') or 0)
 
 
 def _register_job(schedule):
@@ -267,12 +277,16 @@ def _execute(schedule):
         if resolved is None:
             _commit_result(schedule, acc, 'skip', '配置缺失（配置套未绑定或已删除）')
             return
+        # 本次实际提交的单条备注：多条随机选一、单条即用该条、无则占位；
+        # 同时交给 checkin（真实提交 B 平台用）与推送展示，保证「提交什么就推送什么」。
+        submitted_remark = _select_remark(resolved)
         session = {
             'token': acc.get_token(),
             'account': acc.account,
             'profile': acc.profile,
         }
-        result = get_adapter().checkin(session, {'taskType': schedule.task_type, **resolved})
+        task = {'taskType': schedule.task_type, **resolved, 'submittedRemark': submitted_remark}
+        result = get_adapter().checkin(session, task)
         if result is None or not result.ok:
             reason = result.fail_reason if result else '无返回'
             outcome = 'fail'
@@ -299,9 +313,12 @@ def _execute(schedule):
     # 绝不再写第二条 SignRecord，避免一次执行产生「成功 + 失败」两条重复日志
     try:
         if outcome is not None:
-            dispatch_push(resolved, schedule, acc, outcome, reason)
-        if outcome == 'success':
-            _consume_configured_image(schedule, resolved)
+            # 成功时先消费图片拿回 URL，供推送展示签到凭证图
+            image_url = ''
+            if outcome == 'success':
+                image_url = _consume_configured_image(schedule, resolved) or ''
+            dispatch_push(resolved, schedule, acc, outcome, reason,
+                          image_url=image_url, submitted_remark=submitted_remark)
     except Exception as e:
         log.warning('任务 %s 后置动作失败（已落库的执行记录不受影响）：%s', schedule.id, e)
 
@@ -309,10 +326,11 @@ def _execute(schedule):
 def _consume_configured_image(schedule, resolved):
     """按配置套 image 配置消费一张图库图片。
     enabled 未开启直接跳过；groupId ''=全部图库，否则限定分组；strategy：recycle 轮回
-    （用尽整批回池）/ trash 回收站 / delete 删除，未知兜底 trash。无图仅记日志，不影响主链路。"""
+    （用尽整批回池）/ trash 回收站 / delete 删除，未知兜底 trash。无图仅记日志，不影响主链路。
+    返回可被推送展示的图片 URL（delete 策略已物理删除故返回空），无图返回空串。"""
     cfg = (resolved or {}).get('image')
     if not isinstance(cfg, dict) or not cfg.get('enabled'):
-        return
+        return ''
     raw_group = cfg.get('groupId')
     try:
         group_id = int(raw_group) if raw_group not in (None, '', 0) else None
@@ -323,8 +341,29 @@ def _consume_configured_image(schedule, resolved):
     if consumed is None:
         log.warning('任务 %s 签到成功但取图范围内无可用图片（范围=%s，策略=%s）',
                     schedule.id, f'分组{group_id}' if group_id else '全部图库', strategy)
-    else:
-        log.info('任务 %s 消费图片 #%s（策略=%s）', schedule.id, consumed, strategy)
+        return ''
+    log.info('任务 %s 消费图片 #%s（策略=%s）', schedule.id, consumed, strategy)
+    # delete 策略已物理删除，仅 recycle/trash 仍可被外部预览（需配置 PUSH_IMAGE_BASE 公网地址）
+    if strategy == 'delete':
+        return ''
+    base = os.getenv('PUSH_IMAGE_BASE', '').strip().rstrip('/')
+    if not base:
+        return ''
+    return f'{base}/api/pools/images/{consumed}/file'
+
+
+def _select_remark(resolved):
+    """本次提交实际选用的单条备注：多条随机选一、单条即用该条、无则占位。
+    选择结果与 checkin 提交、推送展示共用，确保「提交什么就推送什么」，避免
+    多条备注被一并塞进推送（曾误把所有备注用 ' / ' 拼接上报）。"""
+    import random
+    remarks = (resolved or {}).get('remarks') or []
+    remarks = [str(r).strip() for r in remarks if str(r).strip()]
+    if not remarks:
+        return '—'
+    if len(remarks) == 1:
+        return remarks[0]
+    return random.choice(remarks)
 
 
 def _commit_result(schedule, acc, status, fail_reason=''):
@@ -352,11 +391,13 @@ def _commit_result(schedule, acc, status, fail_reason=''):
     db.session.commit()
 
 
-def dispatch_push(resolved, schedule, acc, status='success', reason=''):
+def dispatch_push(resolved, schedule, acc, status='success', reason='', image_url='', submitted_remark=''):
     """按配置套 push 分发执行结果（ServerChan / PushPlus / Email）。
     读取配置套的 push 结构：channels 决定通道、useOwnCredential 决定密钥来源
     （直接填写用 push.cred 内联字段；回填凭证用 push.credIds 引用资源池并解密）；
-    notify 开关控制各状态是否推送。无可用密钥则不发，发送失败仅记录，不影响主链路。"""
+    notify 开关控制各状态是否推送。无可用密钥则不发，发送失败仅记录，不影响主链路。
+    标题含签到账号姓名 + 状态；内容按 push.template(html/txt/markdown) 渲染，含账号/任务/
+    时间/位置/备注/图片；长度受 pushplus 限制守护。"""
     push = (resolved or {}).get('push')
     if not isinstance(push, dict) or not push:
         log.info('任务 %s 未配置推送，跳过分发', schedule.id)
@@ -378,27 +419,15 @@ def dispatch_push(resolved, schedule, acc, status='success', reason=''):
                     schedule.id, channels)
         return
 
-    status_label = {'success': '成功', 'skip': '跳过', 'fail': '失败'}.get(status, status)
-    title = f"【小北打卡】{'寝室' if schedule.task_type == 'dorm' else '活动'}签到{status_label}"
-    desp = (f"账号 {acc.account} 于 {now_cst().strftime('%Y-%m-%d %H:%M')} 签到{status_label}"
-            + (f"\n原因：{reason}" if reason else ''))
-
-    if creds.get('serverchan'):
-        try:
-            requests.post(f'https://sctapi.ftqq.com/{creds["serverchan"]}.send',
-                          data={'title': title, 'desp': desp}, timeout=8)
-            log.info('任务 %s ServerChan 推送成功', schedule.id)
-        except Exception as e:
-            log.warning('ServerChan 推送失败：%s', e)
-    if creds.get('pushplus'):
-        try:
-            requests.post('https://www.pushplus.plus/send',
-                          json={'token': creds['pushplus'], 'title': title, 'content': desp}, timeout=8)
-            log.info('任务 %s PushPlus 推送成功', schedule.id)
-        except Exception as e:
-            log.warning('PushPlus 推送失败：%s', e)
-    if creds.get('email'):
-        _send_email(creds['email'], title, desp)
+    template = push.get('template') or 'html'
+    ctx = build_ctx(acc, schedule, resolved, status, reason=reason,
+                    image_url=image_url, remark=submitted_remark or None)
+    for ch, key in creds.items():
+        ok, err = send_channel(ch, key, ctx, template)
+        if ok:
+            log.info('任务 %s %s 推送成功', schedule.id, ch)
+        else:
+            log.warning('%s 推送失败：%s', ch, err)
 
 
 def _resolve_push_creds(push, user_id):
@@ -441,20 +470,3 @@ def _resolve_push_creds(push, user_id):
             if email.get('emailSmtp') and email.get('emailFrom') and email.get('emailTo'):
                 out['email'] = email
     return out
-
-
-def _send_email(fields, subject, body):
-    """通过 SMTP（STARTTLS，端口 587）发送纯文本邮件。失败仅记录，不影响主链路。"""
-    try:
-        import smtplib
-        from email.mime.text import MIMEText
-        msg = MIMEText(body, 'plain', 'utf-8')
-        msg['Subject'] = subject
-        msg['From'] = fields['emailFrom']
-        msg['To'] = fields['emailTo']
-        with smtplib.SMTP(fields['emailSmtp'], 587, timeout=8) as s:
-            s.starttls()
-            s.login(fields['emailFrom'], fields['emailPass'])
-            s.sendmail(fields['emailFrom'], [fields['emailTo']], msg.as_string())
-    except Exception as e:
-        log.warning('Email 推送失败：%s', e)

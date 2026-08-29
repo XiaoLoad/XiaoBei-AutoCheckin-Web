@@ -4,6 +4,7 @@ dist/
 dist_build_check/
 .build-check/
 .build-*/
+.vb*/
 .verify-build/
 dist-ssr/
 .vite/

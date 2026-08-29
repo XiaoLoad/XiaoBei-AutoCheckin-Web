@@ -106,6 +106,23 @@
       </div>
 
       <div>
+        <label class="mb-1.5 block text-xs font-medium text-ink-muted">推送模板</label>
+        <div class="inline-flex rounded-xl bg-cloud p-1">
+          <button
+            v-for="t in templateOptions"
+            :key="t.value"
+            type="button"
+            class="rounded-lg px-3 py-1.5 text-sm font-medium transition"
+            :class="config.push.template === t.value ? 'bg-white text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
+            @click="config.push.template = t.value"
+          >
+            {{ t.label }}
+          </button>
+        </div>
+        <p class="mt-1.5 text-xs text-ink-muted">HTML 优雅卡片（微信/pushplus 推荐）；TXT / Markdown 为纯文本，图片等富内容不展示。内容受 pushplus 长度限制（标题 ≤100 字、内容 ≤2 万字）。</p>
+      </div>
+
+      <div>
         <label class="mb-1.5 block text-xs font-medium text-ink-muted">各状态推送开关</label>
         <div class="flex flex-wrap gap-4">
           <label class="flex items-center gap-2 text-sm text-ink-soft">成功<ConfigToggle v-model="config.push.notify.success" /></label>
@@ -133,6 +150,11 @@ const props = defineProps({
 
 const store = useSignConfigStore()
 const CHANNELS = ['serverchan', 'pushplus', 'email']
+const templateOptions = [
+  { label: 'HTML', value: 'html' },
+  { label: 'TXT', value: 'txt' },
+  { label: 'Markdown', value: 'markdown' }
+]
 
 // 补齐 credIds 结构，并兼容早期"单一 credId"数据：按凭证类型归位到对应通道
 function ensureCredIds(cfg) {
@@ -140,6 +162,7 @@ function ensureCredIds(cfg) {
   if (!push) return
   if (!push.credIds || typeof push.credIds !== 'object') push.credIds = {}
   for (const ch of CHANNELS) if (!(ch in push.credIds)) push.credIds[ch] = null
+  if (!push.template || !templateOptions.some((t) => t.value === push.template)) push.template = 'html'
   if (push.credId) {
     const hit = store.credentials.find((c) => c.id === push.credId)
     if (hit && CHANNELS.includes(hit.type) && !push.credIds[hit.type]) push.credIds[hit.type] = push.credId

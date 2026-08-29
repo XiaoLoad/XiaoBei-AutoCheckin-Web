@@ -4,9 +4,14 @@
       <div>
         <label class="mb-1.5 block text-xs font-medium text-ink-muted">每日签到时间段</label>
         <div class="flex items-center gap-2">
-          <BaseSelect v-model="config.time.startHour" :options="hourOptions" size="sm" editable numeric class="w-24" />
+          <!-- w-full 会让下拉框撑满整行挤压相邻文字，故用固定宽度的 shrink-0 容器包裹 -->
+          <div class="w-24 shrink-0">
+            <BaseSelect v-model="config.time.startHour" :options="hourOptions" size="sm" editable numeric />
+          </div>
           <span class="text-sm text-ink-muted">至</span>
-          <BaseSelect v-model="config.time.endHour" :options="hourOptions" size="sm" editable numeric class="w-24" />
+          <div class="w-24 shrink-0">
+            <BaseSelect v-model="config.time.endHour" :options="hourOptions" size="sm" editable numeric />
+          </div>
           <span class="text-sm text-ink-muted">时</span>
         </div>
         <p class="mt-1.5 text-xs text-ink-muted">部分签到任务仅允许在此时段内签到，属于业务限制，与下方「定时签到时间」相互独立。可下拉选择或直接键入数字。</p>
@@ -15,9 +20,13 @@
       <div>
         <label class="mb-1.5 block text-xs font-medium text-ink-muted">定时签到时间</label>
         <div class="flex items-center gap-2">
-          <BaseSelect v-model="config.time.signTime.hour" :options="hourOptions" size="sm" editable numeric class="w-20" />
+          <div class="w-20 shrink-0">
+            <BaseSelect v-model="config.time.signTime.hour" :options="hourOptions" size="sm" editable numeric />
+          </div>
           <span class="text-sm text-ink-muted">时</span>
-          <BaseSelect v-model="config.time.signTime.minute" :options="minuteOptions" size="sm" editable numeric class="w-20" />
+          <div class="w-20 shrink-0">
+            <BaseSelect v-model="config.time.signTime.minute" :options="minuteOptions" size="sm" editable numeric />
+          </div>
           <span class="text-sm text-ink-muted">分</span>
         </div>
         <p class="mt-1.5 text-xs text-ink-muted">调度器在每周选定星期、该时刻附近（叠加随机延时）自动触发；定时任务页默认采纳此时间。可下拉选择或直接键入数字。</p>

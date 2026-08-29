@@ -2,6 +2,7 @@
 # 前缀 /api/tasks；严格按当前登录用户隔离（user_id 过滤，杜绝越权）
 from flask import Blueprint, request
 
+from app.extensions import db
 from app.models import BAccount, SignRecord
 from app.utils.auth import token_required
 from app.utils.response import error, success

@@ -168,11 +168,9 @@ const nextRunText = computed(() => {
 const lastRunText = computed(() => {
   const s = props.schedule
   if (!s.lastRun) return '暂无记录'
-  const d = new Date(s.lastRun)
   const label = s.lastStatus === 'success' ? '成功' : s.lastStatus === 'fail' ? '失败' : s.lastStatus === 'skip' ? '跳过' : '—'
-  const hh = String(d.getHours()).padStart(2, '0')
-  const mm = String(d.getMinutes()).padStart(2, '0')
-  return `${label} · ${hh}:${mm}`
+  // s.lastRun 已是后端按本地时区格式化的 'YYYY-MM-DD HH:MM'，直接拼接，避免 new Date 时区漂移丢日期
+  return `${label} · ${s.lastRun}`
 })
 
 // 开关/色条动画：enabled 变化时由 GSAP 平滑过渡

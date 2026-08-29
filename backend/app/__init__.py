@@ -20,6 +20,7 @@ from app.routes.config_sets import bp as config_sets_bp
 from app.routes.schedules import bp as schedules_bp
 from app.routes.pools import bp as pools_bp
 from app.routes.pool_images import bp as pool_images_bp
+from app.routes.tasks import bp as tasks_bp
 from app.services.scheduler import init_scheduler
 
 
@@ -56,6 +57,7 @@ def create_app(env_name=None):
     app.register_blueprint(schedules_bp)     # /api/schedules
     app.register_blueprint(pools_bp)         # /api/pools
     app.register_blueprint(pool_images_bp)   # /api/pools/images（图库上传/回收站/文件流）
+    app.register_blueprint(tasks_bp)          # /api/tasks（任务日志：跨账号执行日志 + 追踪签到任务）
 
     # 启动时对齐数据库结构与种子数据；失败不阻断应用启动，
     # 但必须记日志——否则数据库不可用时应用照常起来，排障无从下手。

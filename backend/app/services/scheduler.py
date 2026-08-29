@@ -189,16 +189,19 @@ def run_schedule(schedule_id):
 
 
 def _run(schedule_id):
+    """执行入口（被 run_schedule 调用）。异常由 _execute 内部就地回写，
+    此处仅兜底提交失败等极端情况。"""
     s = db.session.get(Schedule, schedule_id)
     if s is None or not s.enabled:
         return
     try:
         _execute(s)
-    except BPlatformError as e:
-        _commit_result(s, None, 'fail', f'B 平台错误：{e.message}')
     except Exception as e:
-        log.exception('任务 %s 执行异常', schedule_id)
-        _commit_result(s, None, 'fail', f'执行异常：{e}')
+        log.exception('任务 %s 外层兜底异常', schedule_id)
+        try:
+            _commit_result(s, None, 'fail', f'执行异常：{e}')
+        except Exception:
+            pass
 
 
 def _resolve(schedule):
@@ -224,59 +227,64 @@ def _execute(schedule):
         log.info('任务 %s 跳过：账号不存在或已禁用', schedule.id)
         return  # 禁用态不写记录，避免刷屏
 
-    if acc.verify_status != 'ok':
-        try:
-            res = get_adapter().verify_and_fetch(acc.account, acc.get_password())
-        except BPlatformError as e:
-            log.warning('任务 %s 账号校验失败：%s', schedule.id, e.message)
-            _commit_result(schedule, acc, 'fail', f'账号校验失败：{e.message}')
-            return
-        acc.set_token(res.token)
-        acc.set_profile(res.profile)
-        acc.bp_uid = res.bp_uid
-        acc.verify_status = 'ok'
-        acc.verified_at = now_cst()
-        db.session.flush()
-
-    resolved = _resolve(schedule)
-    if resolved is None:
-        _commit_result(schedule, acc, 'skip', '配置缺失（配置套未绑定或已删除）')
-        return
-    session = {
-        'token': acc.get_token(),
-        'account': acc.account,
-        'profile': acc.profile,
-    }
     outcome = None
     reason = ''
     try:
+        if acc.verify_status != 'ok':
+            try:
+                res = get_adapter().verify_and_fetch(acc.account, acc.get_password())
+            except BPlatformError as e:
+                log.warning('任务 %s 账号校验失败：%s', schedule.id, e.message)
+                _commit_result(schedule, acc, 'fail', f'账号校验失败：{e.message}')
+                return
+            acc.set_token(res.token)
+            acc.set_profile(res.profile)
+            acc.bp_uid = res.bp_uid
+            acc.verify_status = 'ok'
+            acc.verified_at = now_cst()
+            db.session.flush()
+
+        resolved = _resolve(schedule)
+        if resolved is None:
+            _commit_result(schedule, acc, 'skip', '配置缺失（配置套未绑定或已删除）')
+            return
+        session = {
+            'token': acc.get_token(),
+            'account': acc.account,
+            'profile': acc.profile,
+        }
         result = get_adapter().checkin(session, {'taskType': schedule.task_type, **resolved})
-    except BPlatformError as e:
-        if e.kind == 'credential':
-            acc.verify_status = 'fail'  # 凭证失效，下次执行触发 reverify
-        reason = f'B 平台错误：{e.message}'
-        _commit_result(schedule, acc, 'fail', reason)
-        outcome = 'fail'
-    else:
         if result is None or not result.ok:
             reason = result.fail_reason if result else '无返回'
-            _commit_result(schedule, acc, 'fail', reason)
             outcome = 'fail'
         elif result.status == 'skip':
             reason = result.fail_reason or '平台返回跳过'
-            _commit_result(schedule, acc, 'skip', reason)
             outcome = 'skip'
         else:
-            _commit_result(schedule, acc, 'success')
             outcome = 'success'
+        # 统一在此回写：成功/失败/跳过都落 SignRecord 并回写任务与账号状态
+        _commit_result(schedule, acc, outcome, reason)
+    except BPlatformError as e:
+        # acc 仍在作用域内，账号聚合与任务状态一同更新，杜绝两者不一致
+        if e.kind == 'credential':
+            acc.verify_status = 'fail'  # 凭证失效，下次执行触发 reverify
+        log.warning('任务 %s 执行异常（B 平台）：%s', schedule.id, e.message)
+        _commit_result(schedule, acc, 'fail', f'B 平台错误：{e.message}')
+        return
+    except Exception as e:
+        log.exception('任务 %s 执行异常', schedule.id)
+        _commit_result(schedule, acc, 'fail', f'执行异常：{e}')
+        return
 
-    # 成功/跳过/失败都走推送分发；是否真发由配置套 notify 开关决定
-    if outcome is not None:
-        dispatch_push(resolved, schedule, acc, outcome, reason)
-
-    # 打卡成功才消费图库图片：随机取一张，按配置策略流转（跳过/失败不消费）
-    if outcome == 'success':
-        _consume_configured_image(schedule, resolved)
+    # 后置动作（推送 / 消费图库图片）与「执行结果落库」解耦：失败仅记日志，
+    # 绝不再写第二条 SignRecord，避免一次执行产生「成功 + 失败」两条重复日志
+    try:
+        if outcome is not None:
+            dispatch_push(resolved, schedule, acc, outcome, reason)
+        if outcome == 'success':
+            _consume_configured_image(schedule, resolved)
+    except Exception as e:
+        log.warning('任务 %s 后置动作失败（已落库的执行记录不受影响）：%s', schedule.id, e)
 
 
 def _consume_configured_image(schedule, resolved):

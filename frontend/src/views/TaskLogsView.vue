@@ -286,6 +286,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from "vue";
+import { useRoute } from "vue-router";
 import { storeToRefs } from "pinia";
 import { useTaskLogsStore } from "@/stores/taskLogs";
 import { toast } from "@/utils/toast";
@@ -295,6 +296,7 @@ import StatCard from "@/components/StatCard.vue";
 import BasePagination from "@/components/BasePagination.vue";
 
 const store = useTaskLogsStore();
+const route = useRoute();
 const {
   accounts,
   selectedAccountId,
@@ -392,6 +394,10 @@ function logPill(status) {
 }
 
 onMounted(() => {
+  // 支持从仪表盘「签到失败 · 查看详情」等入口带筛选条件跳入（?type=&status=）
+  const q = route.query || {}
+  if (['all', 'dorm', 'activity'].includes(q.type)) store.typeFilter = q.type
+  if (['all', 'success', 'fail', 'skip'].includes(q.status)) store.statusFilter = q.status
   store.init();
 });
 </script>

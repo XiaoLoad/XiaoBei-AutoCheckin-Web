@@ -92,42 +92,61 @@
         <p v-if="!loading && taskSummaryTotal === 0" class="mt-2 text-center text-xs text-ink-muted">近 30 天暂无执行记录</p>
       </section>
 
-      <!-- 我的账号状态速览（精简，替代原大表） -->
+      <!-- 我的账号状态（仅显示已启用并配置好配置套的账号） -->
       <section class="dash-card p-5 lg:col-span-2 fade-up delay-4">
         <div class="flex items-center justify-between mb-4">
-          <h3 class="font-semibold text-ink">我的账号状态</h3>
-          <RouterLink to="/accounts" class="text-sm font-medium text-brand hover:underline">管理账号</RouterLink>
-        </div>
-        <div v-if="loading" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div v-for="i in 3" :key="i" class="h-20 rounded-xl border border-ink/5 bg-ink/5 animate-pulse" />
-        </div>
-        <div v-else-if="me.accounts.items.length === 0" class="py-6 text-center text-sm text-ink-muted">
-          还没有绑定 B 平台账号，<RouterLink to="/accounts" class="font-medium text-brand hover:underline">去添加</RouterLink>
-        </div>
-        <div v-else class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div v-for="a in me.accounts.items" :key="a.id" class="rounded-xl border border-ink/5 bg-ink/[0.02] p-3.5">
-            <div class="flex items-center justify-between gap-2">
-              <span class="truncate font-medium text-ink">{{ a.account }}</span>
-              <span class="inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium" :class="a.type === 'activity' ? 'bg-brand/10 text-brand' : 'bg-info/10 text-info'">
-                {{ a.type === 'activity' ? '活动' : a.type === 'dorm' ? '寝室' : '通用' }}
-              </span>
-            </div>
-            <div class="mt-3 flex items-center gap-1.5 text-xs font-medium" :class="statusMeta[a.lastStatus].cls">
-              <span class="h-1.5 w-1.5 rounded-full" :class="dotCls(a.lastStatus)"></span>{{ statusMeta[a.lastStatus].label }}
-            </div>
-            <p class="mt-1 text-xs text-ink-muted">{{ a.lastSignIn || '尚未打卡' }}</p>
+          <div class="min-w-0">
+            <h3 class="font-semibold text-ink">我的账号状态</h3>
+            <p class="text-xs text-ink-muted mt-0.5">已启用并配置 · 共 {{ me.accounts.items.length }} 个</p>
           </div>
+          <RouterLink to="/schedules" class="shrink-0 text-sm font-medium text-brand hover:underline">定时任务</RouterLink>
         </div>
+        <div v-if="loading" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div v-for="i in 3" :key="i" class="h-[112px] rounded-xl border border-ink/5 bg-ink/5 animate-pulse" />
+        </div>
+        <div v-else-if="me.accounts.items.length === 0" class="py-8 text-center">
+          <p class="text-sm text-ink-muted">还没有已启用并配置好配置套的账号</p>
+          <RouterLink to="/sign-config" class="mt-2 inline-block text-sm font-medium text-brand hover:underline">去签到配置启用</RouterLink>
+        </div>
+        <template v-else>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div v-for="a in visibleAccounts" :key="a.id"
+                 class="group flex flex-col rounded-xl border border-ink/5 bg-ink/[0.02] p-4 transition hover:-translate-y-0.5 hover:border-brand/20 hover:shadow-md hover:shadow-ink/5">
+              <div class="flex items-start gap-3">
+                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand/10 text-sm font-semibold text-brand">
+                  {{ initialOf(a) }}
+                </span>
+                <div class="min-w-0 flex-1">
+                  <p class="truncate font-semibold text-ink" :title="a.name || a.account">{{ a.name || a.account }}</p>
+                  <p class="truncate text-xs text-ink-muted" :title="[a.college, a.major].filter(Boolean).join(' · ')">{{ [a.college, a.major].filter(Boolean).join(' · ') || '—' }}</p>
+                </div>
+                <span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium" :class="typeBadge(a.type)">{{ a.type }}</span>
+              </div>
+              <p class="mt-3 truncate text-xs text-ink-muted" :title="a.className">班级：{{ a.className || '—' }}</p>
+              <div class="mt-auto flex items-center justify-between gap-2 pt-3">
+                <span class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium" :class="statusMeta[a.lastStatus].cls">
+                  <span class="h-1.5 w-1.5 rounded-full" :class="dotCls(a.lastStatus)"></span>{{ statusMeta[a.lastStatus].label }}
+                </span>
+                <span class="truncate text-[11px] text-ink-muted">{{ a.lastSignIn || '尚未打卡' }}</span>
+              </div>
+            </div>
+          </div>
+          <button v-if="me.accounts.items.length > ACCOUNT_LIMIT" @click="accountsExpanded = !accountsExpanded"
+                  class="mt-3 mx-auto flex items-center gap-1 text-sm font-medium text-brand hover:underline">
+            {{ accountsExpanded ? '收起' : `展开全部 ${me.accounts.items.length} 个账号` }}
+            <Icon :name="accountsExpanded ? 'chevron-up' : 'chevron-down'" :size="14" />
+          </button>
+        </template>
       </section>
     </div>
 
-    <!-- ============ 我的最近打卡日志 ============ -->
+    <!-- ============ 我的最近签到日志 ============ -->
     <section class="dash-card p-5 fade-up delay-4">
       <div class="flex items-center justify-between gap-3 mb-4">
-        <h3 class="font-semibold text-ink">我的最近打卡日志</h3>
+        <h3 class="font-semibold text-ink">我的最近签到日志</h3>
         <div class="flex items-center gap-2 sm:gap-3">
           <div class="w-32 sm:w-36">
-            <BaseSelect v-model="fType" size="sm" :options="[{ label: '全部类型', value: 'all' }, { label: '活动打卡', value: 'activity' }, { label: '寝室打卡', value: 'dorm' }]" />
+            <BaseSelect v-model="fType" size="sm" :options="[{ label: '全部类型', value: 'all' }, { label: '活动签到', value: 'activity' }, { label: '寝室打卡', value: 'dorm' }]" />
           </div>
           <RouterLink to="/task-logs" class="shrink-0 text-sm font-medium text-brand hover:underline">查看全部</RouterLink>
         </div>
@@ -136,19 +155,25 @@
         <table class="w-full text-sm">
           <thead>
             <tr class="text-left text-ink-muted border-b border-ink/5">
-              <th class="font-medium py-2.5 pr-4">时间</th>
-              <th class="font-medium py-2.5 pr-4">账号</th>
-              <th class="font-medium py-2.5 pr-4">类型</th>
-              <th class="font-medium py-2.5 pr-4">结果</th>
-              <th class="font-medium py-2.5">说明</th>
+              <th class="font-medium py-2.5 pr-4 whitespace-nowrap">时间</th>
+              <th class="font-medium py-2.5 pr-4 whitespace-nowrap">姓名</th>
+              <th class="font-medium py-2.5 pr-4 whitespace-nowrap">账号</th>
+              <th class="font-medium py-2.5 pr-4 whitespace-nowrap">学院</th>
+              <th class="font-medium py-2.5 pr-4 whitespace-nowrap">班级</th>
+              <th class="font-medium py-2.5 pr-4 whitespace-nowrap">类型</th>
+              <th class="font-medium py-2.5 pr-4 whitespace-nowrap">结果</th>
+              <th class="font-medium py-2.5 whitespace-nowrap">说明</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(r, i) in filteredLogs" :key="r.id || i" class="border-b border-ink/5 last:border-0">
-              <td class="py-3 pr-4 text-ink-muted tabular-nums">{{ r.time }}</td>
-              <td class="py-3 pr-4 font-medium text-ink">{{ r.account }}</td>
+            <tr v-for="(r, i) in filteredLogs" :key="r.id || i" class="border-b border-ink/5 last:border-0 hover:bg-ink/[0.02]">
+              <td class="py-3 pr-4 text-ink-muted tabular-nums whitespace-nowrap">{{ r.time }}</td>
+              <td class="py-3 pr-4 font-medium text-ink whitespace-nowrap">{{ r.name || '—' }}</td>
+              <td class="py-3 pr-4 text-ink-soft whitespace-nowrap">{{ r.account || '—' }}</td>
+              <td class="py-3 pr-4 text-ink-muted whitespace-nowrap">{{ r.college || '—' }}</td>
+              <td class="py-3 pr-4 text-ink-muted whitespace-nowrap">{{ r.className || '—' }}</td>
               <td class="py-3 pr-4">
-                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium" :class="r.type === '活动打卡' ? 'bg-brand/10 text-brand' : 'bg-info/10 text-info'">
+                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium" :class="r.type.includes('活动') ? 'bg-brand/10 text-brand' : 'bg-info/10 text-info'">
                   {{ r.type }}
                 </span>
               </td>
@@ -157,9 +182,19 @@
                   <span class="h-1.5 w-1.5 rounded-full" :class="dotCls(r.result)"></span>{{ statusMeta[r.result].label }}
                 </span>
               </td>
-              <td class="py-3 text-ink-muted">{{ r.note }}</td>
+              <td class="py-3 max-w-[260px]">
+                <RouterLink
+                  v-if="r.result === 'fail'"
+                  :to="{ path: '/task-logs', query: { type: r.type.includes('活动') ? 'activity' : 'dorm', status: 'fail' } }"
+                  class="inline-flex items-center gap-1 text-xs font-medium text-danger hover:underline"
+                >
+                  签到失败 · 查看详情
+                  <Icon name="chevron-right" :size="12" />
+                </RouterLink>
+                <span v-else class="block truncate text-ink-muted" :title="r.note">{{ r.note || '—' }}</span>
+              </td>
             </tr>
-            <tr v-if="!loading && filteredLogs.length === 0"><td colspan="5" class="py-6 text-center text-ink-muted">暂无打卡日志</td></tr>
+            <tr v-if="!loading && filteredLogs.length === 0"><td colspan="8" class="py-6 text-center text-ink-muted">暂无签到日志</td></tr>
           </tbody>
         </table>
       </div>
@@ -223,40 +258,88 @@ const filteredLogs = computed(() =>
   })
 )
 
-// ===== 图表配色（与 AdminDashboard 保持一致）=====
-const cSuccess = '#16a34a', cDanger = '#dc2626', cSkip = '#F2A65A', cInk = '#5B6478', cGrid = 'rgba(20,33,61,0.06)', cBrand = '#1674f8', cInfo = '#0ea5e9'
+// ===== 账号卡片：默认只展示前 N 个，超出可展开（避免拉伸/显示不全）=====
+const ACCOUNT_LIMIT = 6
+const accountsExpanded = ref(false)
+const visibleAccounts = computed(() => {
+  const items = me.value.accounts.items || []
+  return accountsExpanded.value ? items : items.slice(0, ACCOUNT_LIMIT)
+})
+// 账号类型徽标配色：与饼图一致（活动=品牌蓝 / 寝室=信息蓝 / 通用=中性）
+const typeBadge = (t) => ({
+  '通用': 'bg-ink/10 text-ink-soft',
+  '寝室': 'bg-info/10 text-info',
+  '活动': 'bg-brand/10 text-brand',
+  '未配置': 'bg-ink/5 text-ink-muted',
+}[t] || 'bg-ink/5 text-ink-muted')
+// 头像首字：优先姓名，缺失回退登录账号
+const initialOf = (a) => (a.name || a.account || '?').charAt(0)
+
+// ===== 图表配色（与 App 设计令牌对齐：brand/success/danger/info/amber/ink）=====
+const C = {
+  success: '#16a34a',
+  fail:    '#dc2626',
+  skip:    '#F2A65A',
+  brand:   '#1674f8',
+  dorm:    '#0ea5e9',
+  ink:     '#5B6478',
+  grid:    'rgba(91,100,120,0.10)',
+}
+// hex + alpha → rgba 字符串（用于渐变面积）
+const rgba = (hex, a) => {
+  const n = parseInt(hex.slice(1), 16)
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`
+}
+// 折线面积渐变（顶部稍浓、底部透明）
+const areaFill = (hex) => ({
+  type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+  colorStops: [{ offset: 0, color: rgba(hex, 0.22) }, { offset: 1, color: rgba(hex, 0.02) }],
+})
+// 单条趋势线：圆润曲线 + 白色描边端点 + 柔和渐变 + hover 聚焦其余淡出
+function lineSeries(name, data, color) {
+  return {
+    name, type: 'line', smooth: true, symbol: 'circle', symbolSize: 7, showSymbol: true, data,
+    lineStyle: { width: 2.5, color },
+    itemStyle: { color, borderColor: '#fff', borderWidth: 2 },
+    areaStyle: areaFill(color),
+    emphasis: { focus: 'series' },
+    animationDuration: 1100, animationEasing: 'cubicOut',
+  }
+}
 
 const trendOption = computed(() => ({
-  grid: { left: 40, right: 16, top: 40, bottom: 28 },
+  grid: { left: 44, right: 18, top: 40, bottom: 28 },
   tooltip: {
     trigger: 'axis',
     backgroundColor: 'rgba(20,33,61,0.92)', borderWidth: 0, padding: [6, 10],
     textStyle: { color: '#fff', fontSize: 12 },
-    axisPointer: { type: 'line', lineStyle: { color: cBrand, type: 'dashed' } }
+    axisPointer: { type: 'line', lineStyle: { color: C.brand, type: 'dashed' } }
   },
-  legend: { top: 0, right: 0, icon: 'roundRect', itemWidth: 10, itemHeight: 10, textStyle: { color: cInk, fontSize: 12 } },
+  legend: { top: 0, right: 0, icon: 'roundRect', itemWidth: 10, itemHeight: 10, textStyle: { color: C.ink, fontSize: 12 } },
   xAxis: {
     type: 'category', boundaryGap: false, data: activeTrend.value.map((p) => p.date),
     axisLine: { lineStyle: { color: 'rgba(20,33,61,0.12)' } }, axisTick: { show: false },
-    axisLabel: { color: cInk, fontSize: 12, interval: fRange.value === '30d' ? 4 : 0 }
+    axisLabel: { color: C.ink, fontSize: 12, interval: fRange.value === '30d' ? 4 : 0 }
   },
-  yAxis: { type: 'value', min: 0, axisLabel: { color: cInk, fontSize: 12 }, splitLine: { lineStyle: { color: cGrid, type: 'dashed' } } },
+  yAxis: { type: 'value', min: 0, axisLabel: { color: C.ink, fontSize: 12 }, splitLine: { lineStyle: { color: C.grid, type: 'dashed' } } },
   series: [
-    { name: '成功', type: 'line', smooth: true, symbol: 'circle', symbolSize: 6, data: activeTrend.value.map((p) => p.success), lineStyle: { width: 2.5, color: cSuccess }, itemStyle: { color: cSuccess }, areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(22,163,74,0.22)' }, { offset: 1, color: 'rgba(22,163,74,0.02)' }] } }, animationDuration: 1100, animationEasing: 'cubicOut' },
-    { name: '失败', type: 'line', smooth: true, symbol: 'circle', symbolSize: 6, data: activeTrend.value.map((p) => p.fail), lineStyle: { width: 2.5, color: cDanger }, itemStyle: { color: cDanger }, animationDuration: 1100, animationEasing: 'cubicOut' },
-    { name: '跳过', type: 'line', smooth: true, symbol: 'circle', symbolSize: 6, data: activeTrend.value.map((p) => p.skip), lineStyle: { width: 2.5, color: cSkip }, itemStyle: { color: cSkip }, animationDuration: 1100, animationEasing: 'cubicOut' }
+    lineSeries('成功', activeTrend.value.map((p) => p.success), C.success),
+    lineSeries('失败', activeTrend.value.map((p) => p.fail), C.fail),
+    lineSeries('跳过', activeTrend.value.map((p) => p.skip), C.skip),
   ]
 }))
 
 const typeDistOption = computed(() => ({
   tooltip: { trigger: 'item', backgroundColor: 'rgba(20,33,61,0.92)', borderWidth: 0, textStyle: { color: '#fff', fontSize: 12 }, formatter: '{b}：{c} 次 ({d}%)' },
-  legend: { bottom: 0, textStyle: { color: cInk, fontSize: 11 }, type: 'scroll' },
+  legend: { bottom: 0, textStyle: { color: C.ink, fontSize: 11 }, type: 'scroll' },
   series: [{
-    type: 'pie', radius: ['45%', '70%'], center: ['50%', '42%'], avoidLabelOverlap: true,
-    label: { show: false }, itemStyle: { borderColor: '#fff', borderWidth: 2 },
+    type: 'pie', radius: ['46%', '70%'], center: ['50%', '42%'], avoidLabelOverlap: true,
+    label: { show: false },
+    itemStyle: { borderColor: '#fff', borderWidth: 2, borderRadius: 6 },
+    emphasis: { scale: true, scaleSize: 6 },
     data: [
-      { value: me.value.typeDist?.activity || 0, name: '活动打卡', itemStyle: { color: cBrand } },
-      { value: me.value.typeDist?.dorm || 0, name: '寝室打卡', itemStyle: { color: cInfo } }
+      { value: me.value.typeDist?.activity || 0, name: '活动打卡', itemStyle: { color: C.brand } },
+      { value: me.value.typeDist?.dorm || 0, name: '寝室打卡', itemStyle: { color: C.dorm } }
     ]
   }]
 }))
@@ -265,18 +348,20 @@ const taskOption = computed(() => ({
   tooltip: { trigger: 'item', backgroundColor: 'rgba(20,33,61,0.92)', borderWidth: 0, textStyle: { color: '#fff', fontSize: 12 }, formatter: '{b}：{c} 次 ({d}%)' },
   title: {
     text: successRate.value + '%', subtext: '成功率',
-    left: 'center', top: '38%',
-    textStyle: { fontSize: 24, fontWeight: 'bold', color: cSuccess },
-    subtextStyle: { fontSize: 11, color: cInk }
+    left: 'center', top: '37%',
+    textStyle: { fontSize: 24, fontWeight: 'bold', color: C.success },
+    subtextStyle: { fontSize: 11, color: C.ink }
   },
-  legend: { bottom: 0, textStyle: { color: cInk, fontSize: 11 }, type: 'scroll' },
+  legend: { bottom: 0, textStyle: { color: C.ink, fontSize: 11 }, type: 'scroll' },
   series: [{
     type: 'pie', radius: ['56%', '76%'], center: ['50%', '44%'], avoidLabelOverlap: true,
-    label: { show: false }, itemStyle: { borderColor: '#fff', borderWidth: 2 },
+    label: { show: false },
+    itemStyle: { borderColor: '#fff', borderWidth: 2, borderRadius: 6 },
+    emphasis: { scale: true, scaleSize: 6 },
     data: [
-      { value: me.value.taskSummary?.success || 0, name: '成功', itemStyle: { color: cSuccess } },
-      { value: me.value.taskSummary?.fail || 0, name: '失败', itemStyle: { color: cDanger } },
-      { value: me.value.taskSummary?.skip || 0, name: '跳过', itemStyle: { color: cSkip } }
+      { value: me.value.taskSummary?.success || 0, name: '成功', itemStyle: { color: C.success } },
+      { value: me.value.taskSummary?.fail || 0, name: '失败', itemStyle: { color: C.fail } },
+      { value: me.value.taskSummary?.skip || 0, name: '跳过', itemStyle: { color: C.skip } }
     ]
   }]
 }))

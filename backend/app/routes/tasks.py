@@ -4,7 +4,7 @@ from flask import Blueprint, request
 
 from app.models import BAccount, SignRecord
 from app.utils.auth import token_required
-from app.utils.response import success
+from app.utils.response import error, success
 
 bp = Blueprint('tasks', __name__, url_prefix='/api/tasks')
 
@@ -111,3 +111,68 @@ def task_logs():
         'initiator': r.initiator or 'system',
     } for r in pagination.items]
     return success({'items': items, 'total': total, 'page': page, 'page_size': page_size, 'overview': overview})
+
+
+def _owned_record(rid):
+    """取出当前用户归属的执行日志；非本人或无记录返回 None（调用方判 404）。"""
+    owned_ids = [a.id for a in _owned_accounts()]
+    if not owned_ids:
+        return None
+    rec = SignRecord.query.filter(
+        SignRecord.account_id.in_(owned_ids) if owned_ids else SignRecord.account_id.in_([])
+    ).filter(SignRecord.id == rid).first()
+    return rec
+
+
+@bp.route('/logs/<int:rid>', methods=['DELETE'])
+@token_required
+def delete_task_log(rid):
+    """删除单条执行日志（仅本人归属）。"""
+    rec = _owned_record(rid)
+    if not rec:
+        return error(message='日志不存在或无权删除', code=4404, status=404)
+    db.session.delete(rec)
+    db.session.commit()
+    return success(message='已删除')
+
+
+@bp.route('/logs', methods=['DELETE'])
+@token_required
+def purge_task_logs():
+    """批量删除本人执行日志：必须带 before（YYYY-MM-DD），清理该日期之前的全部记录。
+    无 before 直接拒绝，避免误清空全部历史。accountId/type/status 可选叠加过滤（仍限本人）。"""
+    before = (request.args.get('before') or '').strip()
+    if not before:
+        return error(message='批量删除必须指定 before（YYYY-MM-DD）日期上限', code=4405, status=400)
+
+    from datetime import datetime
+    try:
+        cutoff = datetime.strptime(before, '%Y-%m-%d')
+    except ValueError:
+        return error(message='before 格式应为 YYYY-MM-DD', code=4405, status=400)
+
+    accounts = _owned_accounts()
+    owned_ids = [a.id for a in accounts]
+    if not owned_ids:
+        return success({'deleted': 0})
+
+    q = SignRecord.query.filter(SignRecord.account_id.in_(owned_ids))
+    q = q.filter(SignRecord.created_at < cutoff)
+    account_filter = (request.args.get('accountId') or '').strip()
+    if account_filter:
+        try:
+            aid = int(account_filter)
+            if aid in owned_ids:
+                q = q.filter(SignRecord.account_id == aid)
+        except ValueError:
+            pass
+    type_filter = (request.args.get('type') or '').strip()
+    if type_filter and type_filter != 'all':
+        q = q.filter(SignRecord.task_type == type_filter)
+    status_filter = (request.args.get('status') or '').strip()
+    if status_filter in ('success', 'fail', 'skip'):
+        q = q.filter(SignRecord.status == status_filter)
+
+    deleted = q.delete()
+    db.session.commit()
+    return success({'deleted': deleted})

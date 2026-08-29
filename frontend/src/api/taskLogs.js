@@ -38,3 +38,19 @@ export async function fetchTaskLogs(params = {}) {
     overview: data.overview || { total: 0, success: 0, fail: 0, skip: 0 },
   }
 }
+
+// 删除单条执行日志（仅本人归属，后端校验）
+export async function deleteTaskLog(id) {
+  return request({ url: `/tasks/logs/${id}`, method: 'delete' })
+}
+
+// 批量删除本人执行日志：必须带 before（YYYY-MM-DD），清理该日期之前的全部记录；
+// accountId/type/status 可选叠加过滤。后端无 before 直接 400 拒绝。
+export async function purgeTaskLogs({ before, accountId, type, status } = {}) {
+  const params = {}
+  if (before) params.before = before
+  if (accountId) params.accountId = accountId
+  if (type && type !== 'all') params.type = type
+  if (status && status !== 'all') params.status = status
+  return request({ url: '/tasks/logs', method: 'delete', params })
+}

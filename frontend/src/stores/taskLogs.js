@@ -3,7 +3,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { fetchAccounts } from '@/api/accounts'
-import { fetchTaskLogs } from '@/api/taskLogs'
+import { fetchTaskLogs, deleteTaskLog, purgeTaskLogs } from '@/api/taskLogs'
 
 function toNum(v) {
   const n = Number(v)
@@ -101,6 +101,19 @@ export const useTaskLogsStore = defineStore('taskLogs', () => {
     await loadLogs()
   }
 
+  // 删除单条本人日志（后端校验归属），成功后刷新当前列表
+  async function removeLog(id) {
+    await deleteTaskLog(id)
+    await loadLogs()
+  }
+
+  // 批量清理本人日志：before 必填（YYYY-MM-DD），可选叠加账号/类型/状态过滤
+  async function purgeBefore(before, { accountId, type, status } = {}) {
+    await purgeTaskLogs({ before, accountId, type, status })
+    page.value = 1
+    await loadLogs()
+  }
+
   return {
     accounts,
     selectedAccountId,
@@ -122,5 +135,7 @@ export const useTaskLogsStore = defineStore('taskLogs', () => {
     setStatus,
     setPage,
     setPageSize,
+    removeLog,
+    purgeBefore,
   }
 })

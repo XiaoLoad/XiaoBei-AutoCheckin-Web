@@ -43,15 +43,15 @@
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard
-          label="我的额度占用" :value="quotaPct" unit="%"
-          icon="tasks" :tone="quotaPct >= 90 ? 'danger' : 'amber'"
-          :delta="`${me.quotaUsed} / ${me.quotaLimit}`" delta-type="flat" delta-hint="已用 / 上限" :delay="1"
+          label="我的额度占用" :value="me.quota.pct" unit="%"
+          icon="tasks" :tone="me.quota.pct >= 90 ? 'danger' : 'amber'"
+          :delta="`${me.quota.used} / ${me.quota.limit}`" delta-type="flat" delta-hint="已用 / 上限" :loading="loading"
         />
-        <StatCard label="我的 B 账号" :value="me.accounts" unit="个" icon="authorize" tone="info" :delta="`单平台 · ${me.platform}`" delta-type="flat" delta-hint="B 平台" :delay="2" />
-        <StatCard label="运行中定时任务" :value="me.activeTasks" unit="个" icon="clock" tone="success" :delta="`共 ${me.tasks} 个`" delta-type="flat" delta-hint="已启用" :delay="3" />
+        <StatCard label="我的 B 账号" :value="me.accounts.total" unit="个" icon="authorize" tone="info" :delta="`单平台 · B 打卡平台`" delta-type="flat" delta-hint="B 平台" :loading="loading" />
+        <StatCard label="运行中定时任务" :value="me.tasks.active" unit="个" icon="clock" tone="success" :delta="`共 ${me.tasks.total} 个`" delta-type="flat" delta-hint="已启用" :loading="loading" />
         <StatCard
           label="我的今日打卡" :value="me.today.total" unit="次" icon="check" tone="success"
-          :delta="`成功 ${me.today.success} · 失败 ${me.today.fail} · 跳过 ${me.today.skip}`" delta-type="flat" delta-hint="今日累计" :delay="4"
+          :delta="`成功 ${me.today.success} · 失败 ${me.today.fail} · 跳过 ${me.today.skip}`" delta-type="flat" delta-hint="今日累计" :loading="loading"
         />
       </div>
     </section>
@@ -71,6 +71,7 @@
           </div>
         </div>
         <BaseChart :option="trendOption" height="290px" />
+        <p v-if="!loading && activeTrend.length === 0" class="mt-2 text-center text-xs text-ink-muted">近 {{ fRange === '30d' ? 30 : 7 }} 天暂无打卡数据</p>
       </section>
 
       <!-- 打卡类型分布 -->
@@ -78,6 +79,7 @@
         <h3 class="font-semibold text-ink mb-1">打卡类型分布</h3>
         <p class="text-xs text-ink-muted mb-2">近 30 天 · 共 {{ typeTotal }} 次打卡</p>
         <BaseChart :option="typeDistOption" height="290px" />
+        <p v-if="!loading && typeTotal === 0" class="mt-2 text-center text-xs text-ink-muted">近 30 天暂无打卡数据</p>
       </section>
     </div>
 
@@ -87,6 +89,7 @@
         <h3 class="font-semibold text-ink mb-1">任务完成情况</h3>
         <p class="text-xs text-ink-muted mb-2">近 30 天 · 执行结果占比</p>
         <BaseChart :option="taskOption" height="260px" />
+        <p v-if="!loading && taskSummaryTotal === 0" class="mt-2 text-center text-xs text-ink-muted">近 30 天暂无执行记录</p>
       </section>
 
       <!-- 我的账号状态速览（精简，替代原大表） -->
@@ -95,18 +98,24 @@
           <h3 class="font-semibold text-ink">我的账号状态</h3>
           <RouterLink to="/accounts" class="text-sm font-medium text-brand hover:underline">管理账号</RouterLink>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div v-for="a in myAccounts" :key="a.account" class="rounded-xl border border-ink/5 bg-ink/[0.02] p-3.5">
+        <div v-if="loading" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div v-for="i in 3" :key="i" class="h-20 rounded-xl border border-ink/5 bg-ink/5 animate-pulse" />
+        </div>
+        <div v-else-if="me.accounts.items.length === 0" class="py-6 text-center text-sm text-ink-muted">
+          还没有绑定 B 平台账号，<RouterLink to="/accounts" class="font-medium text-brand hover:underline">去添加</RouterLink>
+        </div>
+        <div v-else class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div v-for="a in me.accounts.items" :key="a.id" class="rounded-xl border border-ink/5 bg-ink/[0.02] p-3.5">
             <div class="flex items-center justify-between gap-2">
               <span class="truncate font-medium text-ink">{{ a.account }}</span>
-              <span class="inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium" :class="a.type === 'course' ? 'bg-brand/10 text-brand' : 'bg-info/10 text-info'">
-                {{ a.type === 'course' ? '课程' : '寝室' }}
+              <span class="inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium" :class="a.type === 'activity' ? 'bg-brand/10 text-brand' : 'bg-info/10 text-info'">
+                {{ a.type === 'activity' ? '活动' : a.type === 'dorm' ? '寝室' : '通用' }}
               </span>
             </div>
-            <div class="mt-3 flex items-center gap-1.5 text-xs font-medium" :class="statusMeta[a.last].cls">
-              <span class="h-1.5 w-1.5 rounded-full" :class="dotCls(a.last)"></span>{{ statusMeta[a.last].label }}
+            <div class="mt-3 flex items-center gap-1.5 text-xs font-medium" :class="statusMeta[a.lastStatus].cls">
+              <span class="h-1.5 w-1.5 rounded-full" :class="dotCls(a.lastStatus)"></span>{{ statusMeta[a.lastStatus].label }}
             </div>
-            <p class="mt-1 text-xs text-ink-muted">{{ a.period }} 打卡</p>
+            <p class="mt-1 text-xs text-ink-muted">{{ a.lastSignIn || '尚未打卡' }}</p>
           </div>
         </div>
       </section>
@@ -118,9 +127,9 @@
         <h3 class="font-semibold text-ink">我的最近打卡日志</h3>
         <div class="flex items-center gap-2 sm:gap-3">
           <div class="w-32 sm:w-36">
-            <BaseSelect v-model="fType" size="sm" :options="[{ label: '全部类型', value: 'all' }, { label: '课程打卡', value: 'course' }, { label: '寝室打卡', value: 'dorm' }]" />
+            <BaseSelect v-model="fType" size="sm" :options="[{ label: '全部类型', value: 'all' }, { label: '活动打卡', value: 'activity' }, { label: '寝室打卡', value: 'dorm' }]" />
           </div>
-          <RouterLink to="/sign-records" class="shrink-0 text-sm font-medium text-brand hover:underline">查看全部</RouterLink>
+          <RouterLink to="/task-logs" class="shrink-0 text-sm font-medium text-brand hover:underline">查看全部</RouterLink>
         </div>
       </div>
       <div class="overflow-x-auto">
@@ -135,12 +144,12 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(r, i) in filteredLogs" :key="i" class="border-b border-ink/5 last:border-0">
+            <tr v-for="(r, i) in filteredLogs" :key="r.id || i" class="border-b border-ink/5 last:border-0">
               <td class="py-3 pr-4 text-ink-muted tabular-nums">{{ r.time }}</td>
               <td class="py-3 pr-4 font-medium text-ink">{{ r.account }}</td>
               <td class="py-3 pr-4">
-                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium" :class="r.type === 'course' ? 'bg-brand/10 text-brand' : 'bg-info/10 text-info'">
-                  {{ r.type === 'course' ? '课程打卡' : '寝室打卡' }}
+                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium" :class="r.type === '活动打卡' ? 'bg-brand/10 text-brand' : 'bg-info/10 text-info'">
+                  {{ r.type }}
                 </span>
               </td>
               <td class="py-3 pr-4">
@@ -150,7 +159,7 @@
               </td>
               <td class="py-3 text-ink-muted">{{ r.note }}</td>
             </tr>
-            <tr v-if="!filteredLogs.length"><td colspan="5" class="py-6 text-center text-ink-muted">当前筛选条件下无日志</td></tr>
+            <tr v-if="!loading && filteredLogs.length === 0"><td colspan="5" class="py-6 text-center text-ink-muted">暂无打卡日志</td></tr>
           </tbody>
         </table>
       </div>
@@ -159,23 +168,25 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
+import { storeToRefs } from 'pinia'
 import StatCard from '@/components/StatCard.vue'
 import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import BaseChart from '@/components/BaseChart.vue'
+import { useDashboardStore } from '@/stores/dashboard'
 
-// ===== 当前角色（mock；真实由后端按 token 返回）=====
-// [权限判断] role === '普通用户' 时渲染本页；管理员应由 DashboardView 分发到 AdminDashboard
-const role = '普通用户'
+const store = useDashboardStore()
+const { overview: me, loading } = storeToRefs(store)
 
 // ===== 状态映射 =====
 const statusMeta = {
   success: { label: '成功', cls: 'bg-success/10 text-success', dot: 'bg-success' },
-  danger: { label: '失败', cls: 'bg-danger/10 text-danger', dot: 'bg-danger' },
+  fail: { label: '失败', cls: 'bg-danger/10 text-danger', dot: 'bg-danger' },
   skip: { label: '跳过', cls: 'bg-amber/15 text-amber', dot: 'bg-amber' },
-  muted: { label: '停用', cls: 'bg-ink/5 text-ink-muted', dot: 'bg-ink/30' }
+  never: { label: '未打卡', cls: 'bg-ink/5 text-ink-muted', dot: 'bg-ink/30' },
+  danger: { label: '失败', cls: 'bg-danger/10 text-danger', dot: 'bg-danger' }
 }
 const dotCls = (k) => statusMeta[k]?.dot || 'bg-ink/30'
 
@@ -188,70 +199,32 @@ const quickActions = [
   { to: '/settings', icon: 'settings', title: '系统设置', desc: '偏好与个性化' }
 ]
 
-// ===== 筛选状态（普通用户：时间范围由趋势图切换控制，类型筛选最近日志）=====
+// ===== 筛选状态 =====
 const fRange = ref('7d')
 const fType = ref('all')
 
-// ===== 我的数据（mock）=====
-// 预留后端请求：GET /api/me/overview
-const me = {
-  quotaUsed: 3,
-  quotaLimit: 20, // 管理员分配的额度上限
-  platform: 'B 打卡平台',
-  accounts: 3,
-  tasks: 3,
-  activeTasks: 3,
-  today: { success: 6, fail: 0, skip: 1, total: 7 }
-}
-const quotaPct = Math.round((me.quotaUsed / me.quotaLimit) * 100)
+// ===== 派生：趋势 / 分布 / 完成情况 =====
+const activeTrend = computed(() => me.value.trend?.[fRange.value] || [])
+const typeTotal = computed(() => (me.value.typeDist?.dorm || 0) + (me.value.typeDist?.activity || 0))
+const taskSummaryTotal = computed(
+  () => (me.value.taskSummary?.success || 0) + (me.value.taskSummary?.fail || 0) + (me.value.taskSummary?.skip || 0)
+)
+const successRate = computed(() => {
+  const s = me.value.taskSummary?.success || 0
+  const f = me.value.taskSummary?.fail || 0
+  return s + f > 0 ? Math.round((s / (s + f)) * 100) : 0
+})
 
-// 我的账号状态（mock，精简展示）
-// 预留后端请求：GET /api/me/accounts
-const myAccounts = [
-  { account: 'A-301', type: 'dorm', period: '每日 07:50', last: 'success' },
-  { account: 'A-302', type: 'dorm', period: '每日 07:50', last: 'success' },
-  { account: 'A-305', type: 'course', period: '每日 12:30', last: 'skip' }
-]
-
-// 我的最近日志（mock）
-// 预留后端请求：GET /api/me/logs?range=7d|30d&type=course|dorm|all
-const myLogs = [
-  { time: '07:52', account: 'A-301', type: 'dorm', result: 'success', note: '已自动完成打卡' },
-  { time: '07:51', account: 'A-302', type: 'dorm', result: 'success', note: '已自动完成打卡' },
-  { time: '12:31', account: 'A-305', type: 'course', result: 'skip', note: '当日无打卡任务，自动跳过' },
-  { time: '昨天 07:50', account: 'A-301', type: 'dorm', result: 'success', note: '已自动完成打卡' },
-  { time: '昨天 12:30', account: 'A-305', type: 'course', result: 'success', note: '已自动完成打卡' },
-  { time: '前天 07:50', account: 'A-302', type: 'dorm', result: 'success', note: '已自动完成打卡' },
-  { time: '前天 07:49', account: 'A-301', type: 'dorm', result: 'danger', note: '接口返回 403，重试失败' }
-]
-const filteredLogs = computed(() => myLogs.filter((r) => fType.value === 'all' || r.type === fType.value))
+const filteredLogs = computed(() =>
+  (me.value.recentLogs || []).filter((r) => {
+    if (fType.value === 'all') return true
+    const isActivity = r.type.includes('活动')
+    return (isActivity ? 'activity' : 'dorm') === fType.value
+  })
+)
 
 // ===== 图表配色（与 AdminDashboard 保持一致）=====
 const cSuccess = '#16a34a', cDanger = '#dc2626', cSkip = '#F2A65A', cInk = '#5B6478', cGrid = 'rgba(20,33,61,0.06)', cBrand = '#1674f8', cInfo = '#0ea5e9'
-
-// ===== 我的签到趋势（mock，7天/30天，个人级数值）=====
-// 预留后端请求：GET /api/me/trend?range=7d|30d&type=course|dorm|all
-const trend7 = [
-  { d: '08-17', success: 2, fail: 0, skip: 1 },
-  { d: '08-18', success: 3, fail: 0, skip: 0 },
-  { d: '08-19', success: 2, fail: 1, skip: 0 },
-  { d: '08-20', success: 3, fail: 0, skip: 0 },
-  { d: '08-21', success: 2, fail: 0, skip: 1 },
-  { d: '08-22', success: 3, fail: 0, skip: 0 },
-  { d: '08-23', success: 2, fail: 0, skip: 1 }
-]
-function genTrend30() {
-  const arr = []
-  for (let i = 29; i >= 0; i--) {
-    const day = new Date(2026, 7, 23)
-    day.setDate(day.getDate() - i)
-    const dd = `${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
-    arr.push({ d: dd, success: 2 + Math.round(Math.random() * 2), fail: Math.round(Math.random()), skip: Math.round(Math.random()) })
-  }
-  return arr
-}
-const trend30 = genTrend30()
-const activeTrend = computed(() => (fRange.value === '30d' ? trend30 : trend7))
 
 const trendOption = computed(() => ({
   grid: { left: 40, right: 16, top: 40, bottom: 28 },
@@ -263,7 +236,7 @@ const trendOption = computed(() => ({
   },
   legend: { top: 0, right: 0, icon: 'roundRect', itemWidth: 10, itemHeight: 10, textStyle: { color: cInk, fontSize: 12 } },
   xAxis: {
-    type: 'category', boundaryGap: false, data: activeTrend.value.map((p) => p.d),
+    type: 'category', boundaryGap: false, data: activeTrend.value.map((p) => p.date),
     axisLine: { lineStyle: { color: 'rgba(20,33,61,0.12)' } }, axisTick: { show: false },
     axisLabel: { color: cInk, fontSize: 12, interval: fRange.value === '30d' ? 4 : 0 }
   },
@@ -275,31 +248,23 @@ const trendOption = computed(() => ({
   ]
 }))
 
-// ===== 打卡类型分布（mock，近30天）=====
-// 预留后端请求：GET /api/me/type-dist
-const typeDist = { course: 42, dorm: 48 }
-const typeTotal = typeDist.course + typeDist.dorm
-const typeDistOption = {
+const typeDistOption = computed(() => ({
   tooltip: { trigger: 'item', backgroundColor: 'rgba(20,33,61,0.92)', borderWidth: 0, textStyle: { color: '#fff', fontSize: 12 }, formatter: '{b}：{c} 次 ({d}%)' },
   legend: { bottom: 0, textStyle: { color: cInk, fontSize: 11 }, type: 'scroll' },
   series: [{
     type: 'pie', radius: ['45%', '70%'], center: ['50%', '42%'], avoidLabelOverlap: true,
     label: { show: false }, itemStyle: { borderColor: '#fff', borderWidth: 2 },
     data: [
-      { value: typeDist.course, name: '课程打卡', itemStyle: { color: cBrand } },
-      { value: typeDist.dorm, name: '寝室打卡', itemStyle: { color: cInfo } }
+      { value: me.value.typeDist?.activity || 0, name: '活动打卡', itemStyle: { color: cBrand } },
+      { value: me.value.typeDist?.dorm || 0, name: '寝室打卡', itemStyle: { color: cInfo } }
     ]
   }]
-}
+}))
 
-// ===== 任务完成情况（mock，近30天）=====
-// 预留后端请求：GET /api/me/task-summary
-const taskSummary = { success: 138, fail: 9, skip: 23, pending: 6 }
-const successRate = Math.round((taskSummary.success / (taskSummary.success + taskSummary.fail)) * 100)
-const taskOption = {
+const taskOption = computed(() => ({
   tooltip: { trigger: 'item', backgroundColor: 'rgba(20,33,61,0.92)', borderWidth: 0, textStyle: { color: '#fff', fontSize: 12 }, formatter: '{b}：{c} 次 ({d}%)' },
   title: {
-    text: successRate + '%', subtext: '成功率',
+    text: successRate.value + '%', subtext: '成功率',
     left: 'center', top: '38%',
     textStyle: { fontSize: 24, fontWeight: 'bold', color: cSuccess },
     subtextStyle: { fontSize: 11, color: cInk }
@@ -309,11 +274,14 @@ const taskOption = {
     type: 'pie', radius: ['56%', '76%'], center: ['50%', '44%'], avoidLabelOverlap: true,
     label: { show: false }, itemStyle: { borderColor: '#fff', borderWidth: 2 },
     data: [
-      { value: taskSummary.success, name: '成功', itemStyle: { color: cSuccess } },
-      { value: taskSummary.fail, name: '失败', itemStyle: { color: cDanger } },
-      { value: taskSummary.skip, name: '跳过', itemStyle: { color: cSkip } },
-      { value: taskSummary.pending, name: '待执行', itemStyle: { color: cInk } }
+      { value: me.value.taskSummary?.success || 0, name: '成功', itemStyle: { color: cSuccess } },
+      { value: me.value.taskSummary?.fail || 0, name: '失败', itemStyle: { color: cDanger } },
+      { value: me.value.taskSummary?.skip || 0, name: '跳过', itemStyle: { color: cSkip } }
     ]
   }]
-}
+}))
+
+onMounted(() => {
+  store.loadOverview()
+})
 </script>

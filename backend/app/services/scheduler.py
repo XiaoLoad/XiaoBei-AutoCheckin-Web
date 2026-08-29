@@ -6,6 +6,7 @@
 import atexit
 import logging
 import os
+from datetime import timedelta
 
 import json
 import requests
@@ -18,6 +19,7 @@ from apscheduler.executors.pool import ThreadPoolExecutor
 from app.extensions import db
 from app.models import BAccount, ConfigSet, Schedule, SignRecord
 from app.models.pools import PoolCredential
+from app.models.system_config import get_setting
 from app.models.user import now_cst
 from app.services.b_platform import get_adapter
 from app.services.b_platform.base import BPlatformError
@@ -127,7 +129,8 @@ def remove_job(schedule_id):
 def reconcile():
     """周期性对账：对齐 DB 启用态与调度器 job 注册。
     - 已注册但 DB 无启用任务（账号删除 / 任务禁用 / 参数变更）→ 移除 job（孤儿清理）
-    - DB 启用但未注册（错过事件钩子的极端情况）→ 补注册"""
+    - DB 启用但未注册（错过事件钩子的极端情况）→ 补注册
+    - 超期签到日志清理：按系统配置 sign_log_retention_days 删除陈旧 SignRecord（全局策略）"""
     if _scheduler is None or _app is None:
         return
     with _app.app_context():
@@ -145,6 +148,22 @@ def reconcile():
         for s in Schedule.query.filter_by(enabled=True).all():
             if _job_id(s.id) not in jobs:
                 _register_job(s)
+        _prune_old_sign_records()
+
+
+def _prune_old_sign_records():
+    """按 sign_log_retention_days 清理超期执行日志（全局策略，不区分用户）。
+    读取失败回退默认值，清理异常仅记录不中断对账周期。"""
+    try:
+        days = get_setting('sign_log_retention_days') or 180
+        cutoff = now_cst() - timedelta(days=int(days))
+        deleted = SignRecord.query.filter(SignRecord.created_at < cutoff).delete()
+        if deleted:
+            db.session.commit()
+            log.info('清理超期签到日志 %d 条（保留 %d 天）', deleted, int(days))
+    except Exception as e:
+        db.session.rollback()
+        log.warning('签到日志自动清理失败：%s', e)
 
 
 def _extract_jitter(schedule):

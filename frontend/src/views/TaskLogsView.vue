@@ -60,6 +60,14 @@
           </div>
         </div>
         <div class="ml-auto flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-xl border border-ink/10 bg-white px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:border-danger/30 hover:text-danger"
+            @click="openPurge"
+          >
+            <Icon name="trash" :size="14" />
+            清空我的日志
+          </button>
           <div class="inline-flex items-center gap-1 rounded-xl bg-cloud p-1">
             <span class="px-1.5 text-[11px] font-medium text-ink-muted"
               >类型</span
@@ -102,6 +110,45 @@
         </div>
       </div>
     </div>
+
+    <!-- 清空我的日志：确认弹窗（必须指定 before 上限，防误清空全部历史） -->
+    <Transition name="fade">
+      <div
+        v-if="purgeOpen"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4"
+        @click.self="closePurge"
+      >
+        <div class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+          <h3 class="text-base font-semibold text-ink">清空我的执行日志</h3>
+          <p class="mt-1.5 text-sm leading-relaxed text-ink-muted">
+            将删除你名下、<span class="font-medium text-ink-soft">该日期之前</span>的全部执行日志（不可恢复）。系统仍会按保留策略自动清理更早记录。
+          </p>
+          <label class="mt-3 block text-xs font-medium text-ink-muted">删除此日期之前的日志</label>
+          <input
+            v-model="purgeBefore"
+            type="date"
+            class="login-input mt-1 w-full px-3 py-2 text-sm"
+          />
+          <div class="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              class="rounded-xl px-3.5 py-2 text-sm font-medium text-ink-muted transition hover:text-ink-soft"
+              @click="closePurge"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              class="rounded-xl bg-danger px-3.5 py-2 text-sm font-semibold text-white shadow-lg shadow-danger/25 transition hover:bg-danger/90 disabled:cursor-not-allowed disabled:opacity-60"
+              :disabled="!purgeBefore || purging"
+              @click="confirmPurge"
+            >
+              {{ purging ? '清理中…' : '确认清空' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
 
     <!-- 平铺列表：按执行时间倒序，状态色条为纵向扫读锚点；列表固定高度内部滚动，分页常驻底部。
          min-h-[480px] 给列表卡片一个舒适下限（与 SignRecordsView 一致），短屏不至过矮、长屏仍随 flex-1 撑满 -->
@@ -206,6 +253,14 @@
             />
             {{ logPill(row.status).label }}
           </span>
+          <button
+            type="button"
+            class="shrink-0 self-center rounded-lg p-1.5 text-ink-muted transition hover:bg-danger/[0.06] hover:text-danger"
+            title="删除该条日志"
+            @click="onDelete(row)"
+          >
+            <Icon name="trash" :size="14" />
+          </button>
         </li>
       </ul>
       </div>
@@ -230,9 +285,10 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { storeToRefs } from "pinia";
 import { useTaskLogsStore } from "@/stores/taskLogs";
+import { toast } from "@/utils/toast";
 import Icon from "@/components/Icon.vue";
 import BaseSelect from "@/components/BaseSelect.vue";
 import StatCard from "@/components/StatCard.vue";
@@ -253,6 +309,45 @@ const {
   loadingLogs,
   accountOptions,
 } = storeToRefs(store);
+
+// ===== 自助删除：单条删除 + 「清空我的日志」确认弹窗 =====
+const purgeOpen = ref(false);
+const purgeBefore = ref("");
+const purging = ref(false);
+
+function openPurge() {
+  purgeBefore.value = "";
+  purgeOpen.value = true;
+}
+function closePurge() {
+  if (purging.value) return;
+  purgeOpen.value = false;
+}
+async function confirmPurge() {
+  if (!purgeBefore.value) return;
+  purging.value = true;
+  try {
+    const res = await store.purgeBefore(purgeBefore.value, {
+      accountId: selectedAccountId.value || "",
+      type: typeFilter.value,
+      status: statusFilter.value,
+    });
+    toast(`已清理 ${res.deleted ?? 0} 条日志`, "success");
+    purgeOpen.value = false;
+  } catch (e) {
+    toast(e.message || "清理失败", "error");
+  } finally {
+    purging.value = false;
+  }
+}
+async function onDelete(row) {
+  try {
+    await store.removeLog(row.id);
+    toast("已删除该条日志", "success");
+  } catch (e) {
+    toast(e.message || "删除失败", "error");
+  }
+}
 
 // 筛选器额外加「全部账号」选项（value=null）
 const accountFilterOptions = computed(() => [

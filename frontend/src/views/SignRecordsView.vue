@@ -46,7 +46,7 @@
       <!-- 统计卡片：当前账号 + 类型的全量任务聚合 -->
       <div class="grid shrink-0 grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard label="历史任务" :value="stats.total" unit="项" icon="records" tone="brand" :loading="loadingRecords" :delay="1" />
-        <StatCard label="已完成" :value="stats.finished" unit="项" icon="check-circle" tone="success" :loading="loadingRecords" :delay="2" />
+        <StatCard label="已签到" :value="stats.finished" unit="项" icon="check-circle" tone="success" :loading="loadingRecords" :delay="2" />
         <StatCard label="需拍照" :value="stats.needPhoto" unit="项" icon="image" tone="amber" :loading="loadingRecords" :delay="3" />
       </div>
 
@@ -215,7 +215,13 @@
       </div>
 
       <!-- 日历视图 -->
-      <div v-else class="dash-card fade-up flex min-h-[480px] flex-1 flex-col rounded-2xl">
+      <div
+        ref="calendarRef"
+        v-else
+        class="dash-card fade-up flex min-h-[600px] flex-1 flex-col rounded-2xl"
+        @mouseover="onCellHover"
+        @mouseout="onCellOut"
+      >
         <!-- 卡片标题行：标题 + 视图切换（收进卡片内） -->
         <div class="flex shrink-0 items-center justify-between gap-3 border-b border-ink/10 px-4 py-2.5 sm:px-5">
           <h3 class="text-sm font-semibold text-ink">签到日历</h3>
@@ -246,7 +252,7 @@
               <button type="button" class="grid h-8 w-8 place-items-center rounded-lg border border-ink/10 text-ink-muted transition hover:bg-cloud hover:text-ink" aria-label="上一月" @click="store.prevMonth">
                 <Icon name="chevron-left" :size="16" />
               </button>
-              <span class="min-w-[88px] text-center text-base font-semibold text-ink tabular-nums">{{ calendarLabel }}</span>
+              <span ref="monthLabelRef" class="min-w-[96px] text-center text-base font-semibold tracking-tight text-ink tabular-nums">{{ calendarLabel }}</span>
               <button type="button" class="grid h-8 w-8 place-items-center rounded-lg border border-ink/10 text-ink-muted transition hover:bg-cloud hover:text-ink" aria-label="下一月" @click="store.nextMonth">
                 <Icon name="chevron-right" :size="16" />
               </button>
@@ -254,11 +260,12 @@
             <div class="flex items-center gap-2">
               <button
                 type="button"
-                class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ink/10 px-3 text-sm font-medium text-ink-soft transition hover:bg-cloud disabled:cursor-not-allowed disabled:opacity-40"
+                class="inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition hover:bg-cloud disabled:cursor-not-allowed disabled:opacity-40"
+                :class="isCurrentMonth ? 'border-ink/10 text-ink-soft' : 'border-brand/30 bg-brand/[0.06] text-brand'"
                 :disabled="isCurrentMonth"
                 @click="store.backToCurrentMonth"
               >
-                <Icon name="refresh" :size="14" />本月
+                <Icon name="refresh" :size="14" />今天
               </button>
               <button
                 type="button"
@@ -276,18 +283,15 @@
             <span class="whitespace-nowrap text-xs text-ink-muted">已签 <b class="text-sm font-semibold text-success tabular-nums">{{ monthSummary.signed }}</b></span>
             <span class="whitespace-nowrap text-xs text-ink-muted">漏签 <b class="text-sm font-semibold text-danger tabular-nums">{{ monthSummary.unsigned }}</b></span>
             <div class="relative h-1.5 flex-1 overflow-hidden rounded-full bg-ink/10">
-              <div class="absolute inset-y-0 left-0 rounded-full bg-success transition-all duration-500" :style="{ width: monthSummary.rate + '%' }" />
+              <div ref="progressRef" class="absolute inset-y-0 left-0 rounded-full bg-success" style="width: 0%" />
             </div>
             <span class="whitespace-nowrap text-xs font-medium text-ink-soft tabular-nums">{{ monthSummary.rate }}%</span>
-            <span v-if="loadingLogs" class="inline-flex items-center gap-1 whitespace-nowrap text-xs text-brand">
-              <span class="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" />聚合中
-            </span>
           </div>
         </div>
 
-        <!-- 星期表头（周日起，对齐旧版 UI） -->
-        <div class="grid shrink-0 grid-cols-7 gap-1.5 px-3 pb-1 pt-2 text-center text-xs font-medium text-ink-muted sm:px-4">
-          <div v-for="d in weekHeads" :key="d">{{ d }}</div>
+        <!-- 星期表头（周日起）：周末列更淡，压低视觉噪音 -->
+        <div class="grid shrink-0 grid-cols-7 gap-1.5 px-3 pb-1.5 pt-2.5 text-center text-[11px] font-medium tracking-wide text-ink-muted sm:px-4">
+          <div v-for="(d, i) in weekHeads" :key="d" :class="i === 0 || i === 6 ? 'text-ink/35' : ''">{{ d }}</div>
         </div>
 
         <!-- 日期网格：flex-1 自适应铺满，6 行等分，内部不滚动 -->
@@ -307,47 +311,54 @@
                 v-for="cell in week"
                 :key="cell.date"
                 type="button"
-                class="group relative flex h-full flex-col justify-between overflow-hidden rounded-xl border px-1.5 py-1 text-left transition"
+                data-day-cell
+                class="group relative flex h-full flex-col items-center justify-center gap-1 rounded-xl border p-1.5 text-center transition-[background-color,border-color,color,box-shadow] duration-300"
                 :class="[
-                  cellClass(cell.state),
-                  cell.inMonth ? '' : 'opacity-35',
-                  cell.state === 'none' ? 'cursor-default' : 'cursor-pointer hover:brightness-[0.97]',
-                  cell.date === dayFilter ? 'ring-2 ring-brand' : '',
+                  cellClass(cell),
+                  ringClass(cell),
+                  cell.inMonth && cell.state !== 'none'
+                    ? 'cursor-pointer hover:shadow-[0_2px_12px_-3px_rgba(15,23,42,0.15)]'
+                    : 'cursor-default',
                 ]"
-                :disabled="cell.state === 'none'"
+                :disabled="!cell.inMonth || cell.state === 'none'"
                 :title="cellTitle(cell)"
                 @click="store.setDayFilter(cell.date)"
               >
-                <span class="text-xs font-semibold leading-none tabular-nums" :class="cell.inMonth ? '' : 'text-ink-muted'">{{ cell.day }}</span>
-                <span v-if="cell.state !== 'none'" class="self-start rounded-md px-1 py-0.5 text-[10px] font-medium leading-none tabular-nums" :class="chipClass(cell.state)">
-                  <template v-if="cell.state === 'pending'">有任务</template>
-                  <template v-else-if="cell.state === 'signed'">签{{ cell.signed }}</template>
-                  <template v-else>漏{{ cell.unsigned }}</template>
+                <span
+                  class="text-sm font-semibold leading-none tabular-nums"
+                  :class="cell.today ? 'text-brand' : (!cell.inMonth ? 'text-ink/30' : 'text-ink')"
+                >{{ cell.day }}</span>
+                <span
+                  v-if="cell.inMonth && cell.state !== 'none'"
+                  class="inline-flex items-center gap-1 rounded-full px-1.5 py-[3px] text-[10px] font-semibold leading-none tabular-nums"
+                  :class="chipClass(cell.state)"
+                >
+                  <span class="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
+                  <template v-if="cell.signed > 0 && cell.unsigned > 0">签{{ cell.signed }}·漏{{ cell.unsigned }}</template>
+                  <template v-else-if="cell.unsigned > 0">漏{{ cell.unsigned }}</template>
+                  <template v-else>签{{ cell.signed }}</template>
                 </span>
               </button>
             </template>
           </template>
         </div>
 
-        <!-- 跨月提示：当前月无数据但有数据月份 -->
-        <div v-if="tasks.length > 0 && !monthHasTask" class="flex shrink-0 items-center justify-center gap-2 border-t border-ink/5 px-4 py-2 text-xs text-ink-muted">
-          <span>本月暂无签到记录</span>
-          <button v-if="bestDataMonth" type="button" class="rounded-md px-2 py-0.5 font-medium text-brand hover:bg-brand/10" @click="store.jumpToBestMonth">
-            查看 {{ bestDataMonth.y }}年{{ bestDataMonth.m }}月
-          </button>
-        </div>
-
-        <!-- 图例 -->
+        <!-- 图例：始终渲染、固定高度，避免切换月份时布局跳动 -->
         <div class="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-ink/5 px-4 py-2.5 text-xs text-ink-muted sm:px-5">
           <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-success" />已签到</span>
           <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-danger" />漏签</span>
-          <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-brand" />待聚合</span>
           <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-ink/15" />无记录</span>
+          <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-brand/20 ring-2 ring-brand/60 ring-offset-1" />今天</span>
         </div>
 
-        <p v-if="dayFilter" class="shrink-0 px-4 pb-2 text-center text-xs text-ink-muted sm:px-5">
-          已选中 <b class="tabular-nums text-ink-soft">{{ dayFilter }}</b>，点击上方「列表」可查看当天任务明细
-        </p>
+        <!-- 底部信息条：始终占位（固定最小高度），内容按需切换，杜绝切换月份时的高度跳动 -->
+        <div class="flex shrink-0 min-h-[2.5rem] items-center justify-center px-4 pb-2 text-center text-xs text-ink-muted sm:px-5">
+          <span v-if="dayFilter">已选中 <b class="tabular-nums text-ink-soft">{{ dayFilter }}</b>，点击上方「列表」查看当天任务明细</span>
+          <template v-else-if="tasks.length > 0 && !monthHasTask">
+            <span>本月暂无签到记录</span>
+            <button v-if="bestDataMonth" type="button" class="ml-1 rounded-md px-2 py-0.5 font-medium text-brand hover:bg-brand/10" @click="store.jumpToBestMonth">查看 {{ bestDataMonth.y }}年{{ bestDataMonth.m }}月</button>
+          </template>
+        </div>
       </div>
     </template>
 
@@ -357,8 +368,9 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import { gsap } from 'gsap'
 import { useSignRecordsStore } from '@/stores/signRecords'
 import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
@@ -372,8 +384,6 @@ const {
   selectedAccountId,
   loadingAccounts,
   loadingRecords,
-  loadingLogs,
-  logsReady,
   tasks,
   typeFilter,
   viewMode,
@@ -409,35 +419,156 @@ function typeBadge(t) {
 
 function statusBadge(finished) {
   return finished
-    ? { label: '已完成', cls: 'bg-success/10 text-success', dot: 'bg-success' }
-    : { label: '进行中', cls: 'bg-ink/10 text-ink-muted', dot: 'bg-ink/30' }
+    ? { label: '已签到', cls: 'bg-success/10 text-success', dot: 'bg-success' }
+    : { label: '未签到', cls: 'bg-danger/10 text-danger', dot: 'bg-danger' }
 }
 
-// 日历格底色：已签(绿) / 漏签(红) / 待聚合(品牌蓝) / 无记录(灰)
-function cellClass(state) {
-  if (state === 'signed') return 'border-success/30 bg-success/10 text-success'
-  if (state === 'unsigned') return 'border-danger/30 bg-danger/10 text-danger'
-  if (state === 'pending') return 'border-brand/25 bg-brand/5 text-brand'
-  return 'border-ink/5 bg-white text-ink-muted'
+// 日历格底色：占位日期(上/下月)彻底弱化、当月无任务安静清晰、已签(绿)/漏签(红)区分明确。
+// 今天即便当天没有任务也要一眼可辨，故单独给品牌色底 + 描边，且不受 inMonth 限制
+// （今天可能落在当月的网格占位区，如 7 月网格会包含 8 月初）。
+function cellClass(cell) {
+  if (cell.today && cell.state === 'none') return 'border-brand/40 bg-brand/[0.06] text-brand'
+  // 占位日期（上/下月）：透明无边框、文字极淡，明显区别于当月真实日期
+  if (!cell.inMonth) return 'border-transparent bg-transparent text-ink/25'
+  // 当月：柔和底色 + 同色描边，文字取满色保证可读
+  if (cell.state === 'signed') return 'border-success/30 bg-success/10 text-success'
+  if (cell.state === 'unsigned') return 'border-danger/30 bg-danger/10 text-danger'
+  // 当月无任务：安静但在场（白底 + 极浅边框），与占位日期一眼可分
+  return 'border-ink/[0.07] bg-white text-ink-soft'
 }
 
-// 日历格状态小标签配色，与底色呼应
+// 环：选中态优先于今天，二者只取其一，避免两个 ring 工具类在 CSS 中互相覆盖
+function ringClass(cell) {
+  if (cell.date === dayFilter) return 'ring-2 ring-brand'
+  if (cell.today) return 'ring-2 ring-brand/60'
+  return ''
+}
+
+// 日历格状态小标签配色，与底色呼应（实心点 + 粗体数字，小尺寸下也清晰）
 function chipClass(state) {
-  if (state === 'signed') return 'bg-success/15 text-success'
-  if (state === 'unsigned') return 'bg-danger/15 text-danger'
-  return 'bg-brand/10 text-brand'
+  if (state === 'signed') return 'bg-success/25 text-success'
+  return 'bg-danger/25 text-danger'
 }
 
-// 悬浮提示：区分已签 / 漏签 / 待聚合 的语义文案
+// 悬浮提示：同时给出当天的已签 / 漏签任务条数；今天额外标注
 function cellTitle(cell) {
-  if (cell.state === 'none') return cell.date
-  const map = {
-    signed: `已签 ${cell.signed}`,
-    unsigned: `漏签 ${cell.unsigned}`,
-    pending: '有任务（聚合中）',
-  }
-  return `${cell.date} · ${map[cell.state] || ''}`
+  const suffix = cell.today ? '（今天）' : ''
+  if (cell.state === 'none') return `${cell.date}${suffix}`
+  const parts = []
+  if (cell.signed) parts.push(`已签 ${cell.signed}`)
+  if (cell.unsigned) parts.push(`漏签 ${cell.unsigned}`)
+  return `${cell.date}${suffix} · ${parts.join(' · ')}`
 }
+
+// ---- 日历动效（GSAP）----
+// 切月时格子错落淡入、完成率进度条补间、格子悬浮微缩放；统一尊重系统「减少动态效果」偏好
+const calendarRef = ref(null)
+const monthLabelRef = ref(null)
+const progressRef = ref(null)
+const reduceMotion = ref(false)
+let mm = null
+
+// 进度条宽度交给 GSAP 驱动：模板里初始 0%，避免与 Vue 的内联样式互相覆盖
+function animateProgress(rate) {
+  if (!progressRef.value) return
+  const w = Math.min(100, Math.max(0, Number(rate) || 0))
+  gsap.to(progressRef.value, {
+    width: `${w}%`,
+    duration: reduceMotion.value ? 0 : 0.85,
+    ease: 'power3.out',
+    overwrite: true,
+  })
+}
+
+// dir：1=下一月，-1=上一月，0=进入日历视图（不做方向位移）
+async function animateCalendar(dir = 0) {
+  await nextTick()
+  const root = calendarRef.value
+  if (!root) return
+  const cells = root.querySelectorAll('[data-day-cell]')
+  if (reduceMotion.value) {
+    if (cells.length) gsap.set(cells, { autoAlpha: 1, y: 0, scale: 1 })
+    animateProgress(monthSummary.value?.rate)
+    return
+  }
+  if (cells.length) {
+    gsap.fromTo(
+      cells,
+      { autoAlpha: 0, y: 12 * (dir || 1), scale: 0.96 },
+      {
+        autoAlpha: 1,
+        y: 0,
+        scale: 1,
+        duration: 0.42,
+        ease: 'power2.out',
+        stagger: { each: 0.011, from: 'start' },
+        overwrite: true,
+      }
+    )
+  }
+  if (dir && monthLabelRef.value) {
+    gsap.fromTo(
+      monthLabelRef.value,
+      { autoAlpha: 0, x: 14 * dir },
+      { autoAlpha: 1, x: 0, duration: 0.36, ease: 'power2.out', overwrite: true }
+    )
+  }
+  animateProgress(monthSummary.value?.rate)
+}
+
+// 悬浮微交互用事件委托挂在日历根节点，避免给 42 个格子各绑一对监听
+function hoveredCell(e) {
+  const el = e.target instanceof Element ? e.target : null
+  return el ? el.closest('[data-day-cell]') : null
+}
+
+function onCellHover(e) {
+  const cell = hoveredCell(e)
+  if (!cell || cell.disabled || reduceMotion.value) return
+  gsap.to(cell, { scale: 1.05, duration: 0.22, ease: 'power2.out', overwrite: 'auto' })
+}
+
+function onCellOut(e) {
+  const cell = hoveredCell(e)
+  if (!cell || reduceMotion.value) return
+  // 指针仍在同格的子元素之间移动时忽略，否则会来回抖动
+  if (e.relatedTarget instanceof Node && cell.contains(e.relatedTarget)) return
+  gsap.to(cell, { scale: 1, duration: 0.22, ease: 'power2.out', overwrite: 'auto' })
+}
+
+onMounted(() => {
+  mm = gsap.matchMedia()
+  mm.add('(prefers-reduced-motion: reduce)', () => {
+    reduceMotion.value = true
+    return () => {
+      reduceMotion.value = false
+    }
+  })
+})
+
+// 账号是异步加载的，日历卡片要等数据到位才挂载；ref 由 null 变为元素时补一次入场动画
+// （同时覆盖「首次进入」与「列表→日历」切换，避免与月份监听重复触发）
+watch(calendarRef, (el) => {
+  if (el) animateCalendar(0)
+})
+
+watch([calendarYear, calendarMonth], ([ny, nm], [oy, om]) => {
+  if (viewMode.value !== 'calendar') return
+  animateCalendar(ny > oy || (ny === oy && nm > om) ? 1 : -1)
+})
+
+watch(
+  () => monthSummary.value?.rate,
+  (r) => {
+    if (viewMode.value === 'calendar') animateProgress(r)
+  }
+)
+
+onUnmounted(() => {
+  mm?.revert()
+  if (calendarRef.value) gsap.killTweensOf(calendarRef.value.querySelectorAll('[data-day-cell]'))
+  gsap.killTweensOf([monthLabelRef.value, progressRef.value].filter(Boolean))
+})
 
 // 直连 B 平台图片，加载失败的记录（taskId-logId 维度）回退为「无图」
 const brokenImgs = ref(new Set())

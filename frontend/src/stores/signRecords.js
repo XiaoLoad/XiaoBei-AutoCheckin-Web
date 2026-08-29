@@ -1,18 +1,17 @@
 // 签到记录领域状态（Pinia）：收纳账号列表 / 选中账号 / 类型筛选 / 视图模式 / 分页 /
-// 日历定位 / 任务列表 / 展开详情 / 每日签到聚合。数据来自 B 平台、经后端代理读取
-// （api/signRecords.js），本 store 只做编排。
+// 日历定位 / 任务列表 / 展开详情。数据来自 B 平台、经后端代理读取（api/signRecords.js），
+// 本 store 只做编排。
 //
-// 账号 / 类型切换由 watch 兜底触发 loadRecords，无需在各处手动调用，避免隐式链路遗漏；
-// 日历的"哪天没签"来自各任务真实签到记录（listLog）按日期聚合，而非依赖任务区间的
-// finished 字段（overlist 仅返回已结束任务，finished 几乎恒为 true，无法体现漏签）。
+// 账号 / 类型切换走显式 selectAccount / setType，不依赖 watch 隐式链路。
+// 日历着色直接用任务列表自带的 finished（isFinishKnowing / isFinishSign）——2026-08-29
+// 抓包实证该字段会取 0 表示漏签（如 07.02查寝签到、05.28班会签到），无需再逐任务查
+// listLog 聚合，日历因此即时渲染、没有「待聚合」等待。listLog 仅用于展开详情按需拉取。
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { fetchAccounts, fetchSignRecords, fetchTaskDetail } from '@/api/signRecords'
 
 // 历史任务量有限（寝/活各自数十~数百级），一次拉全量后在客户端分页，统计口径才与全局一致
 const ALL_PAGE_SIZE = 9999
-// 并发预拉各任务签到记录的并发度（控制对 B 平台的瞬时压力）
-const LOG_CONCURRENCY = 8
 
 // 本地日期格式（避开 toISOString 的 UTC 时区偏移，否则 GMT+8 会差一天）
 function fmt(d) {
@@ -56,9 +55,6 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
   const selectedAccountId = ref(null)
   const loadingAccounts = ref(false)
   const loadingRecords = ref(false)
-  const loadingLogs = ref(false)
-  // 每日签到聚合是否已完成（false 时日历对应格子显示「待聚合」而非绿/红）
-  const logsReady = ref(false)
   const tasks = ref([]) // 当前账号 + 类型下的全部历史任务（后端已合并排序）
 
   // 类型筛选：all（全部）| dorm（寝室签到）| activity（活动签到）
@@ -77,12 +73,8 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
 
   // 展开详情：taskId -> { loading, open, geoFence, logs, error }
   const details = ref({})
-  // 任务签到记录缓存：taskId -> { logs, geoFence }，预拉后供展开复用
+  // 任务签到记录缓存：taskId -> { logs, geoFence }，展开详情时按需拉取并复用
   const logsCache = ref({})
-  // 每日签到聚合：'YYYY-MM-DD' -> 当天签到次数（来自各任务 listLog 真实数据）
-  const signedByDate = ref({})
-  // 预拉轮次标记，屏蔽过期轮次对缓存的覆盖
-  const logsRun = ref(0)
 
   const accountOptions = computed(() =>
     accounts.value.map((a) => ({
@@ -120,34 +112,43 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     return visibleTasks.value.slice(start, start + pageSize.value)
   })
 
-  // 日历网格：以周日为一周起点（对齐旧版 UI）；每日：有任务且当天有真实签到→已签(绿)，
-  // 有任务但无签到→漏签(红)，其余→无记录(灰)。签到数据来自预拉的 listLog 真实聚合。
+  // 每日签到统计：直接按任务自身的 finished（isFinishKnowing / isFinishSign）聚合到日期。
+  // overlist 已给出每条任务的签到状态（2026-08-29 抓包实证：isFinishKnowing/isFinishSign
+  // 存在 0 值，正是漏签），故无需再逐任务查 listLog —— 日历可即时着色，不再有「待聚合」等待。
+  // 同一天可能有多条任务，因此分别统计已签 / 漏签条数。
+  const dayStats = computed(() => {
+    const acc = {}
+    for (const t of tasks.value) {
+      for (const d of eachDayInRange(t.startDate, t.endDate)) {
+        const s = acc[d] || (acc[d] = { signed: 0, unsigned: 0 })
+        if (t.finished) s.signed += 1
+        else s.unsigned += 1
+      }
+    }
+    return acc
+  })
+
+  // 日历网格：以周日为一周起点；当天只要有漏签即标红，全部完成才标绿，无任务为灰
   const calendarWeeks = computed(() => {
     const y = calendarYear.value
     const m = calendarMonth.value
-    const taskDays = {}
-    for (const t of tasks.value) {
-      for (const d of eachDayInRange(t.startDate, t.endDate)) taskDays[d] = true
-    }
+    // 每次重算都取当前时间，避免 store 创建后跨日失效（now 是冻结的初始值）
+    const todayStr = fmt(new Date())
     const lead = new Date(y, m - 1, 1).getDay() // 周日=0
     const cells = []
     const cur = new Date(y, m - 1, 1 - lead)
     for (let i = 0; i < 42; i++) {
       const dateStr = fmt(cur)
       const inMonth = cur.getMonth() === m - 1
-      const hasTask = !!taskDays[dateStr]
-      const signed = signedByDate.value[dateStr] || 0
-      let state
-      if (!hasTask) state = 'none'
-      else if (!logsReady.value) state = 'pending'
-      else state = signed > 0 ? 'signed' : 'unsigned'
+      const st = dayStats.value[dateStr]
       cells.push({
         date: dateStr,
         day: cur.getDate(),
         inMonth,
-        state,
-        signed,
-        unsigned: hasTask && signed === 0 ? 1 : 0,
+        state: !st ? 'none' : st.unsigned > 0 ? 'unsigned' : 'signed',
+        signed: st ? st.signed : 0,
+        unsigned: st ? st.unsigned : 0,
+        today: dateStr === todayStr,
       })
       cur.setDate(cur.getDate() + 1)
     }
@@ -157,9 +158,10 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
   })
 
   const calendarLabel = computed(() => `${calendarYear.value}年${calendarMonth.value}月`)
-  const isCurrentMonth = computed(
-    () => calendarYear.value === now.getFullYear() && calendarMonth.value === now.getMonth() + 1
-  )
+  const isCurrentMonth = computed(() => {
+    const d = new Date()
+    return calendarYear.value === d.getFullYear() && calendarMonth.value === d.getMonth() + 1
+  })
   const monthHasTask = computed(() =>
     calendarWeeks.value.some((w) => w.some((c) => c.state !== 'none'))
   )
@@ -177,22 +179,22 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
         consider(y, m)
       }
     }
-    for (const d of Object.keys(signedByDate.value)) {
+    for (const d of Object.keys(dayStats.value)) {
       const [y, m] = d.split('-').map(Number)
       consider(y, m)
     }
     return best
   })
 
-  // 本月概览（签名元素）：已签 / 漏签 / 完成率，仅统计当月真实格
+  // 本月概览（签名元素）：按任务条数统计已签 / 漏签 / 完成率，仅统计当月真实格
   const monthSummary = computed(() => {
     let signed = 0
     let unsigned = 0
     for (const w of calendarWeeks.value) {
       for (const c of w) {
-        if (!c.inMonth || c.state === 'none' || c.state === 'pending') continue
-        if (c.state === 'signed') signed++
-        else if (c.state === 'unsigned') unsigned++
+        if (!c.inMonth || c.state === 'none') continue
+        signed += c.signed
+        unsigned += c.unsigned
       }
     }
     const total = signed + unsigned
@@ -223,8 +225,6 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     if (!selectedAccountId.value) {
       tasks.value = []
       logsCache.value = {}
-      signedByDate.value = {}
-      logsReady.value = true
       details.value = {}
       dayFilter.value = null
       return
@@ -233,6 +233,8 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     details.value = {}
     page.value = 1
     dayFilter.value = null
+    // 账号 / 类型已变，旧的任务签到缓存（展开详情用）作废
+    logsCache.value = {}
     try {
       const res = await fetchSignRecords(selectedAccountId.value, {
         type: typeFilter.value,
@@ -245,49 +247,7 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     } finally {
       loadingRecords.value = false
     }
-    // 列表已可渲染；日历所需的每日签到聚合在后台并发预拉，logsReady/loadingLogs 单独指示
-    logsReady.value = false
-    void loadAllLogs()
-  }
-
-  // 并发预拉各任务真实签到记录，按 log.time 日期聚合到 signedByDate，
-  // 结果缓存到 logsCache 供展开详情复用。幂等轮次标记防止过期轮次覆盖新数据。
-  async function loadAllLogs() {
-    const list = tasks.value
-    if (!list.length) {
-      logsCache.value = {}
-      signedByDate.value = {}
-      logsReady.value = true
-      return
-    }
-    const myRun = ++logsRun.value
-    loadingLogs.value = true
-    const cache = {}
-    const acc = {}
-    let idx = 0
-    const worker = async () => {
-      while (idx < list.length) {
-        const t = list[idx++]
-        try {
-          const r = await fetchTaskDetail(selectedAccountId.value, t.id, t.kind)
-          cache[t.id] = { logs: r.logs || [], geoFence: r.geoFence || [] }
-          for (const lg of r.logs || []) {
-            const d = normalizeDate(lg.time)
-            if (d) acc[d] = (acc[d] || 0) + 1
-          }
-        } catch (e) {
-          cache[t.id] = { logs: [], geoFence: [] }
-        }
-      }
-    }
-    await Promise.all(Array.from({ length: Math.min(LOG_CONCURRENCY, list.length) }, worker))
-    if (myRun === logsRun.value) {
-      logsCache.value = cache
-      signedByDate.value = acc
-      logsReady.value = true
-    }
-    // 本轮为最新轮次才收尾；过期轮次由新轮次自行收尾，避免旧数据覆盖
-    if (myRun === logsRun.value) loadingLogs.value = false
+    // 日历着色直接来自任务列表的 finished 字段，无需任何额外聚合请求
   }
 
   function setType(t) {
@@ -312,25 +272,23 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     page.value = 1
   }
 
+  // 切月统一入口：改月份后立即补拉该月所需的签到记录
+  function setMonth(y, m) {
+    calendarYear.value = y
+    calendarMonth.value = m
+  }
+
   function prevMonth() {
-    if (calendarMonth.value === 1) {
-      calendarMonth.value = 12
-      calendarYear.value--
-    } else {
-      calendarMonth.value--
-    }
+    if (calendarMonth.value === 1) setMonth(calendarYear.value - 1, 12)
+    else setMonth(calendarYear.value, calendarMonth.value - 1)
   }
   function nextMonth() {
-    if (calendarMonth.value === 12) {
-      calendarYear.value = 1
-      calendarMonth.value++
-    } else {
-      calendarMonth.value++
-    }
+    if (calendarMonth.value === 12) setMonth(calendarYear.value + 1, 1)
+    else setMonth(calendarYear.value, calendarMonth.value + 1)
   }
   function backToCurrentMonth() {
-    calendarYear.value = now.getFullYear()
-    calendarMonth.value = now.getMonth() + 1
+    const d = new Date()
+    setMonth(d.getFullYear(), d.getMonth() + 1)
   }
   function setDayFilter(d) {
     dayFilter.value = dayFilter.value === d ? null : d
@@ -406,8 +364,7 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     const best = bestDataMonth.value
     if (best) {
       dayFilter.value = null
-      calendarYear.value = best.y
-      calendarMonth.value = best.m
+      setMonth(best.y, best.m)
     }
   }
 
@@ -416,8 +373,6 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     selectedAccountId,
     loadingAccounts,
     loadingRecords,
-    loadingLogs,
-    logsReady,
     tasks,
     typeFilter,
     viewMode,
@@ -428,7 +383,7 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     dayFilter,
     details,
     logsCache,
-    signedByDate,
+    dayStats,
     accountOptions,
     selectedAccount,
     stats,

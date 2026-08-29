@@ -1,8 +1,9 @@
 <template>
   <div class="flex flex-1 min-h-0 flex-col gap-6">
-    <!-- 筛选卡片：平台账号（带搜索）居左；右侧为类型切换 -->
+    <!-- 筛选卡片：账号决定看谁的数据；类型与状态同行双胶囊，竖线分隔，维度不同不合并为同一控件 -->
     <div class="dash-card fade-up relative z-30 shrink-0 p-3 sm:p-4">
       <div class="flex flex-wrap items-center gap-x-4 gap-y-3">
+        <!-- 平台账号：决定数据归属，独立于筛选维度 -->
         <div class="flex items-center gap-2">
           <span class="shrink-0 text-sm font-medium text-ink-soft">平台账号</span>
           <div class="w-44 sm:w-56">
@@ -18,18 +19,36 @@
           </div>
         </div>
 
-        <div class="ml-auto inline-flex items-center gap-2">
-          <!-- 签到类型切换 -->
-          <div class="inline-flex items-center rounded-xl bg-cloud p-1">
+        <!-- 类型 + 状态：双胶囊竖线分隔，label 嵌入为行内灰色提示 -->
+        <div class="ml-auto flex flex-wrap items-center gap-2">
+          <div class="inline-flex items-center gap-1 rounded-xl bg-cloud p-1">
+            <span class="px-1.5 text-[11px] font-medium text-ink-muted">类型</span>
             <button
               v-for="t in typeTabs"
-              :key="t.value"
+              :key="`ty-${t.value}`"
               type="button"
-              class="rounded-lg px-3 py-1.5 text-sm font-medium transition"
+              class="whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm font-medium transition"
               :class="typeFilter === t.value ? 'bg-white text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
               @click="store.setType(t.value)"
             >
               {{ t.label }}
+            </button>
+          </div>
+
+          <span class="h-5 w-px bg-ink/10" aria-hidden="true" />
+
+          <div class="inline-flex items-center gap-1 rounded-xl bg-cloud p-1">
+            <span class="px-1.5 text-[11px] font-medium text-ink-muted">状态</span>
+            <button
+              v-for="s in statusTabs"
+              :key="`st-${s.value}`"
+              type="button"
+              :title="s.title"
+              class="whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm font-medium transition"
+              :class="statusFilter === s.value ? 'bg-white text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
+              @click="store.setStatus(s.value)"
+            >
+              {{ s.label }}
             </button>
           </div>
         </div>
@@ -43,11 +62,55 @@
     </div>
 
     <template v-else>
-      <!-- 统计卡片：当前账号 + 类型的全量任务聚合 -->
-      <div class="grid shrink-0 grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard label="历史任务" :value="stats.total" unit="项" icon="records" tone="brand" :loading="loadingRecords" :delay="1" />
-        <StatCard label="已签到" :value="stats.finished" unit="项" icon="check-circle" tone="success" :loading="loadingRecords" :delay="2" />
-        <StatCard label="需拍照" :value="stats.needPhoto" unit="项" icon="image" tone="amber" :loading="loadingRecords" :delay="3" />
+      <!-- 统计卡片：总任务 / 已签 / 未签 / 满勤率。满勤率用环形进度作视觉锚点，其余保持数字卡 -->
+      <div class="grid shrink-0 grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatCard label="签到总任务" :value="stats.total" unit="项" icon="records" tone="brand" :loading="loadingRecords" :delay="1" count-up />
+        <StatCard label="已签到" :value="stats.finished" unit="项" icon="check-circle" tone="success" :loading="loadingRecords" :delay="2" count-up />
+        <StatCard label="未签到" :value="stats.unsigned" unit="项" icon="x-circle" tone="danger" :loading="loadingRecords" :delay="3" count-up />
+
+        <div class="dash-card fade-up delay-4 flex min-h-[120px] items-center gap-4 p-5">
+          <template v-if="loadingRecords">
+            <div class="h-[76px] w-[76px] shrink-0 rounded-full border-[7px] border-ink/5 animate-pulse" />
+            <div class="min-w-0 flex-1 space-y-2">
+              <div class="h-4 w-16 rounded bg-ink/5 animate-pulse" />
+              <div class="h-3 w-12 rounded bg-ink/5 animate-pulse" />
+            </div>
+          </template>
+          <template v-else>
+            <svg width="76" height="76" viewBox="0 0 76 76" class="shrink-0" aria-hidden="true">
+              <circle cx="38" cy="38" r="30" fill="none" stroke="currentColor" stroke-width="7" class="text-ink/10" />
+              <circle
+                ref="rateArcRef"
+                cx="38"
+                cy="38"
+                r="30"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="7"
+                stroke-linecap="round"
+                transform="rotate(-90 38 38)"
+                :stroke-dasharray="RING_C"
+                :stroke-dashoffset="RING_C"
+                :class="rateToneClass"
+              />
+              <text
+                x="38"
+                y="38"
+                text-anchor="middle"
+                dominant-baseline="central"
+                fill="currentColor"
+                class="text-ink text-[17px] font-bold tabular-nums"
+              >{{ stats.rate }}%</text>
+            </svg>
+            <div class="min-w-0 flex-1">
+              <p class="text-sm font-medium text-ink-muted">满勤率</p>
+              <p class="mt-1.5 truncate text-xs text-ink-muted">
+                已签 <b class="tabular-nums text-success">{{ stats.finished }}</b>
+                <span class="text-ink-muted">/ {{ stats.total }} 项</span>
+              </p>
+            </div>
+          </template>
+        </div>
       </div>
 
       <!-- 列表视图 -->
@@ -99,104 +162,198 @@
           </div>
 
           <!-- 任务行（可展开） -->
-          <ul v-else class="divide-y divide-ink/5">
-            <li v-for="row in pagedRows" :key="row.id">
+          <ul ref="listRef" v-else class="divide-y divide-ink/5">
+            <li v-for="row in pagedRows" :key="row.id" data-task-row>
               <button
                 type="button"
-                class="flex w-full items-center justify-between gap-3 px-2 py-3 text-left transition hover:bg-cloud/40 sm:px-3"
+                class="flex w-full items-center gap-3 px-2 py-3 text-left transition hover:bg-cloud/40 sm:px-3"
                 @click="store.toggleExpand(row)"
               >
+                <!-- 状态色条：纵向扫列表时的第一视觉锚点 -->
+                <span class="h-9 w-1 shrink-0 rounded-full" :class="row.finished ? 'bg-success' : 'bg-danger'" />
+
                 <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-2">
-                    <span class="truncate font-medium text-ink">{{ row.taskName }}</span>
-                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap" :class="typeBadge(row.type).cls">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="truncate text-[15px] font-semibold text-ink">{{ row.taskName }}</span>
+                    <span class="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap" :class="typeBadge(row.type).cls">
                       {{ typeBadge(row.type).label }}
                     </span>
+                    <span v-if="row.needPhoto" class="shrink-0 rounded-full bg-amber/10 px-2 py-0.5 text-xs font-medium text-amber whitespace-nowrap">需拍照</span>
                   </div>
                   <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
                     <span class="tabular-nums">{{ row.startDate }}<template v-if="row.endDate && row.endDate !== row.startDate"> ~ {{ row.endDate }}</template></span>
                     <span class="tabular-nums">{{ row.startTime }}<template v-if="row.endTime"> – {{ row.endTime }}</template></span>
-                    <span>发起人 {{ row.initiator }}</span>
-                    <span v-if="row.needPhoto" class="inline-flex items-center rounded-full bg-amber/10 px-2 py-0.5 text-xs font-medium text-amber whitespace-nowrap">需拍照</span>
-                    <span class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap" :class="statusBadge(row.finished).cls">
-                      <span class="h-1.5 w-1.5 rounded-full" :class="statusBadge(row.finished).dot" />
-                      {{ statusBadge(row.finished).label }}
-                    </span>
+                    <span class="truncate">发起人 {{ row.initiator }}</span>
                   </div>
                 </div>
+
+                <span class="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap" :class="statusBadge(row.finished).cls">
+                  <span class="h-1.5 w-1.5 rounded-full" :class="statusBadge(row.finished).dot" />
+                  {{ statusBadge(row.finished).label }}
+                </span>
+
                 <Icon
                   name="chevron-right"
                   :size="18"
                   class="shrink-0 text-ink-muted transition-transform"
-                  :class="store.getDetail(row.id) && store.getDetail(row.id).open ? 'rotate-90' : ''"
+                  :class="detailOf(row) && detailOf(row).open ? 'rotate-90' : ''"
                 />
               </button>
 
-              <!-- 展开详情：地理围栏读取单元 + 签到记录子行 -->
-              <div v-if="store.getDetail(row.id) && store.getDetail(row.id).open" class="border-t border-ink/5 bg-cloud/30 px-3 py-4 sm:px-5">
-                <div v-if="store.getDetail(row.id).loading" class="flex items-center justify-center py-8 text-sm text-ink-muted">
+              <!-- 展开详情：任务要素 + 地理围栏卡片 + 签到凭证 -->
+              <Transition :css="false" @enter="onDetailEnter" @leave="onDetailLeave">
+              <div v-if="detailOf(row) && detailOf(row).open" class="overflow-hidden border-t border-ink/5 bg-cloud/30 px-3 py-4 sm:px-5">
+                <div v-if="detailOf(row).loading" class="flex items-center justify-center py-8 text-sm text-ink-muted">
                   加载详情中…
                 </div>
-                <div v-else-if="store.getDetail(row.id).error" class="py-2 text-sm text-danger">
-                  {{ store.getDetail(row.id).error }}
+                <div v-else-if="detailOf(row).error" class="py-2 text-sm text-danger">
+                  {{ detailOf(row).error }}
                 </div>
                 <div v-else class="space-y-4">
-                  <!-- 地理围栏读取单元（签名元素：细环 + 中心点） -->
-                  <div class="flex gap-3 rounded-xl border border-amber/20 bg-amber/5 p-3">
-                    <svg width="44" height="44" viewBox="0 0 44 44" class="shrink-0" aria-hidden="true">
-                      <circle cx="22" cy="22" r="17" fill="none" stroke="#F2A65A" stroke-width="1.5" opacity="0.45" />
-                      <circle cx="22" cy="22" r="10" fill="none" stroke="#F2A65A" stroke-width="1.5" />
-                      <circle cx="22" cy="22" r="2.5" fill="#F2A65A" />
-                    </svg>
-                    <div class="min-w-0 flex-1 text-xs">
-                      <p class="mb-1 text-[11px] font-medium uppercase tracking-wide text-amber">地理围栏</p>
-                      <template v-if="store.getDetail(row.id).geoFence.length">
-                        <div v-for="(g, gi) in store.getDetail(row.id).geoFence" :key="gi" class="space-y-0.5 text-ink-soft">
-                          <p><span class="text-ink-muted">别名</span> <b class="text-ink">{{ g.alias || '—' }}</b> <span class="text-ink-muted">· 半径</span> {{ g.radius || '—' }}m</p>
-                          <p class="tabular-nums"><span class="text-ink-muted">中心坐标</span> {{ g.latitude || '—' }}, {{ g.longitude || '—' }}</p>
-                          <p class="truncate"><span class="text-ink-muted">地址</span> {{ g.location || '—' }}</p>
-                        </div>
-                      </template>
-                      <p v-else class="text-ink-muted">该任务无地理围栏信息</p>
+                  <!-- 任务要素：日期 / 时段 / 发起人 / 拍照要求 -->
+                  <div data-detail-item class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <div class="rounded-lg bg-white/70 px-2.5 py-2">
+                      <p class="text-[11px] text-ink-muted">日期</p>
+                      <p class="mt-0.5 truncate text-xs font-medium text-ink tabular-nums">
+                        {{ row.startDate }}<template v-if="row.endDate && row.endDate !== row.startDate"> ~ {{ row.endDate }}</template>
+                      </p>
+                    </div>
+                    <div class="rounded-lg bg-white/70 px-2.5 py-2">
+                      <p class="text-[11px] text-ink-muted">时段</p>
+                      <p class="mt-0.5 truncate text-xs font-medium text-ink tabular-nums">
+                        {{ row.startTime || '—' }}<template v-if="row.endTime"> – {{ row.endTime }}</template>
+                      </p>
+                    </div>
+                    <div class="rounded-lg bg-white/70 px-2.5 py-2">
+                      <p class="text-[11px] text-ink-muted">发起人</p>
+                      <p class="mt-0.5 truncate text-xs font-medium text-ink">{{ row.initiator || '—' }}</p>
+                    </div>
+                    <div class="rounded-lg bg-white/70 px-2.5 py-2">
+                      <p class="text-[11px] text-ink-muted">拍照要求</p>
+                      <p class="mt-0.5 truncate text-xs font-medium" :class="row.needPhoto ? 'text-amber' : 'text-ink'">
+                        {{ row.needPhoto ? '需拍照' : '无需拍照' }}
+                      </p>
                     </div>
                   </div>
 
-                  <!-- 签到记录子行 -->
-                  <div class="space-y-2">
-                    <p class="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
-                      签到记录（{{ store.getDetail(row.id).logs.length }}）
-                    </p>
-                    <div
-                      v-for="log in store.getDetail(row.id).logs"
-                      :key="log.id"
-                      class="flex items-center gap-3 rounded-lg border border-ink/5 bg-white px-3 py-2"
-                    >
-                      <div class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand/10 text-sm font-medium text-brand">
-                        {{ (log.studentName || '?').charAt(0) }}
-                      </div>
-                      <div class="min-w-0 flex-1">
-                        <p class="truncate text-sm text-ink">
-                          {{ log.studentName || '—' }}
-                          <span class="text-ink-muted">· {{ log.studentNumber || '—' }}</span>
-                        </p>
-                        <p class="truncate text-xs text-ink-muted tabular-nums">
-                          {{ log.className || '—' }} · {{ log.time || '—' }} · 定位 {{ log.location || '—' }} · {{ log.remark || '无备注' }}
-                        </p>
-                      </div>
-                      <img
-                        v-if="log.imageUrl && !brokenImgs.has(row.id + '-' + log.id)"
-                        :src="log.imageUrl"
-                        class="h-12 w-12 shrink-0 rounded-lg border border-ink/5 object-cover"
-                        loading="lazy"
-                        alt="签到图片"
-                        @error="onImgError(row.id, log.id)"
-                      />
-                      <span v-else class="shrink-0 text-[11px] text-ink-muted">无图</span>
+                  <!-- 地理围栏：一围栏一卡，多个自动排两列 -->
+                  <section data-detail-item>
+                    <h4 class="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+                      地理围栏（{{ detailOf(row).geoFence.length }}）
+                    </h4>
+                    <div v-if="detailOf(row).geoFence.length" class="mt-2 grid gap-2 sm:grid-cols-2">
+                      <article
+                        v-for="(g, gi) in detailOf(row).geoFence"
+                        :key="gi"
+                        class="flex gap-2.5 rounded-xl border border-amber/20 bg-amber/5 p-2.5"
+                      >
+                        <svg width="34" height="34" viewBox="0 0 44 44" class="shrink-0" aria-hidden="true">
+                          <circle cx="22" cy="22" r="17" fill="none" stroke="#F2A65A" stroke-width="1.5" opacity="0.45" />
+                          <circle cx="22" cy="22" r="10" fill="none" stroke="#F2A65A" stroke-width="1.5" />
+                          <circle cx="22" cy="22" r="2.5" fill="#F2A65A" />
+                        </svg>
+                        <div class="min-w-0 flex-1">
+                          <div class="flex items-center gap-1.5">
+                            <span class="truncate text-sm font-medium text-ink" :title="g.alias">{{ g.alias || '未命名围栏' }}</span>
+                            <span class="shrink-0 rounded-full bg-amber/20 px-1.5 py-0.5 text-[10px] font-medium text-amber tabular-nums">
+                              半径 {{ g.radius || '—' }}m
+                            </span>
+                          </div>
+                          <p class="mt-1 truncate text-[11px] tabular-nums text-ink-soft" :title="`${g.latitude || ''}, ${g.longitude || ''}`">
+                            {{ g.latitude || '—' }}, {{ g.longitude || '—' }}
+                          </p>
+                          <p class="mt-0.5 truncate text-[11px] text-ink-muted" :title="g.location">{{ g.location || '暂无地址' }}</p>
+                        </div>
+                      </article>
                     </div>
-                    <p v-if="store.getDetail(row.id).logs.length === 0" class="text-xs text-ink-muted">暂无签到记录</p>
-                  </div>
+                    <p v-else class="mt-2 rounded-lg bg-white/70 px-2.5 py-2 text-xs text-ink-muted">该任务未设置地理围栏</p>
+                  </section>
+
+                  <!-- 签到凭证：一个任务只有一次签到，常态走单卡；多条仅作兜底 -->
+                  <section data-detail-item>
+                    <h4 class="text-[11px] font-medium uppercase tracking-wide text-ink-muted">签到凭证</h4>
+
+                    <article v-if="detailOf(row).logs.length === 1" class="mt-2 flex items-start gap-3.5 rounded-xl border border-ink/5 bg-white p-3">
+                      <!-- 签到照片：点击全屏查看；无图时保持同尺寸占位，避免与右侧文字错位 -->
+                      <button
+                        v-if="detailOf(row).logs[0].imageUrl && !brokenImgs.has(row.id + '-' + detailOf(row).logs[0].id)"
+                        type="button"
+                        class="group/img relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-ink/5 bg-cloud"
+                        title="点击全屏查看"
+                        @click="openPreview(detailOf(row).logs[0])"
+                      >
+                        <img
+                          :src="detailOf(row).logs[0].imageUrl"
+                          class="h-full w-full object-cover transition duration-300 group-hover/img:scale-105"
+                          loading="lazy"
+                          alt="签到图片"
+                          @error="onImgError(row.id, detailOf(row).logs[0].id)"
+                        />
+                        <span class="absolute inset-0 grid place-items-center bg-black/0 opacity-0 transition group-hover/img:bg-black/25 group-hover/img:opacity-100">
+                          <Icon name="search" :size="18" class="text-white" />
+                        </span>
+                      </button>
+                      <div v-else class="grid h-24 w-24 shrink-0 place-items-center rounded-lg border border-dashed border-ink/10 bg-cloud text-[11px] text-ink-muted">
+                        无图
+                      </div>
+
+                      <div class="min-w-0 flex-1 space-y-1.5">
+                        <div class="flex flex-wrap items-center gap-2">
+                          <span class="text-sm font-semibold text-ink tabular-nums">{{ detailOf(row).logs[0].time || '—' }}</span>
+                          <span class="shrink-0 rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success">已提交</span>
+                        </div>
+                        <p class="truncate text-xs text-ink-soft">
+                          {{ detailOf(row).logs[0].studentName || '—' }}<template v-if="detailOf(row).logs[0].studentNumber"> · {{ detailOf(row).logs[0].studentNumber }}</template>
+                        </p>
+                        <p class="truncate text-xs text-ink-muted" :title="detailOf(row).logs[0].location">
+                          定位 {{ detailOf(row).logs[0].location || '—' }}
+                        </p>
+                        <p class="truncate text-xs text-ink-muted" :title="detailOf(row).logs[0].remark">
+                          备注 {{ detailOf(row).logs[0].remark || '无' }}
+                        </p>
+                      </div>
+                    </article>
+
+                    <!-- 兜底：一个任务出现多条记录时仍以紧凑列表呈现 -->
+                    <div v-else-if="detailOf(row).logs.length > 1" class="mt-2 space-y-2">
+                      <div
+                        v-for="log in detailOf(row).logs"
+                        :key="log.id"
+                        class="flex items-center gap-3 rounded-lg border border-ink/5 bg-white px-3 py-2"
+                      >
+                        <div class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand/10 text-sm font-medium text-brand">
+                          {{ (log.studentName || '?').charAt(0) }}
+                        </div>
+                        <div class="min-w-0 flex-1">
+                          <p class="truncate text-sm text-ink">
+                            {{ log.studentName || '—' }}
+                            <span class="text-ink-muted">· {{ log.studentNumber || '—' }}</span>
+                          </p>
+                          <p class="truncate text-xs text-ink-muted tabular-nums">
+                            {{ log.time || '—' }} · 定位 {{ log.location || '—' }} · {{ log.remark || '无备注' }}
+                          </p>
+                        </div>
+                        <img
+                          v-if="log.imageUrl && !brokenImgs.has(row.id + '-' + log.id)"
+                          :src="log.imageUrl"
+                          class="h-10 w-10 shrink-0 rounded-lg border border-ink/5 object-cover"
+                          loading="lazy"
+                          alt="签到图片"
+                          @error="onImgError(row.id, log.id)"
+                        />
+                        <span v-else class="shrink-0 text-[11px] text-ink-muted">无图</span>
+                      </div>
+                    </div>
+
+                    <!-- 无记录：即漏签 -->
+                    <div v-else class="mt-2 flex items-center gap-2 rounded-xl border border-dashed border-danger/25 bg-danger/5 px-3 py-3 text-xs text-ink-muted">
+                      <Icon name="x-circle" :size="14" class="shrink-0 text-danger" />
+                      <span>该任务没有签到记录，判定为未签到</span>
+                    </div>
+                  </section>
                 </div>
               </div>
+              </Transition>
             </li>
           </ul>
         </div>
@@ -299,10 +456,10 @@
           <template v-if="loadingRecords">
             <div class="col-span-7 flex items-center justify-center text-sm text-ink-muted">加载中…</div>
           </template>
-          <template v-else-if="tasks.length === 0">
+          <template v-else-if="statusTasks.length === 0">
             <div class="col-span-7 flex flex-col items-center justify-center gap-2 text-ink-muted">
               <Icon name="calendar" :size="34" class="opacity-40" />
-              <p class="text-sm">{{ calendarLabel }} 暂无签到任务</p>
+              <p class="text-sm">{{ statusFilter === 'all' ? `${calendarLabel} 暂无签到任务` : '当前筛选条件下没有签到任务' }}</p>
             </div>
           </template>
           <template v-else>
@@ -353,8 +510,12 @@
 
         <!-- 底部信息条：始终占位（固定最小高度），内容按需切换，杜绝切换月份时的高度跳动 -->
         <div class="flex shrink-0 min-h-[2.5rem] items-center justify-center px-4 pb-2 text-center text-xs text-ink-muted sm:px-5">
-          <span v-if="dayFilter">已选中 <b class="tabular-nums text-ink-soft">{{ dayFilter }}</b>，点击上方「列表」查看当天任务明细</span>
-          <template v-else-if="tasks.length > 0 && !monthHasTask">
+          <span v-if="dayFilter">
+            已选中 <b class="tabular-nums text-ink-soft">{{ dayFilter }}</b>
+            <button type="button" class="ml-1 rounded-md px-2 py-0.5 font-medium text-brand hover:bg-brand/10" @click="store.setView('list')">查看当天任务</button>
+            <button type="button" class="ml-1 rounded-md px-2 py-0.5 font-medium text-ink-muted hover:bg-cloud" @click="store.clearDayFilter">清除筛选</button>
+          </span>
+          <template v-else-if="statusTasks.length > 0 && !monthHasTask">
             <span>本月暂无签到记录</span>
             <button v-if="bestDataMonth" type="button" class="ml-1 rounded-md px-2 py-0.5 font-medium text-brand hover:bg-brand/10" @click="store.jumpToBestMonth">查看 {{ bestDataMonth.y }}年{{ bestDataMonth.m }}月</button>
           </template>
@@ -371,6 +532,9 @@
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { gsap } from 'gsap'
+// PhotoSwipe 与图库同款（样式已在 main.js 全局引入，此处不重复引）
+import PhotoSwipeLightbox from 'photoswipe/lightbox'
+import PhotoSwipe from 'photoswipe'
 import { useSignRecordsStore } from '@/stores/signRecords'
 import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
@@ -384,8 +548,9 @@ const {
   selectedAccountId,
   loadingAccounts,
   loadingRecords,
-  tasks,
+  statusTasks,
   typeFilter,
+  statusFilter,
   viewMode,
   stats,
   total,
@@ -403,10 +568,17 @@ const {
   isCurrentMonth,
 } = storeToRefs(store)
 
+// 分行后横向不再拥挤，类型恢复完整文案，语义不必再靠 title 兜底
 const typeTabs = [
   { label: '全部', value: 'all' },
   { label: '寝室签到', value: 'dorm' },
   { label: '活动签到', value: 'activity' },
+]
+const statusTabs = [
+  { label: '全部', value: 'all', title: '全部状态' },
+  { label: '已签到', value: 'signed', title: '已签到的任务' },
+  { label: '未签到', value: 'unsigned', title: '未签到（漏签）的任务' },
+  { label: '需拍照', value: 'needPhoto', title: '需要拍照的任务' },
 ]
 // 周日起始，对齐旧版日历 UI
 const weekHeads = ['日', '一', '二', '三', '四', '五', '六']
@@ -421,6 +593,11 @@ function statusBadge(finished) {
   return finished
     ? { label: '已签到', cls: 'bg-success/10 text-success', dot: 'bg-success' }
     : { label: '未签到', cls: 'bg-danger/10 text-danger', dot: 'bg-danger' }
+}
+
+// 模板里多次读同一任务的详情，收敛成一次查找，避免重复的 store.getDetail 调用
+function detailOf(row) {
+  return store.getDetail(row.id)
 }
 
 // 日历格底色：占位日期(上/下月)彻底弱化、当月无任务安静清晰、已签(绿)/漏签(红)区分明确。
@@ -467,6 +644,99 @@ const monthLabelRef = ref(null)
 const progressRef = ref(null)
 const reduceMotion = ref(false)
 let mm = null
+
+// ---- 列表与展开详情动效 ----
+const listRef = ref(null)
+// 行错落入场：翻页 / 切换筛选 / 回到列表时重放，展开详情不触发（避免整列表闪烁）
+function staggerRows() {
+  const root = listRef.value
+  if (!root || reduceMotion.value) return
+  const rows = root.querySelectorAll('[data-task-row]')
+  if (!rows.length) return
+  gsap.fromTo(
+    rows,
+    { autoAlpha: 0, y: 10 },
+    {
+      autoAlpha: 1,
+      y: 0,
+      duration: 0.36,
+      stagger: 0.035,
+      ease: 'power2.out',
+      overwrite: true,
+      clearProps: 'opacity,transform',
+    }
+  )
+}
+
+// 详情高度补间：纵向 padding 必须一起归零，否则收起后会残留一段空白
+const DETAIL_PAD = 16 // 与模板 py-4 对齐
+function onDetailEnter(el, done) {
+  if (reduceMotion.value) {
+    done()
+    return
+  }
+  gsap.fromTo(
+    el,
+    { height: 0, paddingTop: 0, paddingBottom: 0, autoAlpha: 0 },
+    {
+      height: 'auto',
+      paddingTop: DETAIL_PAD,
+      paddingBottom: DETAIL_PAD,
+      autoAlpha: 1,
+      duration: 0.36,
+      ease: 'power2.out',
+      onComplete: () => {
+        gsap.set(el, { clearProps: 'height,paddingTop,paddingBottom' })
+        done()
+      },
+    }
+  )
+  const items = el.querySelectorAll('[data-detail-item]')
+  if (items.length) {
+    gsap.fromTo(
+      items,
+      { autoAlpha: 0, y: 8 },
+      {
+        autoAlpha: 1,
+        y: 0,
+        duration: 0.32,
+        stagger: 0.06,
+        delay: 0.1,
+        ease: 'power2.out',
+        overwrite: true,
+        clearProps: 'opacity,transform',
+      }
+    )
+  }
+}
+
+function onDetailLeave(el, done) {
+  if (reduceMotion.value) {
+    done()
+    return
+  }
+  gsap.to(el, {
+    height: 0,
+    paddingTop: 0,
+    paddingBottom: 0,
+    autoAlpha: 0,
+    duration: 0.28,
+    ease: 'power2.in',
+    onComplete: done,
+  })
+}
+
+watch([page, statusFilter, typeFilter, dayFilter, viewMode], async () => {
+  if (viewMode.value !== 'list') return
+  await nextTick()
+  staggerRows()
+})
+// 首次数据到位时补一次入场（账号异步加载，列表晚于组件挂载）
+watch(loadingRecords, async (v) => {
+  if (v || viewMode.value !== 'list') return
+  await nextTick()
+  staggerRows()
+})
 
 // 进度条宽度交给 GSAP 驱动：模板里初始 0%，避免与 Vue 的内联样式互相覆盖
 function animateProgress(rate) {
@@ -564,16 +834,83 @@ watch(
   }
 )
 
+// ---- 满勤率环（统计卡签名元素）----
+// 周长固定，进度只靠 stroke-dashoffset 补间；配色按完成率分档，让颜色本身传递状态
+const RING_C = 2 * Math.PI * 30
+const rateArcRef = ref(null)
+const rateToneClass = computed(() => {
+  const r = stats.value?.rate ?? 0
+  if (r >= 100) return 'text-success'
+  if (r >= 80) return 'text-brand'
+  return 'text-amber'
+})
+function animateRateRing(rate) {
+  if (!rateArcRef.value) return
+  const r = Math.min(100, Math.max(0, Number(rate) || 0))
+  gsap.to(rateArcRef.value, {
+    strokeDashoffset: RING_C * (1 - r / 100),
+    duration: reduceMotion.value ? 0 : 0.9,
+    ease: 'power3.out',
+    overwrite: true,
+  })
+}
+// 环形在 loading 结束后才挂载，故连同 loadingRecords 一起监听，等 DOM 就绪再补间
+watch(
+  [() => stats.value?.rate, loadingRecords],
+  async ([r]) => {
+    await nextTick()
+    animateRateRing(r)
+  },
+  { immediate: true }
+)
+
 onUnmounted(() => {
   mm?.revert()
+  lightbox?.destroy()
   if (calendarRef.value) gsap.killTweensOf(calendarRef.value.querySelectorAll('[data-day-cell]'))
-  gsap.killTweensOf([monthLabelRef.value, progressRef.value].filter(Boolean))
+  gsap.killTweensOf([monthLabelRef.value, progressRef.value, rateArcRef.value].filter(Boolean))
 })
 
 // 直连 B 平台图片，加载失败的记录（taskId-logId 维度）回退为「无图」
 const brokenImgs = ref(new Set())
 function onImgError(taskId, logId) {
   brokenImgs.value = new Set(brokenImgs.value).add(`${taskId}-${logId}`)
+}
+
+// ---- 签到照片全屏（复用图库同款 PhotoSwipe）----
+// v5 必须显式给出 width/height：缺失时它无从判断原始比例，会按视口铺满拉伸，滚轮缩放也失效
+const sizeCache = new Map()
+function probeSize(src) {
+  if (!sizeCache.has(src)) {
+    sizeCache.set(
+      src,
+      new Promise((resolve) => {
+        const im = new Image()
+        im.onload = () => resolve({ width: im.naturalWidth || 0, height: im.naturalHeight || 0 })
+        im.onerror = () => resolve({ width: 0, height: 0 })
+        im.src = src
+      })
+    )
+  }
+  return sizeCache.get(src)
+}
+
+let lightbox = null
+async function openPreview(log) {
+  if (!log || !log.imageUrl) return
+  // 每次打开都新建实例，先销毁旧的，避免残留 DOM 与事件监听
+  lightbox?.destroy()
+  const { width, height } = await probeSize(log.imageUrl)
+  // 单图时 PhotoSwipe 自动隐藏左右箭头与计数器
+  lightbox = new PhotoSwipeLightbox({
+    dataSource: [width && height ? { src: log.imageUrl, width, height } : { src: log.imageUrl }],
+    index: 0,
+    showHideAnimationType: 'fade',
+    wheelToZoom: true,
+    pswpModule: PhotoSwipe,
+  })
+  lightbox.init()
+  lightbox.loadAndOpen(0)
 }
 
 store.loadAccounts()

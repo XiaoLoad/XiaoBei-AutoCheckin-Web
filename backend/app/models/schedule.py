@@ -70,6 +70,10 @@ class Schedule(db.Model):
             'taskType': self.task_type,
             'taskLabel': task_label,
             'platform': acc.platform if acc else '',
+            # 平台回填档案：真实姓名 / 学院 / 专业（登录账号 account 可能是手机号或身份证，不足以辨识身份）
+            'studentName': profile.get('name') or '',
+            'college': profile.get('college') or '',
+            'major': profile.get('major') or '',
             'studentNo': profile.get('studentNo') or '',
             'className': profile.get('className') or '',
             'mode': self.mode,

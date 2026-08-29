@@ -59,6 +59,8 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
 
   // 类型筛选：all（全部）| dorm（寝室签到）| activity（活动签到）
   const typeFilter = ref('all')
+  // 状态筛选：all（全部）| signed（已签到）| unsigned（未签到）| needPhoto（需拍照）
+  const statusFilter = ref('all')
   // 视图模式：list（列表）| calendar（日历）
   const viewMode = ref('list')
   // 列表分页：当前页 / 每页条数（作用于已拉取的全量任务；dayFilter 时作用于当日子集）
@@ -87,20 +89,34 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     () => accounts.value.find((a) => toNum(a.id) === selectedAccountId.value) || null
   )
 
-  // 统计：基于当前账号 + 类型的全量任务（已拉全，非仅当前页，也不受日历日筛选影响）
+  // 状态筛选后的任务：统计卡与日历着色的共同口径。
+  // 刻意不叠加日历点选的某天（dayFilter）——下钻只是临时查看，不该让概览指标跟着跳变。
+  const statusTasks = computed(() => {
+    const st = statusFilter.value
+    if (st === 'signed') return tasks.value.filter((t) => t.finished)
+    if (st === 'unsigned') return tasks.value.filter((t) => !t.finished)
+    if (st === 'needPhoto') return tasks.value.filter((t) => t.needPhoto)
+    return tasks.value
+  })
+
+  // 统计：签到总任务 / 已签到 / 未签到 / 满勤率（与日历口径一致，不受日历点选的某天影响）
   const stats = computed(() => {
-    const list = tasks.value
+    const list = statusTasks.value
+    const total = list.length
+    const finished = list.filter((t) => t.finished).length
     return {
-      total: list.length,
-      finished: list.filter((t) => t.finished).length,
+      total,
+      finished,
+      unsigned: total - finished,
       needPhoto: list.filter((t) => t.needPhoto).length,
+      rate: total ? Math.round((finished / total) * 100) : 0,
     }
   })
 
-  // 列表可见任务：点选某天时仅保留区间覆盖该天的任务
+  // 列表可见任务：状态筛选之上再叠加日历点选的某天
   const visibleTasks = computed(() => {
-    if (!dayFilter.value) return tasks.value
-    return tasks.value.filter((t) =>
+    if (!dayFilter.value) return statusTasks.value
+    return statusTasks.value.filter((t) =>
       eachDayInRange(t.startDate, t.endDate).includes(dayFilter.value)
     )
   })
@@ -118,7 +134,7 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
   // 同一天可能有多条任务，因此分别统计已签 / 漏签条数。
   const dayStats = computed(() => {
     const acc = {}
-    for (const t of tasks.value) {
+    for (const t of statusTasks.value) {
       for (const d of eachDayInRange(t.startDate, t.endDate)) {
         const s = acc[d] || (acc[d] = { signed: 0, unsigned: 0 })
         if (t.finished) s.signed += 1
@@ -172,7 +188,7 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     const consider = (y, m) => {
       if (!best || y > best.y || (y === best.y && m > best.m)) best = { y, m }
     }
-    for (const t of tasks.value) {
+    for (const t of statusTasks.value) {
       const s = normalizeDate(t.startDate)
       if (s) {
         const [y, m] = s.split('-').map(Number)
@@ -264,6 +280,12 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     page.value = 1
   }
 
+  function setStatus(s) {
+    if (statusFilter.value === s) return
+    statusFilter.value = s
+    page.value = 1
+  }
+
   function setPage(p) {
     if (p >= 1 && p <= totalPages.value) page.value = p
   }
@@ -291,8 +313,11 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     setMonth(d.getFullYear(), d.getMonth() + 1)
   }
   function setDayFilter(d) {
-    dayFilter.value = dayFilter.value === d ? null : d
+    const next = dayFilter.value === d ? null : d
+    dayFilter.value = next
     page.value = 1
+    // 在日历里点某天即切到列表看当天明细，省去手动切换视图（取消选中不跳转）
+    if (next && viewMode.value === 'calendar') viewMode.value = 'list'
   }
   function clearDayFilter() {
     dayFilter.value = null
@@ -375,6 +400,7 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     loadingRecords,
     tasks,
     typeFilter,
+    statusFilter,
     viewMode,
     page,
     pageSize,
@@ -386,6 +412,7 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     dayStats,
     accountOptions,
     selectedAccount,
+    statusTasks,
     stats,
     visibleTasks,
     total,
@@ -401,6 +428,7 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     loadRecords,
     selectAccount,
     setType,
+    setStatus,
     setView,
     setPage,
     setPageSize,

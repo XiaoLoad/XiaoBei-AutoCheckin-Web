@@ -23,7 +23,7 @@
         </span>
       </div>
       <div class="flex items-end gap-1.5">
-        <span class="font-bold text-ink tabular-nums leading-none" :class="compact ? 'text-2xl' : 'text-3xl'">{{ value }}</span>
+        <span class="font-bold text-ink tabular-nums leading-none" :class="compact ? 'text-2xl' : 'text-3xl'">{{ displayValue }}</span>
         <span v-if="unit" class="text-ink-muted" :class="compact ? 'text-xs mb-0.5' : 'text-sm mb-0.5'">{{ unit }}</span>
       </div>
       <div v-if="delta !== null" class="flex items-center gap-1 text-xs" :class="deltaClass">
@@ -36,7 +36,8 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch, onUnmounted } from 'vue'
+import { gsap } from 'gsap'
 import Icon from '@/components/Icon.vue'
 
 const props = defineProps({
@@ -52,7 +53,37 @@ const props = defineProps({
   // 紧凑模式：用于移动端或高密度页面，减小内边距与字号
   compact: { type: Boolean, default: false },
   // 加载态：true 时渲染骨架占位，配合父级在数据返回前传入避免卡片跳动
-  loading: { type: Boolean, default: false }
+  loading: { type: Boolean, default: false },
+  // 数字滚动：数据到位后由 GSAP 补间到目标值（默认关闭，其余页面行为不变）
+  countUp: { type: Boolean, default: false }
+})
+
+// 数字滚动只在 countUp 且值为数字时生效，并尊重系统「减少动态效果」偏好
+const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+const displayValue = ref(props.value)
+let tweenTarget = null
+watch(
+  () => props.value,
+  (v) => {
+    if (!props.countUp || typeof v !== 'number' || Number.isNaN(v) || prefersReduced) {
+      displayValue.value = v
+      return
+    }
+    tweenTarget = { n: Number(displayValue.value) || 0 }
+    gsap.to(tweenTarget, {
+      n: v,
+      duration: 0.75,
+      ease: 'power2.out',
+      overwrite: true,
+      onUpdate: () => {
+        displayValue.value = Math.round(tweenTarget.n)
+      },
+    })
+  },
+  { immediate: true }
+)
+onUnmounted(() => {
+  if (tweenTarget) gsap.killTweensOf(tweenTarget)
 })
 
 const toneMap = {

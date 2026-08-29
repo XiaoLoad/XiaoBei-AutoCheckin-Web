@@ -1,5 +1,5 @@
 <template>
-  <article ref="root" class="sched-card dash-card relative flex flex-col overflow-hidden p-3">
+  <article ref="root" class="sched-card dash-card relative flex flex-col overflow-hidden p-3.5">
     <!-- 左侧状态色条：开启时品牌蓝竖向铺满，GSAP 缩放呈现 -->
     <span
       ref="accent"
@@ -7,15 +7,21 @@
       :class="schedule.enabled ? 'opacity-100' : 'opacity-0'"
     />
 
-    <!-- 头部：账号 + 任务类型 + 开关 -->
-    <div class="flex items-start justify-between gap-3">
-      <div class="min-w-0">
+    <!-- 身份区：真实姓名为卡片主视觉（首字头像 + 放大字号），学院 / 专业 / 学号依次降级 -->
+    <div class="flex items-start gap-2.5">
+      <span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand/10 text-[15px] font-semibold text-brand">
+        <template v-if="displayName">{{ displayName.charAt(0) }}</template>
+        <Icon v-else name="user" :size="16" />
+      </span>
+
+      <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2">
-          <span class="truncate text-sm font-semibold text-ink">{{ schedule.accountName }}</span>
+          <span class="truncate text-base font-semibold leading-tight text-ink">{{ displayName }}</span>
           <span class="shrink-0 rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-medium text-brand">{{ schedule.taskLabel }}</span>
         </div>
-        <p class="mt-1 truncate text-xs text-ink-muted">{{ schedule.platform }} · 学号 {{ schedule.studentNo }} · {{ schedule.className }}</p>
-        <p class="mt-0.5 truncate text-xs text-ink-muted">关联「{{ configMeta.presetSetName }}」</p>
+        <p v-if="orgLine" class="mt-1 truncate text-xs text-ink-soft">{{ orgLine }}</p>
+        <p v-if="idLine" class="mt-0.5 truncate text-[11px] tabular-nums text-ink-muted">{{ idLine }}</p>
+        <p class="mt-0.5 truncate text-[11px] text-ink-muted">关联「{{ configMeta.presetSetName }}」</p>
       </div>
 
       <!-- 自定义开关（GSAP 驱动滑块） -->
@@ -33,7 +39,7 @@
     </div>
 
     <!-- 状态 + 下一次执行 -->
-    <div class="mt-2.5 grid grid-cols-2 gap-2.5">
+    <div class="mt-3 grid grid-cols-2 gap-2.5 border-t border-ink/5 pt-2.5">
       <div>
         <p class="text-[11px] text-ink-muted">状态</p>
         <p class="mt-0.5 text-sm font-medium" :class="statusCls">{{ statusText }}</p>
@@ -127,6 +133,20 @@ function confirmDelete() {
   emit('delete', props.schedule.id)
 }
 
+// 登录账号可能是手机号或身份证，辨识度低；有平台回填的真实姓名时优先用它
+const displayName = computed(() => props.schedule.studentName || props.schedule.accountName || '—')
+const orgLine = computed(() =>
+  [props.schedule.college, props.schedule.major].filter(Boolean).join(' · ')
+)
+// 姓名已占主视觉时，登录账号降为末位补充信息；主标题回退成账号时不再重复
+const idLine = computed(() => {
+  const parts = []
+  if (props.schedule.studentNo) parts.push(`学号 ${props.schedule.studentNo}`)
+  if (props.schedule.className) parts.push(props.schedule.className)
+  if (props.schedule.studentName && props.schedule.accountName) parts.push(`账号 ${props.schedule.accountName}`)
+  return parts.join(' · ')
+})
+
 const statusText = computed(() => {
   if (!props.schedule.accountEnabled) return '账号未启用'
   return props.schedule.enabled ? '运行中' : '已暂停'
@@ -146,7 +166,6 @@ const lastRunText = computed(() => {
   if (!s.lastRun) return '暂无记录'
   const d = new Date(s.lastRun)
   const label = s.lastStatus === 'success' ? '成功' : s.lastStatus === 'fail' ? '失败' : s.lastStatus === 'skip' ? '跳过' : '—'
-  const dot = s.lastStatus === 'success' ? 'text-success' : s.lastStatus === 'fail' ? 'text-danger' : 'text-ink-muted'
   const hh = String(d.getHours()).padStart(2, '0')
   const mm = String(d.getMinutes()).padStart(2, '0')
   return `${label} · ${hh}:${mm}`

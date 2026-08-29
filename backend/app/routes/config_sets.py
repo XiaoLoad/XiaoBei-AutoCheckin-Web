@@ -89,3 +89,33 @@ def delete_set(set_id):
     db.session.delete(s)
     db.session.commit()
     return success(message='删除成功')
+
+
+@bp.route('/<int:set_id>/apply-all', methods=['POST'])
+@token_required
+def apply_set_to_all(set_id):
+    """应用全部：把当前配置套配置覆盖写入所有「已套用」本套的任务实例。
+
+    仅处理 config_set_id 仍指向本套且持有自持配置快照（standalone）的任务——
+    这些是被「套用配置套」回填过的账号任务配置；follow 任务实时跟随配置套，无需覆盖。
+    覆盖后若任务已启用则重算下次执行时间并对齐调度器 job。
+    """
+    s = ConfigSet.query.filter_by(id=set_id, user_id=request.current_user.id).first()
+    if not s:
+        return error(message='配置套不存在', code=4040, status=404)
+    targets = (Schedule.query
+               .filter_by(user_id=request.current_user.id, config_set_id=set_id)
+               .all())
+    updated = 0
+    from app.services.scheduler import sync_schedule
+    from app.utils.schedule_utils import compute_next_run
+    for sc in targets:
+        if not sc.has_own_config:
+            continue
+        sc.set_config(s.config)
+        if sc.enabled:
+            sc.next_run_at = compute_next_run(sc)
+            sync_schedule(sc)
+        updated += 1
+    db.session.commit()
+    return success({'updated': updated}, message=f'已覆盖更新 {updated} 个账号任务配置')

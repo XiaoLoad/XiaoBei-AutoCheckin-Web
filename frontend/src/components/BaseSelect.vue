@@ -128,6 +128,9 @@ const panel = ref(null)
 const panelPlacement = ref(props.placement === 'auto' ? 'bottom' : props.placement)
 // 面板位置（fixed，相对视口）：由触发器 getBoundingClientRect 计算，脱离滚动容器
 const panelStyle = ref({ left: '0px', top: '0px', width: '0px' })
+// 程序化滚动（聚焦输入框时浏览器把触发器滚入视口）期间临时屏蔽「滚动即关闭」，
+// 避免面板被 focus/select 触发的滚动误关；坐标稳定后再重算位置。
+const suppressScrollClose = ref(false)
 
 // 归一化选项为 { label, value }
 const normalized = computed(() =>
@@ -175,8 +178,14 @@ async function openPanel() {
   refinePlacement()
   if (props.searchable && searchInput.value) searchInput.value.focus()
   if (props.editable && triggerInput.value) {
+    // 先聚焦并全选：浏览器可能把触发器滚入视口（改变其视口坐标），期间屏蔽滚动误关；
+    // 待坐标稳定后基于最终矩形重算面板位置，避免面板悬空在上或错位。
+    suppressScrollClose.value = true
     triggerInput.value.focus()
     triggerInput.value.select()
+    await nextTick()
+    refinePlacement()
+    requestAnimationFrame(() => { suppressScrollClose.value = false })
   }
 }
 
@@ -207,6 +216,7 @@ function onResize() {
 // 展开时监听滚动：页面滚动则关闭面板（忽略面板内部列表自身的滚动），
 // 避免面板脱离触发器悬空；同时用户滚动通常意味着放弃当前选择。
 function onScrollClose(e) {
+  if (suppressScrollClose.value) return
   if (panel.value && panel.value.contains(e.target)) return
   close()
 }
@@ -239,6 +249,12 @@ function move(delta) {
   highlightedIndex.value = i
   scrollActiveIntoView()
 }
+
+// 可输入/搜索模式下筛选结果变化后，面板内容高度改变，需重算定位
+// （否则向上展开时 top 仍按旧高度计算，短结果会悬空在输入框上方）。
+watch(filteredOptions, () => {
+  if (open.value && (props.editable || props.searchable)) nextTick(refinePlacement)
+})
 
 // 触发器键盘：上下打开并移动，回车/空格选择，Esc 关闭
 function onKeydown(e) {

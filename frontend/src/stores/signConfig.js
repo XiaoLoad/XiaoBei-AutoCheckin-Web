@@ -148,6 +148,14 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     const s = userConfigSets.value.find((x) => x.id === id)
     return s ? s.name : '已删除配置套'
   }
+  // 比对两份配置是否实质一致：位置 id 统一按字符串归一（来源套 locationId 经 mapSetIn 转字符串，
+  // 任务快照 locationId 为原始存储值，可能为字符串或数字），其余字段按 JSON 原文比较。
+  function configsEqual(a, b) {
+    if (a === b) return true
+    if (!a || !b) return false
+    const norm = (c) => JSON.stringify({ ...c, locationId: c.locationId == null ? null : String(c.locationId) })
+    return norm(a) === norm(b)
+  }
   function initTaskDraft() {
     const key = taskConfigKey.value
     const b = scheduleBindings.value[key]
@@ -244,7 +252,15 @@ export const useSignConfigStore = defineStore('signConfig', () => {
   const taskStatus = computed(() => {
     const b = scheduleBindings.value[taskConfigKey.value]
     if (b && b.config) {
-      if (b.configSetId) return { text: `已套用「${setName(b.configSetId)}」`, cls: 'bg-info/10 text-info' }
+      if (b.configSetId) {
+        const set = userConfigSets.value.find((s) => s.id === b.configSetId)
+        if (!set) return { text: '原配置套已删除（自定义配置）', cls: 'bg-warning/10 text-warning' }
+        // 任务配置快照与当前配置套内容比对：一致=仍沿用；不一致=来源已改，视为自定义
+        if (configsEqual(b.config, set.config)) {
+          return { text: `已套用「${set.name}」`, cls: 'bg-info/10 text-info' }
+        }
+        return { text: '自定义配置（与配置套已不一致）', cls: 'bg-warning/10 text-warning' }
+      }
       return { text: '自定义配置（已解绑配置套）', cls: 'bg-info/10 text-info' }
     }
     if (b && b.configSetId) {
@@ -253,6 +269,16 @@ export const useSignConfigStore = defineStore('signConfig', () => {
       return { text: `沿用「${set.name}」`, cls: 'bg-info/10 text-info' }
     }
     return { text: '未关联配置套', cls: 'bg-ink/10 text-ink-muted' }
+  })
+  // 任务自持配置是否已与「来源配置套」当前内容一致（对齐）：仅 b.config && b.configSetId 时有意义。
+  // 用于「套用」按钮禁用判定——同一配置套且已对齐时，套用是纯空操作，禁用；
+  // 一旦配置套被改（任务漂移为「自定义」）则放开，点击套用即把最新配置覆盖回任务、重新对齐。
+  const taskAlignedWithSource = computed(() => {
+    const b = scheduleBindings.value[taskConfigKey.value]
+    if (!b || !b.config || !b.configSetId) return false
+    const set = userConfigSets.value.find((s) => s.id === b.configSetId)
+    if (!set) return false
+    return configsEqual(b.config, set.config)
   })
 
   // 供定时任务页「跟随配置套」预览：解析某任务绑定配置套的时间/位置元信息
@@ -571,6 +597,27 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     }
   }
 
+  // 应用全部：把当前配置套配置覆盖写入所有「已套用」该套的账号任务配置（后端批量执行）。
+  // 覆盖后重拉绑定与配置套，使任务状态即时反映「已套用」对齐态。
+  async function applyConfigSetToAll(setId) {
+    if (!setId) return
+    saving.value = true
+    try {
+      const data = await api.applyConfigSetToAll(setId)
+      const n = (data && data.updated) || 0
+      await refreshBindings()
+      userConfigSets.value = (await api.fetchConfigSets()).userConfigSets
+      snapshotSets()
+      initTaskDraft()
+      if (n) toast(`已应用配置套到 ${n} 个关联账号任务`, 'success')
+      else toast('没有套用该配置套的账号任务配置', 'warning')
+    } catch (e) {
+      toast(e.message || '应用失败', 'error')
+    } finally {
+      saving.value = false
+    }
+  }
+
   // 清空当前正在编辑的配置（舍弃所有已填内容，回到默认空白模板）。
   // 配合「保存按钮旁的清空填写」使用：Tab 切换内容由 store 持有不会丢失，此为手动显式清空。
   function resetActiveSetConfig() {
@@ -802,6 +849,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     taskConfigKey,
     taskConfig,
     taskStatus,
+    taskAlignedWithSource,
     taskConfigMetaOf,
     isDirty,
     activeSetDirty,
@@ -826,6 +874,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     pauseTask,
     bindSet,
     applyBind,
+    applyConfigSetToAll,
     saveTaskConfig,
     resetActiveSetConfig,
     resetTaskConfig,

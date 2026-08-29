@@ -90,6 +90,12 @@ export async function deleteConfigSet(id) {
   return refreshSets()
 }
 
+// 应用全部：把当前配置套配置覆盖写入所有「已套用」该套的账号任务配置（需二次确认，后端执行）
+export async function applyConfigSetToAll(id) {
+  const data = await request({ url: `/config-sets/${id}/apply-all`, method: 'post' })
+  return data || {}
+}
+
 // ── 资源池 ──
 const mapLocation = (l) => ({
   id: String(l.id), name: l.name, address: l.address || '',

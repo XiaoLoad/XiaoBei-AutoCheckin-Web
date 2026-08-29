@@ -118,7 +118,7 @@
             <button
               type="button"
               class="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-ink/10 px-3 text-sm text-ink-soft transition hover:bg-cloud disabled:opacity-40"
-              :disabled="!bindPick || bindPick === (taskState.configSetId || '') || store.saving"
+              :disabled="!bindPick || (bindPick === (taskState.configSetId || '') && store.taskAlignedWithSource) || store.saving"
               @click="onBindApply"
             >
               <Icon name="copy" :size="13" />套用

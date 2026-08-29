@@ -239,3 +239,85 @@ def list_records(account_id):
         'failReason': r.fail_reason or '',
     } for r in pagination.items]
     return success({'items': items, 'total': total, 'page': page, 'page_size': page_size})
+
+
+def _call_with_refresh(account, call):
+    """调用 B 平台读取函数；token 失效（credential 类错误）自动重登并刷新一次。
+    返回 (result, err_resp)：成功时 err_resp 为 None，失败时 result 为 None。"""
+    adapter = get_adapter()
+    token = account.get_token()
+    if not token:
+        result, err = _run_verify(account.account, account.get_password())
+        if err:
+            return None, err
+        account.set_token(result.token)
+        db.session.commit()
+        token = result.token
+    try:
+        return call(adapter, token), None
+    except BPlatformError as e:
+        if e.kind != 'credential':
+            return None, error(message=f'B 平台读取失败：{e.message}', code=4302, status=502)
+        # token 失效：重登刷新后重试一次
+        try:
+            new_token = adapter.login(account.account, account.get_password())
+        except BPlatformError as le:
+            return None, error(message=f'B 平台重登失败：{le.message}', code=4303, status=502)
+        account.set_token(new_token)
+        db.session.commit()
+        try:
+            return call(adapter, new_token), None
+        except BPlatformError as e2:
+            return None, error(message=f'B 平台读取失败：{e2.message}', code=4302, status=502)
+
+
+@bp.route('/<int:account_id>/sign-records', methods=['GET'])
+@token_required
+def list_sign_records(account_id):
+    """合并寝/活历史任务（各自取全量后后端排序分页），支持类型筛选。数据来自 B 平台。"""
+    acc = _load_owned(account_id)
+    if not acc:
+        return error(message='账号不存在', code=4040, status=404)
+    try:
+        page = max(1, int(request.args.get('page', 1)))
+        page_size = min(1000, max(1, int(request.args.get('page_size', 10))))
+    except (TypeError, ValueError):
+        page, page_size = 1, 10
+    type_filter = (request.args.get('type') or 'all').strip()
+
+    def _fetch(ad, tk):
+        merged = ad.fetch_history_tasks(tk, 'know') + ad.fetch_history_tasks(tk, 'sign')
+        if type_filter in ('dorm', 'activity'):
+            merged = [t for t in merged if t['type'] == type_filter]
+        merged.sort(key=lambda t: (t['startDate'], t['startTime']), reverse=True)
+        return merged
+
+    merged, err = _call_with_refresh(acc, _fetch)
+    if err:
+        return err
+    total = len(merged)
+    start = (page - 1) * page_size
+    items = merged[start:start + page_size]
+    return success({'items': items, 'total': total, 'page': page, 'page_size': page_size})
+
+
+@bp.route('/<int:account_id>/sign-records/<int:task_id>/detail', methods=['GET'])
+@token_required
+def sign_record_detail(account_id, task_id):
+    """任务地理围栏 + 签到记录列表（listLog）。know/sign 由 kind 区分。"""
+    acc = _load_owned(account_id)
+    if not acc:
+        return error(message='账号不存在', code=4040, status=404)
+    kind = (request.args.get('kind') or 'know').strip()
+    if kind not in ('know', 'sign'):
+        return error(message='未知的任务类型', code=4001, status=400)
+
+    def _fetch(ad, tk):
+        detail = ad.fetch_task_detail(tk, kind, task_id)
+        logs = ad.fetch_task_logs(tk, kind, task_id)
+        return {'geoFence': detail['geoFence'], 'logs': logs}
+
+    data, err = _call_with_refresh(acc, _fetch)
+    if err:
+        return err
+    return success(data)

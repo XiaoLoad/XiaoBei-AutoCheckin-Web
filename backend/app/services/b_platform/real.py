@@ -2,6 +2,7 @@
 # 注意：密码传输编码是 Base64（非加密）；showCode 是测试环境的明文验证码后门，
 # 正式环境关闭时需在 solve_captcha 钩子接打码方案（本期不做）。
 import base64
+import json
 import os
 import warnings
 
@@ -114,13 +115,139 @@ class RealAdapter:
         profile, bp_uid = self.fetch_profile(token, ua)
         return VerifyResult(ok=True, token=token, bp_uid=bp_uid, profile=profile)
 
-    # ---- 本期留桩：打卡执行与历史记录（抓包到位后在 RealAdapter 内补真实现）----
+    def _request(self, method, path, token=None, params=None, json=None):
+        """统一的 B 平台读取请求：拼 /xiaobei-api/ 前缀，走信封校验。"""
+        url = f'{BASE_URL}/xiaobei-api/{path}'
+        try:
+            resp = requests.request(
+                method, url, headers=self._headers(None, token),
+                params=params, json=json, timeout=_TIMEOUT, verify=SSL_VERIFY,
+            )
+        except requests.RequestException as e:
+            raise BPlatformError('network', f'请求 B 平台失败：{e}')
+        return self._check(resp)
+
+    # ---- 历史签到读取（v1.5 抓包闭环：overlist → {id} 围栏 → listLog）----
+    def fetch_history_tasks(self, token, kind, page_num=1, page_size=200):
+        """寝/活历史任务列表（overlist）。kind: 'know'|'sign'，返回统一行列表。"""
+        if kind not in ('know', 'sign'):
+            raise BPlatformError('unknown', f'未知任务模块：{kind}')
+        data = self._request('GET', f'student/{kind}/overlist', token=token,
+                             params={'pageNum': page_num, 'pageSize': page_size})
+        rows = data.get('rows') or []
+        return [self._unify_task(r, kind) for r in rows]
+
+    def fetch_task_detail(self, token, kind, task_id):
+        """任务详情：地理围栏 JSON 字符串位于 data.location（know 详情独有，sign 亦含）。"""
+        if kind not in ('know', 'sign'):
+            raise BPlatformError('unknown', f'未知任务模块：{kind}')
+        data = self._request('GET', f'student/{kind}/{task_id}', token=token)
+        task = data.get('data') or {}
+        return {'geoFence': self._parse_geo(task.get('location')),
+                'task': self._unify_task(task, kind)}
+
+    def fetch_task_logs(self, token, kind, task_id):
+        """签到记录列表（listLog）。know 用 knowingId，sign 用 signId；仅取已完成记录。"""
+        if kind not in ('know', 'sign'):
+            raise BPlatformError('unknown', f'未知任务模块：{kind}')
+        param = 'knowingId' if kind == 'know' else 'signId'
+        finish_key = 'isFinishKnowing' if kind == 'know' else 'isFinishSign'
+        data = self._request('GET', f'student/{kind}/listLog', token=token,
+                             params={param: task_id, finish_key: 1,
+                                     'pageNum': 1, 'pageSize': 200})
+        rows = data.get('rows') or []
+        return [self._unify_log(r, kind) for r in rows]
+
+    def _initiator(self, r):
+        name = r.get('sendName') or ''
+        role = r.get('sendRole') or ''
+        return f'{name} · {role}' if (name and role) else (name or '—')
+
+    def _unify_task(self, r, kind):
+        """B 平台任务行 → 统一字段（know/sign 拼写字段在此归一）。
+
+        needPhoto：第三方平台约定 isPicture/isPictrue == 0 表示「需要拍照」、
+        1 表示「无需拍照」（与常规布尔相反，旧版 XiaoBeiCheck 亦如此实现：
+        `task.get('isPicture', 0) == 0`）。str 比较以兼容 int 与可能的字符串 "0"/"1"。
+        """
+        raw_photo = r.get('isPicture') if kind == 'know' else r.get('isPictrue')
+        need_photo = str(raw_photo) == '0'
+        base = {
+            'id': r.get('id'),
+            'kind': kind,
+            'type': 'dorm' if kind == 'know' else 'activity',
+            'taskName': r.get('knowingName') if kind == 'know' else r.get('signName') or '',
+            'startDate': r.get('startDate') or '',
+            'endDate': r.get('endDate') or '',
+            'startTime': r.get('startTime') or '',
+            'endTime': r.get('endTime') or '',
+            'initiator': self._initiator(r),
+            'needPhoto': need_photo,
+            'finished': bool(r.get('isFinishKnowing') if kind == 'know' else r.get('isFinishSign')),
+        }
+        return base
+
+    def _unify_log(self, r, kind):
+        """B 平台签到记录行 → 统一字段（注意 file 尾随逗号需剔除）。
+
+        image_url 直接回填 B 平台图片直链：该接口为公开静态资源、无需鉴权，且 <img>
+        标签不受 CORS 约束，前端直接 <img :src> 即可，无需后端代理。路径须字面量透传，
+        不得再做 percent-encode（浏览器对查询串内的 // 与括号保持原样，正好对齐 App 抓包）。
+        """
+        file_path = (r.get('file') or '').rstrip(',')
+        # 防御：file 内若混入 ?/# 会截断查询串（理论上 B 平台路径不会含，仅兜底）
+        file_path = file_path.split('?')[0].split('#')[0]
+        image_url = f'{BASE_URL}/xiaobei-api/image/get?path={file_path}' if file_path else ''
+        if kind == 'know':
+            return {
+                'id': r.get('id'),
+                'studentNumber': r.get('studentNumber') or '',
+                'studentName': r.get('studentName') or '',
+                'className': '',
+                'location': r.get('location') or '',
+                'remark': r.get('remark') or '',
+                'time': r.get('knowingTime') or '',
+                'file': file_path,
+                'imageUrl': image_url,
+                'finished': bool(r.get('isFinishKnowing')),
+            }
+        return {
+            'id': r.get('id'),
+            'studentNumber': r.get('studentNumber') or '',
+            'studentName': r.get('studentName') or '',
+            'className': r.get('studentClass') or '',
+            'location': r.get('location') or '',
+            'remark': r.get('signRemark') or '',
+            'time': r.get('signTime') or '',
+            'file': file_path,
+            'imageUrl': image_url,
+            'finished': bool(r.get('isFinishSign')),
+        }
+
+    @staticmethod
+    def _parse_geo(loc):
+        """location 是 JSON 数组字符串（可能为空/非法），解析为围栏列表。"""
+        if not loc:
+            return []
+        try:
+            arr = json.loads(loc) if isinstance(loc, str) else loc
+        except (ValueError, TypeError):
+            return []
+        out = []
+        for g in (arr or []):
+            out.append({
+                'alias': g.get('alias') or '',
+                'latitude': g.get('latitude') or '',
+                'longitude': g.get('longitude') or '',
+                'location': g.get('location') or '',
+                'radius': g.get('radius') or '',
+            })
+        return out
+
+    # ---- 打卡执行（Module E，本期仍留桩）----
     def checkin(self, session, task):
         from app.services.b_platform.base import CheckinResult
         return CheckinResult(ok=True, status='success', detail={'stub': True})
-
-    def fetch_records(self, session, account):
-        return []
 
 
 def map_student_info(data: dict):

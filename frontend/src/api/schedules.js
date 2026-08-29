@@ -25,6 +25,10 @@ function mapItem(it) {
     platform: it.platform || '',
     studentNo: it.studentNo || '',
     className: it.className || '',
+    // 平台回填档案：姓名作主视觉，学院/专业作次行；mapItem 须显式透传，否则会被归一化丢弃
+    studentName: it.studentName || '',
+    college: it.college || '',
+    major: it.major || '',
     mode: it.mode || 'follow',
     configSetId: it.configSetId == null ? null : it.configSetId,
     config: it.config || null,

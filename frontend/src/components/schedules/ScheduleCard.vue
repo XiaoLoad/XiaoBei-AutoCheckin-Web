@@ -15,13 +15,16 @@
       </span>
 
       <div class="min-w-0 flex-1">
-        <div class="flex items-center gap-2">
-          <span class="truncate text-base font-semibold leading-tight text-ink">{{ displayName }}</span>
+        <!-- 姓名作主视觉：完整展示、可换行，不省略；任务类型徽标随行 -->
+        <div class="flex items-start gap-2">
+          <span class="break-words text-base font-semibold leading-tight text-ink line-clamp-2">{{ displayName }}</span>
           <span class="shrink-0 rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-medium text-brand">{{ schedule.taskLabel }}</span>
         </div>
-        <p v-if="orgLine" class="mt-1 truncate text-xs text-ink-soft">{{ orgLine }}</p>
-        <p v-if="idLine" class="mt-0.5 truncate text-[11px] tabular-nums text-ink-muted">{{ idLine }}</p>
-        <p class="mt-0.5 truncate text-[11px] text-ink-muted">关联「{{ configMeta.presetSetName }}」</p>
+        <!-- 学院 · 专业：单行省略，悬停由 title 看全文，不撑高卡片 -->
+        <p v-if="orgText" class="mt-1 truncate text-xs text-ink-soft" :title="orgText">{{ orgText }}</p>
+        <!-- 学号 · 班级 · 账号：单行省略，悬停看全文 -->
+        <p v-if="idText" class="mt-0.5 truncate text-[11px] tabular-nums text-ink-muted" :title="idText">{{ idText }}</p>
+        <p class="mt-0.5 truncate text-[11px] text-ink-muted" :title="`关联「${configMeta.presetSetName}」`">关联「{{ configMeta.presetSetName }}」</p>
       </div>
 
       <!-- 自定义开关（GSAP 驱动滑块） -->
@@ -135,11 +138,12 @@ function confirmDelete() {
 
 // 登录账号可能是手机号或身份证，辨识度低；有平台回填的真实姓名时优先用它
 const displayName = computed(() => props.schedule.studentName || props.schedule.accountName || '—')
-const orgLine = computed(() =>
+// 学院 · 专业：单行展示，超长省略，悬停由 title 看全文
+const orgText = computed(() =>
   [props.schedule.college, props.schedule.major].filter(Boolean).join(' · ')
 )
-// 姓名已占主视觉时，登录账号降为末位补充信息；主标题回退成账号时不再重复
-const idLine = computed(() => {
+// 学号 · 班级 · 账号：单行展示，超长省略，悬停看全文；登录账号仅在姓名存在时补充
+const idText = computed(() => {
   const parts = []
   if (props.schedule.studentNo) parts.push(`学号 ${props.schedule.studentNo}`)
   if (props.schedule.className) parts.push(props.schedule.className)

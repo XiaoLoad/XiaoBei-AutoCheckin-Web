@@ -61,7 +61,7 @@
     <!-- ============ 可视化图表区 ============ -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <!-- 我的签到趋势（7天/30天 切换） -->
-      <section class="dash-card p-5 lg:col-span-2 fade-up delay-2">
+      <section class="dash-card p-5 lg:col-span-2 v-reveal delay-2">
         <div class="flex items-center justify-between mb-4">
           <div>
             <h3 class="font-semibold text-ink">我的签到趋势</h3>
@@ -77,7 +77,7 @@
       </section>
 
       <!-- 打卡类型分布 -->
-      <section class="dash-card p-5 fade-up delay-3">
+      <section class="dash-card p-5 v-reveal delay-3">
         <h3 class="font-semibold text-ink mb-1">打卡类型分布</h3>
         <p class="text-xs text-ink-muted mb-2">近 30 天 · 共 {{ typeTotal }} 次打卡</p>
         <BaseChart :option="typeDistOption" height="290px" />
@@ -87,7 +87,7 @@
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <!-- 任务完成情况 -->
-      <section class="dash-card p-5 fade-up delay-3">
+      <section class="dash-card p-5 v-reveal delay-3">
         <h3 class="font-semibold text-ink mb-1">任务完成情况</h3>
         <p class="text-xs text-ink-muted mb-2">近 30 天 · 执行结果占比</p>
         <BaseChart :option="taskOption" height="260px" />
@@ -95,7 +95,7 @@
       </section>
 
       <!-- 我的账号状态（仅显示已启用并配置好配置套的账号） -->
-      <section class="dash-card p-5 lg:col-span-2 fade-up delay-4">
+      <section class="dash-card p-5 lg:col-span-2 v-reveal delay-4">
         <div class="flex items-center justify-between mb-4">
           <div class="min-w-0">
             <h3 class="font-semibold text-ink">我的账号状态</h3>
@@ -143,7 +143,7 @@
     </div>
 
     <!-- ============ 我的最近签到日志 ============ -->
-    <section class="dash-card p-5 fade-up delay-4">
+    <section class="dash-card p-5 v-reveal delay-4">
       <div class="flex items-center justify-between gap-3 mb-4">
         <h3 class="font-semibold text-ink">我的最近签到日志</h3>
         <div class="flex items-center gap-2 sm:gap-3">

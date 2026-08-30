@@ -218,10 +218,6 @@ function cancelLogout() {
   color: #fff;
   box-shadow: inset 3px 0 0 0 #1674f8;
 }
-.sidebar-scroll::-webkit-scrollbar,
-.content-scroll::-webkit-scrollbar { width: 6px; }
-.sidebar-scroll::-webkit-scrollbar-thumb,
-.content-scroll::-webkit-scrollbar-thumb { background: rgba(20, 33, 61, 0.12); border-radius: 9999px; }
 .fade-enter-active, .fade-leave-active { transition: opacity 0.2s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>

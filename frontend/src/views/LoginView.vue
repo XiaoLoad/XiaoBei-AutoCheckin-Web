@@ -166,6 +166,13 @@
         </div>
       </div>
     </main>
+
+    <MessageModal
+      v-model="loginMsg.show"
+      :type="loginMsg.type"
+      :title="loginMsg.title"
+      :message="loginMsg.message"
+    />
   </div>
 </template>
 
@@ -175,6 +182,7 @@ import { useRouter, useRoute, RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useLoginAnimations } from '@/composables/useLoginAnimations'
 import BaseCheckbox from '@/components/BaseCheckbox.vue'
+import MessageModal from '@/components/MessageModal.vue'
 
 const root = ref(null)
 const loading = ref(false)
@@ -196,12 +204,21 @@ const form = reactive({
   remember: false
 })
 
+// 登录结果提示：统一走通用模态框（替代原生 alert）
+const loginMsg = reactive({ show: false, type: 'info', title: '', message: '' })
+function showMsg(type, title, message) {
+  loginMsg.type = type
+  loginMsg.title = title
+  loginMsg.message = message
+  loginMsg.show = true
+}
+
 // 初始化 GSAP 动画（自动处理挂载/销毁生命周期）
 useLoginAnimations(root)
 
 async function handleLogin() {
   if (!form.account.trim() || !form.password.trim()) {
-    alert('请填写账号和密码')
+    showMsg('warning', '提示', '请填写账号和密码')
     return
   }
   loading.value = true
@@ -216,7 +233,7 @@ async function handleLogin() {
     router.replace(typeof redirect === 'string' ? redirect : '/')
   } catch (e) {
     // 后端已返回清晰错误（账号不存在 / 密码错误 / 账号已禁用）
-    alert(e.message || '登录失败')
+    showMsg('error', '登录失败', e.message || '登录失败')
   } finally {
     loading.value = false
   }

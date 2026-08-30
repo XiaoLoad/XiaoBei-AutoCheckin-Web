@@ -2,7 +2,7 @@
   <ConfigSection title="位置配置" icon="map-pin" :source="source" :error="error" :required="required">
     <div class="space-y-3">
       <div class="flex items-end gap-2">
-        <div class="flex-1">
+        <div class="min-w-0 flex-1">
           <label class="mb-1 block text-xs font-medium text-ink-muted">签到位置（从位置池选择其一）</label>
           <BaseSelect
             v-model="config.locationId"
@@ -14,7 +14,7 @@
         </div>
         <button
           type="button"
-          class="inline-flex h-[38px] items-center gap-1.5 rounded-lg border border-ink/10 px-3 text-sm text-ink-soft transition hover:bg-cloud"
+          class="inline-flex h-[38px] shrink-0 items-center gap-1.5 rounded-lg border border-ink/10 px-3 text-sm text-ink-soft transition hover:bg-cloud"
           @click="store.gotoResource('locations')"
         >
           <Icon name="layers" :size="14" />管理

@@ -167,7 +167,7 @@
 
           <!-- 任务行（可展开） -->
           <ul ref="listRef" v-else class="divide-y divide-ink/5">
-            <li v-for="row in pagedRows" :key="row.id" data-task-row>
+            <li v-for="row in pagedRows" :key="row.id" v-reveal data-task-row>
               <button
                 type="button"
                 class="flex w-full items-center gap-3 px-2 py-3 text-left transition hover:bg-cloud/40 sm:px-3"

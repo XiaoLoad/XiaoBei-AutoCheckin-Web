@@ -52,7 +52,7 @@
       <!-- ============ 图表区 ============ -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <!-- 全站打卡趋势（7天/30天 切换） -->
-        <section class="dash-card p-5 lg:col-span-2 fade-up delay-2">
+        <section class="dash-card p-5 lg:col-span-2 v-reveal delay-2">
           <div class="flex items-center justify-between mb-4">
             <div>
               <h3 class="font-semibold text-ink">全站打卡趋势</h3>
@@ -67,7 +67,7 @@
         </section>
 
         <!-- 失败原因分布（归类后） -->
-        <section class="dash-card p-5 fade-up delay-3">
+        <section class="dash-card p-5 v-reveal delay-3">
           <h3 class="font-semibold text-ink mb-1">失败原因分布</h3>
           <p class="text-xs text-ink-muted mb-2">近 30 天 · 共 {{ failTotal }} 次失败</p>
           <BaseChart v-if="failTotal > 0" :option="failOption" height="290px" />
@@ -80,7 +80,7 @@
 
       <!-- ============ 账号健康卡（凭证异常 + 疑似漏签） ============ -->
       <section
-        class="relative overflow-hidden rounded-2xl dash-card bg-gradient-to-br from-white via-white to-brand/[0.04] p-5 sm:p-6 fade-up delay-3"
+        class="relative overflow-hidden rounded-2xl dash-card bg-gradient-to-br from-white via-white to-brand/[0.04] p-5 sm:p-6 v-reveal delay-3"
       >
         <!-- 氛围光斑：品牌色/琥珀色极低透明模糊，增加层次不抢数据 -->
         <div class="pointer-events-none absolute -right-16 -top-24 h-56 w-56 rounded-full bg-brand/[0.07] blur-3xl"></div>
@@ -188,7 +188,7 @@
 
       <!-- ============ 额度健康：分桶直方图 + 预警列表 ============ -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <section class="dash-card p-5 fade-up delay-3">
+        <section class="dash-card p-5 v-reveal delay-3">
           <div class="flex items-center justify-between mb-4">
             <div>
               <h3 class="font-semibold text-ink">额度健康分布</h3>
@@ -200,7 +200,7 @@
         </section>
 
         <!-- 额度预警用户列表（Top 20） -->
-        <section class="dash-card p-5 fade-up delay-4 flex flex-col min-h-0">
+        <section class="dash-card p-5 v-reveal delay-4 flex flex-col min-h-0">
           <div class="flex items-center justify-between mb-4">
             <h3 class="font-semibold text-ink">额度预警用户</h3>
             <span class="rounded-full bg-danger/10 px-2.5 py-0.5 text-xs font-medium text-danger">
@@ -249,7 +249,7 @@
       </div>
 
       <!-- ============ 列表模块 ============ -->
-      <section class="dash-card p-5 fade-up delay-4">
+      <section class="dash-card p-5 v-reveal delay-4">
         <div class="flex items-center justify-between mb-4">
           <h3 class="font-semibold text-ink">高频失败风险用户</h3>
           <span class="rounded-full bg-danger/10 px-2.5 py-0.5 text-xs font-medium text-danger">近 7 天 · 失败 ≥ 3 次或失败率 ≥ 50%</span>
@@ -282,7 +282,7 @@
       </section>
 
       <!-- 全局最新打卡日志 -->
-      <section class="dash-card p-5 fade-up delay-4">
+      <section class="dash-card p-5 v-reveal delay-4">
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h3 class="font-semibold text-ink">全局最新打卡日志</h3>
           <div class="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -358,7 +358,7 @@
 
       <!-- ============ 调度器运行状态 + 即将执行 ============ -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <section class="dash-card p-5 fade-up delay-5">
+        <section class="dash-card p-5 v-reveal delay-5">
           <div class="flex items-center justify-between mb-4">
             <h3 class="font-semibold text-ink">调度器运行状态</h3>
             <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium" :class="scheduler.running ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'">
@@ -374,7 +374,7 @@
           </dl>
         </section>
 
-        <section class="dash-card p-5 lg:col-span-2 fade-up delay-5">
+        <section class="dash-card p-5 lg:col-span-2 v-reveal delay-5">
           <h3 class="font-semibold text-ink mb-4">即将执行的任务</h3>
           <ul class="space-y-2">
             <li v-for="(n, i) in scheduler.nextRuns" :key="i" class="flex items-center gap-3 rounded-xl border border-ink/5 bg-ink/[0.02] px-3 py-2.5 text-sm">
@@ -542,16 +542,3 @@ onMounted(() => {
   store.loadOverview()
 })
 </script>
-
-<style scoped>
-/* 卡片内滚动条：细 6px 圆角拇指，与侧边栏滚动条同视觉 */
-.health-scroll {
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(20, 33, 61, 0.18) transparent;
-}
-.health-scroll::-webkit-scrollbar { width: 6px; }
-.health-scroll::-webkit-scrollbar-track { background: transparent; }
-.health-scroll::-webkit-scrollbar-thumb { background: rgba(20, 33, 61, 0.12); border-radius: 9999px; }
-.health-scroll::-webkit-scrollbar-thumb:hover { background: rgba(20, 33, 61, 0.22); }
-</style>

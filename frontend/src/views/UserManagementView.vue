@@ -178,6 +178,7 @@
           <div
             v-for="item in rows"
             :key="item.user_id"
+            v-reveal
             class="rounded-xl border border-ink/10 bg-white p-3"
           >
             <div class="flex items-center gap-3">

@@ -4,6 +4,7 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import router, { syncInitialRoutes } from './router'
 import permission from '@/directives/permission'
+import reveal from '@/directives/reveal'
 import './assets/main.css'
 // PhotoSwipe 灯箱样式全局加载：组件级按需注入在 dev/HMR 下偶发不生效（灯箱无样式、图片拉伸铺满）
 import 'photoswipe/dist/photoswipe.css'
@@ -19,5 +20,7 @@ syncInitialRoutes()
 
 // 注册按钮级权限指令 v-permission（无权限时移除元素）
 app.directive('permission', permission)
+// 注册滚动渐入指令 v-reveal（元素进入视口时 GSAP 淡入上移）
+app.directive('reveal', reveal)
 
 app.mount('#app')

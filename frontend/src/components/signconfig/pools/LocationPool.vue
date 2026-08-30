@@ -285,9 +285,9 @@ watch(paged, async () => {
   gsap.fromTo(
     '.loc-card',
     { opacity: 0, y: 10 },
-    { opacity: 1, y: 0, duration: 0.35, stagger: 0.05, ease: 'power2.out', clearProps: 'opacity,transform' }
+      { opacity: 1, y: 0, duration: 0.35, stagger: 0.05, ease: 'power2.out', clearProps: 'opacity,transform' }
   )
-})
+}, { immediate: true })
 
 // 模态框：添加 / 编辑
 const showModal = ref(false)

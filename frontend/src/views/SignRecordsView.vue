@@ -146,8 +146,11 @@
           </button>
         </div>
 
-        <div class="xb-scroll flex-1 min-h-0 overflow-auto px-2 sm:px-3">
-          <!-- 加载中 -->
+        <div
+          class="xb-scroll flex-1 min-h-0 overflow-auto px-2 transition-opacity sm:px-3"
+          :class="refreshingRecords && 'opacity-60 pointer-events-none'"
+        >
+          <!-- 加载中（仅首次进入，之后翻页/筛选原地静默换新） -->
           <div v-if="loadingRecords" class="flex items-center justify-center py-16 text-sm text-ink-muted">
             加载中…
           </div>
@@ -451,9 +454,13 @@
           <div v-for="(d, i) in weekHeads" :key="d" :class="i === 0 || i === 6 ? 'text-ink/35' : ''">{{ d }}</div>
         </div>
 
-        <!-- 日期网格：flex-1 自适应铺满，6 行等分，内部不滚动 -->
-        <div class="grid min-h-0 flex-1 grid-cols-7 grid-rows-6 gap-1.5 px-3 pb-3 pt-1 sm:px-4">
-          <template v-if="loadingRecords || loadingCalendar">
+        <!-- 日期网格：flex-1 自适应铺满，6 行等分，内部不滚动。
+             静默刷新期（切月取数）格子先以无记录灰渲染，数据到位即着色，不闪加载页 -->
+        <div
+          class="grid min-h-0 flex-1 grid-cols-7 grid-rows-6 gap-1.5 px-3 pb-3 pt-1 transition-opacity sm:px-4"
+          :class="refreshingCalendar && 'opacity-60 pointer-events-none'"
+        >
+          <template v-if="(loadingRecords && !listLoaded) || (loadingCalendar && !calendarLoaded)">
             <div class="col-span-7 flex items-center justify-center text-sm text-ink-muted">加载中…</div>
           </template>
           <template v-else-if="stats.total === 0">
@@ -515,7 +522,7 @@
             <button type="button" class="ml-1 rounded-md px-2 py-0.5 font-medium text-brand hover:bg-brand/10" @click="store.setView('list')">查看当天任务</button>
             <button type="button" class="ml-1 rounded-md px-2 py-0.5 font-medium text-ink-muted hover:bg-cloud" @click="store.clearDayFilter">清除筛选</button>
           </span>
-          <template v-else-if="stats.total > 0 && !monthHasTask">
+          <template v-else-if="stats.total > 0 && !monthHasTask && !refreshingCalendar">
             <span>本月暂无签到记录</span>
             <button v-if="bestDataMonth" type="button" class="ml-1 rounded-md px-2 py-0.5 font-medium text-brand hover:bg-brand/10" @click="store.jumpToBestMonth">查看 {{ bestDataMonth.y }}年{{ bestDataMonth.m }}月</button>
           </template>
@@ -549,6 +556,10 @@ const {
   loadingAccounts,
   loadingRecords,
   loadingCalendar,
+  refreshingRecords,
+  refreshingCalendar,
+  listLoaded,
+  calendarLoaded,
   typeFilter,
   statusFilter,
   viewMode,

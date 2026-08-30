@@ -73,8 +73,12 @@
       </div>
     </div>
 
-    <!-- 列表卡片：账号卡片网格（桌面/移动同一套），卡片 flex-1 内部滚动，底部固定分页 -->
-    <div class="dash-card fade-up flex flex-1 min-h-0 flex-col overflow-hidden rounded-2xl">
+    <!-- 列表卡片：账号卡片网格（桌面/移动同一套），卡片 flex-1 内部滚动，底部固定分页。
+         静默刷新期旧数据原地保留，仅整卡降透明并暂停交互 -->
+    <div
+      class="dash-card fade-up flex flex-1 min-h-0 flex-col overflow-hidden rounded-2xl transition-opacity"
+      :class="refreshing && 'opacity-60 pointer-events-none'"
+    >
       <!-- 加载态 -->
       <div v-if="loading" class="flex flex-1 items-center justify-center text-sm text-ink-muted">加载中…</div>
 
@@ -202,6 +206,7 @@ import ConfirmModal from '@/components/ConfirmModal.vue'
 const store = useAccountsStore()
 const {
   loading,
+  refreshing,
   keyword,
   typeFilter,
   signFilter,

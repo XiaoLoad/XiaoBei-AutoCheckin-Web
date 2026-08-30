@@ -151,8 +151,12 @@
     </Transition>
 
     <!-- 平铺列表：按执行时间倒序，状态色条为纵向扫读锚点；列表固定高度内部滚动，分页常驻底部。
-         min-h-[480px] 给列表卡片一个舒适下限（与 SignRecordsView 一致），短屏不至过矮、长屏仍随 flex-1 撑满 -->
-    <div class="dash-card fade-up flex flex-1 min-h-[480px] flex-col rounded-2xl">
+         min-h-[480px] 给列表卡片一个舒适下限（与 SignRecordsView 一致），短屏不至过矮、长屏仍随 flex-1 撑满。
+         静默刷新期旧日志原地保留，仅整卡降透明并暂停交互（筛选/翻页/删除不再闪加载页） -->
+    <div
+      class="dash-card fade-up flex flex-1 min-h-[480px] flex-col rounded-2xl transition-opacity"
+      :class="refreshingLogs && 'opacity-60 pointer-events-none'"
+    >
       <div class="flex-1 min-h-0 overflow-y-auto">
       <ul v-if="loadingLogs" class="divide-y divide-ink/5">
         <li
@@ -308,6 +312,7 @@ const {
   total,
   overview,
   loadingLogs,
+  refreshingLogs,
   accountOptions,
 } = storeToRefs(store);
 

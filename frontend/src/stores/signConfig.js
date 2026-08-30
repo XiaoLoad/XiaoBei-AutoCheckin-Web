@@ -7,6 +7,9 @@ import * as api from '@/api/signConfig'
 
 export const useSignConfigStore = defineStore('signConfig', () => {
   const loading = ref(true)
+  // 无感刷新：首次加载显示骨架屏；再次进入页面（store 已有缓存）后台静默换新
+  const refreshing = ref(false)
+  const loaded = ref(false)
   const saving = ref(false)
 
   // 必填校验错误：键为 time / location / remarks，值为提示文案；保存前若非空则阻断提交
@@ -286,7 +289,9 @@ export const useSignConfigStore = defineStore('signConfig', () => {
 
   // ── 加载 ──
   async function load() {
-    loading.value = true
+    const first = !loaded.value
+    if (first) loading.value = true
+    else refreshing.value = true
     try {
       const [meta, sets, pools] = await Promise.all([api.fetchConfigMeta(), api.fetchConfigSets(), api.fetchPools()])
       accounts.value = meta.accounts
@@ -313,8 +318,10 @@ export const useSignConfigStore = defineStore('signConfig', () => {
           selectedTaskType.value = 'dorm'
         }
       }
+      loaded.value = true
     } finally {
       loading.value = false
+      refreshing.value = false
     }
   }
 
@@ -815,6 +822,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
 
   return {
     loading,
+    refreshing,
     saving,
     formErrors,
     accounts,

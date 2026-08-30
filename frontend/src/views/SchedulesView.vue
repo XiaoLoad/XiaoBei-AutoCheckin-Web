@@ -1,5 +1,9 @@
 <template>
-  <div class="flex flex-1 min-h-0 flex-col gap-6">
+  <!-- 静默刷新期（回到页面后台换新）整页降透明并暂停交互，数据原地保留不闪加载页 -->
+  <div
+    class="flex flex-1 min-h-0 flex-col gap-6 transition-opacity"
+    :class="store.refreshing && 'opacity-60 pointer-events-none'"
+  >
     <!-- 概览卡 -->
     <div class="dash-card fade-up shrink-0 p-4 sm:p-5">
       <div class="flex flex-wrap items-center justify-between gap-4">

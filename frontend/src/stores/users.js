@@ -13,6 +13,12 @@ export const useUsersStore = defineStore('users', () => {
   const keyword = ref('')
   const roleFilter = ref('')
   const loading = ref(false)
+  // 无感刷新：已有数据时后台静默换新（视图仅降透明），loading 只用于真正的首次加载；
+  // loaded 标记"是否完成过一次成功拉取"，区分首载与刷新（列表为空也可能是合法空结果）
+  const refreshing = ref(false)
+  const loaded = ref(false)
+  let fetchSeq = 0
+
   const summary = ref({ total_users: 0, enabled: 0, disabled: 0, total_quota: 0, used_quota: 0 })
 
   // 乐观删除：后端删除为桩，标记隐藏的 id 并在拉取后过滤，刷新页面前保持不可见
@@ -43,17 +49,25 @@ export const useUsersStore = defineStore('users', () => {
   }
 
   async function fetchUsers() {
-    loading.value = true
+    const first = !loaded.value
+    if (first) loading.value = true
+    else refreshing.value = true
+    const seq = ++fetchSeq
     try {
       const res = await getUsers(buildParams())
+      if (seq !== fetchSeq) return // 竞态守卫：仅采纳最新请求
       list.value = res.items || []
       total.value = res.total || 0
       if (res.summary) summary.value = res.summary
       // 删除后可能使当前页越界，做收敛
       const tp = Math.max(1, Math.ceil(displayTotal.value / pageSize.value))
       if (page.value > tp) page.value = tp
+      loaded.value = true
     } finally {
-      loading.value = false
+      if (seq === fetchSeq) {
+        loading.value = false
+        refreshing.value = false
+      }
     }
   }
 
@@ -160,6 +174,7 @@ export const useUsersStore = defineStore('users', () => {
     keyword,
     roleFilter,
     loading,
+    refreshing,
     summary,
     hiddenIds,
     showForm,

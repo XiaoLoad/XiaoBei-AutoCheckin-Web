@@ -7,6 +7,10 @@ import { fetchAccounts, createAccount, updateAccount, deleteAccount } from '@/ap
 
 export const useAccountsStore = defineStore('accounts', () => {
   const loading = ref(false)
+  // 无感刷新：已有数据时后台静默换新（视图仅降透明），loading 只用于真正的首次加载
+  const refreshing = ref(false)
+  const loaded = ref(false)
+  let loadSeq = 0
   const accounts = ref([])
 
   // 筛选状态（前端演示；后端接入时作为查询参数传递，见 api/accounts.js）
@@ -88,12 +92,21 @@ export const useAccountsStore = defineStore('accounts', () => {
   }
 
   async function load() {
-    loading.value = true
+    const first = !loaded.value
+    if (first) loading.value = true
+    else refreshing.value = true
+    const seq = ++loadSeq
     try {
       // 后端接入时此处可传 { keyword, type, signStatus, enabled } 由服务端过滤与分页
-      accounts.value = await fetchAccounts()
+      const list = await fetchAccounts()
+      if (seq !== loadSeq) return // 竞态守卫：仅采纳最新请求
+      accounts.value = list
+      loaded.value = true
     } finally {
-      loading.value = false
+      if (seq === loadSeq) {
+        loading.value = false
+        refreshing.value = false
+      }
     }
   }
 
@@ -166,6 +179,7 @@ export const useAccountsStore = defineStore('accounts', () => {
 
   return {
     loading,
+    refreshing,
     accounts,
     keyword,
     typeFilter,

@@ -21,7 +21,11 @@ function enableBlockReason(s) {
 }
 
 export const useSchedulesStore = defineStore('schedules', () => {
-  const loading = ref(true)
+  const loading = ref(false)
+  // 无感刷新：已有数据时后台静默换新（视图仅降透明），loading 只用于真正的首次加载
+  const refreshing = ref(false)
+  const loaded = ref(false)
+  let loadSeq = 0
   const saving = ref(false)
   const schedules = ref([])
 
@@ -49,11 +53,20 @@ export const useSchedulesStore = defineStore('schedules', () => {
   }
 
   async function load() {
-    loading.value = true
+    const first = !loaded.value
+    if (first) loading.value = true
+    else refreshing.value = true
+    const seq = ++loadSeq
     try {
-      schedules.value = await api.fetchSchedules()
+      const list = await api.fetchSchedules()
+      if (seq !== loadSeq) return // 竞态守卫：仅采纳最新请求
+      schedules.value = list
+      loaded.value = true
     } finally {
-      loading.value = false
+      if (seq === loadSeq) {
+        loading.value = false
+        refreshing.value = false
+      }
     }
   }
 
@@ -161,6 +174,7 @@ export const useSchedulesStore = defineStore('schedules', () => {
 
   return {
     loading,
+    refreshing,
     saving,
     schedules,
     configMetaOf,

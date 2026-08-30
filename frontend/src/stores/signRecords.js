@@ -62,6 +62,11 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
   const loadingAccounts = ref(false)
   const loadingRecords = ref(false)
   const loadingCalendar = ref(false)
+  // 无感刷新：列表/日历各自区分首载与静默刷新（视图骨架只挂首载，刷新期旧数据降透明保留）
+  const refreshingRecords = ref(false)
+  const refreshingCalendar = ref(false)
+  const listLoaded = ref(false)
+  const calendarLoaded = ref(false)
   // 当前列表页数据（服务端分页的一页）与服务端总数
   const tasks = ref([])
   const total = ref(0)
@@ -216,7 +221,8 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     }
     const seq = ++listSeq
     const day = dayFilter.value
-    loadingRecords.value = true
+    if (listLoaded.value) refreshingRecords.value = true
+    else loadingRecords.value = true
     try {
       const res = await fetchSignRecords(selectedAccountId.value, {
         type: typeFilter.value,
@@ -231,8 +237,12 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
       total.value = res.total
       if (res.overview) overview.value = res.overview
       if (res.meta && res.meta.latest_date) dataLatest.value = res.meta.latest_date
+      listLoaded.value = true
     } finally {
-      if (seq === listSeq) loadingRecords.value = false
+      if (seq === listSeq) {
+        loadingRecords.value = false
+        refreshingRecords.value = false
+      }
     }
   }
 
@@ -249,7 +259,8 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     const first = new Date(y, m - 1, 1 - lead)
     const last = new Date(first)
     last.setDate(first.getDate() + 41)
-    loadingCalendar.value = true
+    if (calendarLoaded.value) refreshingCalendar.value = true
+    else loadingCalendar.value = true
     try {
       const res = await fetchSignRecords(selectedAccountId.value, {
         type: typeFilter.value,
@@ -269,8 +280,12 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
         }
       }
       monthCache.value = { ...monthCache.value, [key]: acc }
+      calendarLoaded.value = true
     } finally {
-      if (seq === monthSeq) loadingCalendar.value = false
+      if (seq === monthSeq) {
+        loadingCalendar.value = false
+        refreshingCalendar.value = false
+      }
     }
   }
 
@@ -426,6 +441,8 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     loadingAccounts,
     loadingRecords,
     loadingCalendar,
+    refreshingRecords,
+    refreshingCalendar,
     tasks,
     total,
     typeFilter,

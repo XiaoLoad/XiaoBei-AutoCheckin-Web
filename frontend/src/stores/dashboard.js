@@ -19,18 +19,24 @@ export const useDashboardStore = defineStore('dashboard', () => {
   const overview = ref({ ...EMPTY })
   const loading = ref(false)
   const loaded = ref(false)
+  // 无感刷新：再次进入仪表盘时旧数据原地保留（统计卡/图表原地换数），仅标记刷新态供视图降透明
+  const refreshing = ref(false)
 
   async function loadOverview() {
-    loading.value = true
+    const first = !loaded.value
+    if (first) loading.value = true
+    else refreshing.value = true
     try {
       overview.value = await fetchOverview()
       loaded.value = true
     } catch (e) {
-      overview.value = { ...EMPTY }
+      // 失败时保留旧数据（首次失败才落回空态骨架），避免刷新把已渲染内容打空
+      if (!loaded.value) overview.value = { ...EMPTY }
     } finally {
       loading.value = false
+      refreshing.value = false
     }
   }
 
-  return { overview, loading, loaded, loadOverview }
+  return { overview, loading, refreshing, loaded, loadOverview }
 })

@@ -25,6 +25,10 @@ export const useTaskLogsStore = defineStore('taskLogs', () => {
   const total = ref(0)
   const overview = ref({ total: 0, success: 0, fail: 0, skip: 0 })
   const loadingLogs = ref(false)
+  // 无感刷新：已有日志时后台静默换新（视图仅降透明），loadingLogs 只用于真正的首次加载
+  const refreshingLogs = ref(false)
+  const logsLoaded = ref(false)
+  let logsSeq = 0
 
   const accountOptions = computed(() =>
     accounts.value.map((a) => ({
@@ -45,7 +49,10 @@ export const useTaskLogsStore = defineStore('taskLogs', () => {
   }
 
   async function loadLogs() {
-    loadingLogs.value = true
+    const first = !logsLoaded.value
+    if (first) loadingLogs.value = true
+    else refreshingLogs.value = true
+    const seq = ++logsSeq
     try {
       const res = await fetchTaskLogs({
         accountId: selectedAccountId.value || '',
@@ -54,15 +61,21 @@ export const useTaskLogsStore = defineStore('taskLogs', () => {
         page: page.value,
         pageSize: pageSize.value,
       })
+      if (seq !== logsSeq) return // 竞态守卫：仅采纳最新请求
       logs.value = res.items || []
       total.value = res.total || 0
       overview.value = res.overview || { total: 0, success: 0, fail: 0, skip: 0 }
+      logsLoaded.value = true
     } catch (e) {
+      if (seq !== logsSeq) return
       logs.value = []
       total.value = 0
       overview.value = { total: 0, success: 0, fail: 0, skip: 0 }
     } finally {
-      loadingLogs.value = false
+      if (seq === logsSeq) {
+        loadingLogs.value = false
+        refreshingLogs.value = false
+      }
     }
   }
 
@@ -126,6 +139,7 @@ export const useTaskLogsStore = defineStore('taskLogs', () => {
     total,
     overview,
     loadingLogs,
+    refreshingLogs,
     accountOptions,
     init,
     loadAccounts,

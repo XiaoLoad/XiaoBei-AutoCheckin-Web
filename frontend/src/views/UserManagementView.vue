@@ -62,8 +62,12 @@
       </div>
     </div>
 
-    <!-- 用户列表：桌面用表格（表头固定、列对齐），移动端用卡片，页面主体高度固定 -->
-    <div class="dash-card flex min-h-[260px] flex-1 flex-col overflow-hidden sm:min-h-0">
+    <!-- 用户列表：桌面用表格（表头固定、列对齐），移动端用卡片，页面主体高度固定。
+         静默刷新期旧数据原地保留，仅整卡降透明并暂停交互（无感换新，不整块替换） -->
+    <div
+      class="dash-card flex min-h-[260px] flex-1 flex-col overflow-hidden transition-opacity sm:min-h-0"
+      :class="refreshing && 'opacity-60 pointer-events-none'"
+    >
       <!-- 加载中 -->
       <div v-if="loading" class="flex flex-1 items-center justify-center text-sm text-ink-muted">加载中…</div>
       <!-- 空状态 -->
@@ -278,6 +282,7 @@ const {
   keyword,
   roleFilter,
   loading,
+  refreshing,
   summary,
   showForm,
   formMode,

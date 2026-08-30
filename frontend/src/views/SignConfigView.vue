@@ -21,7 +21,12 @@
       </div>
     </div>
 
-    <div ref="content" class="min-h-0 flex-1 flex flex-col">
+    <!-- 静默刷新期（再次进入页面后台换新）内容区降透明，已渲染的页签数据原地保留 -->
+    <div
+      ref="content"
+      class="min-h-0 flex-1 flex flex-col transition-opacity"
+      :class="store.refreshing && 'opacity-60 pointer-events-none'"
+    >
       <SignConfigSkeleton
         v-if="store.loading"
         :tab="effectiveTab"

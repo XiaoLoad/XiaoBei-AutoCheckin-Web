@@ -32,15 +32,20 @@ export const useSchedulesStore = defineStore('schedules', () => {
   // 读取某任务实例的配置元信息：standalone 任务优先读自身 config；否则回退配置套元信息
   function configMetaOf(accountId, taskType) {
     const s = schedules.value.find((x) => x.accountId == accountId && x.taskType === taskType)
+    const sign = useSignConfigStore()
     if (s && s.config) {
       const cfg = s.config
-      const sign = useSignConfigStore()
       const loc =
         sign.userLocations.find((l) => l.id === cfg.locationId) ||
         sign.systemLocations.find((l) => l.id === cfg.locationId)
+      // 套用快照会保留来源标签 configSetId：展示真实配置套名（此前硬编码「原配置套」，
+      // 无论套用了哪个套都显示同一个名字）
+      const bound = sign.scheduleBindings[`${accountId}:${taskType}`]
+      const setName =
+        (bound && bound.configSetId && sign.userConfigSets.find((x) => x.id === bound.configSetId)?.name) || '自定义'
       return {
         time: cfg.time ? JSON.parse(JSON.stringify(cfg.time)) : null,
-        presetSetName: s.configSetId ? '原配置套' : '自定义',
+        presetSetName: setName,
         locationName: loc ? loc.name : '未设置位置'
       }
     }

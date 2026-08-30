@@ -1,5 +1,5 @@
 <template>
-  <article ref="root" class="sched-card dash-card relative flex flex-col overflow-hidden p-3.5">
+  <article ref="root" class="sched-card dash-card relative flex flex-col overflow-hidden p-4 transition duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-ink/5">
     <!-- 左侧状态色条：开启时品牌蓝竖向铺满，GSAP 缩放呈现 -->
     <span
       ref="accent"
@@ -9,7 +9,7 @@
 
     <!-- 身份区：真实姓名为卡片主视觉（首字头像 + 放大字号），学院 / 专业 / 学号依次降级 -->
     <div class="flex items-start gap-2.5">
-      <span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand/10 text-[15px] font-semibold text-brand">
+      <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/10 text-[15px] font-semibold text-brand">
         <template v-if="displayName">{{ displayName.charAt(0) }}</template>
         <Icon v-else name="user" :size="16" />
       </span>
@@ -24,7 +24,6 @@
         <p v-if="orgText" class="mt-1 truncate text-xs text-ink-soft" :title="orgText">{{ orgText }}</p>
         <!-- 学号 · 班级 · 账号：单行省略，悬停看全文 -->
         <p v-if="idText" class="mt-0.5 truncate text-[11px] tabular-nums text-ink-muted" :title="idText">{{ idText }}</p>
-        <p class="mt-0.5 truncate text-[11px] text-ink-muted" :title="`关联「${configMeta.presetSetName}」`">关联「{{ configMeta.presetSetName }}」</p>
       </div>
 
       <!-- 自定义开关（GSAP 驱动滑块） -->
@@ -41,16 +40,27 @@
       </button>
     </div>
 
-    <!-- 状态 + 下一次执行 -->
-    <div class="mt-3 grid grid-cols-2 gap-2.5 border-t border-ink/5 pt-2.5">
-      <div>
-        <p class="text-[11px] text-ink-muted">状态</p>
-        <p class="mt-0.5 text-sm font-medium" :class="statusCls">{{ statusText }}</p>
+    <!-- 配置来源胶囊：真实配置套名（套用哪个显示哪个）/ 自定义 / 未关联 + 位置 -->
+    <div class="mt-2.5 flex items-center gap-1.5 rounded-lg bg-cloud/70 px-2.5 py-1.5 text-[11px]">
+      <Icon name="layers" :size="12" class="shrink-0 text-brand" />
+      <span
+        class="min-w-0 flex-1 truncate font-medium text-ink-soft"
+        :title="`关联「${configMeta.presetSetName}」`"
+      >{{ configMeta.presetSetName }}</span>
+      <span
+        v-if="configMeta.locationName && configMeta.locationName !== '未设置位置'"
+        class="max-w-[45%] shrink-0 truncate text-ink-muted"
+        :title="configMeta.locationName"
+      >{{ configMeta.locationName }}</span>
+    </div>
+
+    <!-- 下一次执行：卡片最重要的运行时信息，品牌色高亮块 -->
+    <div class="mt-2.5 rounded-xl border border-brand/15 bg-brand/5 px-3 py-2">
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-[11px] text-ink-muted">下一次执行</span>
+        <span class="text-[11px] font-medium" :class="statusCls">{{ statusText }}</span>
       </div>
-      <div>
-        <p class="text-[11px] text-ink-muted">下一次执行</p>
-        <p class="mt-0.5 text-sm font-medium text-ink">{{ nextRunText }}</p>
-      </div>
+      <p class="mt-0.5 truncate text-sm font-semibold text-brand" :title="nextRunText">{{ nextRunText }}</p>
     </div>
 
     <!-- 模式 chip + 上次运行 -->

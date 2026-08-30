@@ -284,21 +284,23 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     return configsEqual(b.config, set.config)
   })
 
-  // 供定时任务页「跟随配置套」预览：解析某任务绑定配置套的时间/位置元信息
+  // 供定时任务页「跟随配置套」预览：解析某任务的时间/位置元信息
+  // 来源优先级：任务自持快照（套用/保存后的 b.config）→ 所绑配置套 → 未关联。
+  // 此前独立任务（已解绑配置套）读不到自身配置，抽屉「预计下一次执行」恒显示暂不可执行。
   function taskConfigMetaOf(accountId, type) {
     const key = `${accountId}:${type}`
     const b = scheduleBindings.value[key]
     const setId = b ? b.configSetId : null
     const set = setId ? userConfigSets.value.find((s) => s.id === setId) : null
-    const cfg = set ? set.config : null
+    const cfg = b && b.config ? b.config : set ? set.config : null
     if (!cfg) return { time: null, presetSetName: '未关联', locationName: '未设置位置' }
     const loc =
       userLocations.value.find((l) => l.id === cfg.locationId) ||
       systemLocations.value.find((l) => l.id === cfg.locationId)
     return {
       time: cfg.time ? JSON.parse(JSON.stringify(cfg.time)) : null,
-      presetSetName: set ? set.name : '未关联',
-      locationName: loc ? loc.name : '未设置位置'
+      presetSetName: set ? set.name : b && b.config ? '自定义' : '未关联',
+      locationName: loc ? loc.name : '未设置位置',
     }
   }
 

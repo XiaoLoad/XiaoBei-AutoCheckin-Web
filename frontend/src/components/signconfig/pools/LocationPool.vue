@@ -20,14 +20,14 @@
         <input
           v-model="query"
           type="text"
-          class="w-full rounded-xl border border-ink/10 bg-white py-2 pl-9 pr-3 text-sm text-ink outline-none focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
+          class="w-full rounded-xl border border-ink/10 bg-white py-2 pl-9 pr-3 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
           placeholder="搜索名称或地址"
           @input="onQuery"
         />
       </div>
       <button
         type="button"
-        class="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
+        class="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white shadow-lg shadow-brand/20 transition hover:bg-brand-dark disabled:opacity-50"
         :disabled="!canEdit || showModal"
         @click="openAdd"
       >
@@ -35,38 +35,77 @@
       </button>
     </div>
 
-    <p class="text-xs text-ink-muted">
-      {{ scope === 'system' ? '平台预设位置（管理员维护，普通用户可选不可改）' : '我的位置（本人可添加）' }}
-    </p>
+    <!-- 列表：卡片网格（悬停浮起 + 操作浮现，GSAP 错峰入场） -->
+    <div v-if="filtered.length === 0" class="flex flex-col items-center gap-2 py-10 text-ink-muted">
+      <Icon name="map-pin" :size="30" class="opacity-40" />
+      <p class="text-sm">{{ query ? '未找到匹配的位置' : '暂无位置' }}</p>
+    </div>
+    <TransitionGroup v-else tag="div" class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3" name="loc-list">
+      <article
+        v-for="loc in paged"
+        :key="loc.id"
+        class="loc-card group relative overflow-hidden rounded-xl border border-ink/10 bg-white p-3.5 transition duration-300 hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-md hover:shadow-ink/5"
+      >
+        <div class="flex items-start gap-2.5">
+          <span
+            class="grid h-9 w-9 shrink-0 place-items-center rounded-lg"
+            :class="scope === 'system' ? 'bg-info/10 text-info' : 'bg-brand/10 text-brand'"
+          >
+            <Icon name="map-pin" :size="16" />
+          </span>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-1.5">
+              <p class="min-w-0 flex-1 truncate text-sm font-semibold text-ink" :title="loc.name">{{ loc.name }}</p>
+              <span
+                v-if="scope === 'system'"
+                class="shrink-0 rounded-full bg-info/10 px-1.5 py-0.5 text-[10px] font-medium text-info"
+              >预设</span>
+            </div>
+            <p class="mt-0.5 truncate text-xs text-ink-muted" :title="loc.address">{{ loc.address || '—' }}</p>
+          </div>
+        </div>
 
-    <!-- 列表 -->
-    <div v-if="filtered.length === 0" class="py-8 text-center text-sm text-ink-muted">
-      {{ query ? '未找到匹配的位置' : '暂无位置' }}
-    </div>
-    <div v-else class="overflow-hidden rounded-xl border border-ink/10">
-      <table class="w-full text-left text-sm">
-        <thead class="bg-cloud/60 text-ink-muted">
-          <tr>
-            <th class="px-3 py-2 font-medium">名称</th>
-            <th class="px-3 py-2 font-medium">经纬度</th>
-            <th class="px-3 py-2 font-medium">偏移</th>
-            <th class="px-3 py-2 text-right font-medium">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="loc in paged" :key="loc.id" class="border-t border-ink/5 hover:bg-cloud/40">
-            <td class="px-3 py-2"><p class="font-medium text-ink">{{ loc.name }}</p><p class="truncate text-xs text-ink-muted">{{ loc.address }}</p></td>
-            <td class="px-3 py-2 tabular-nums text-ink-soft">{{ loc.lat }}, {{ loc.lng }}</td>
-            <td class="px-3 py-2 tabular-nums text-ink-soft">{{ loc.offset }} 米</td>
-            <td class="px-3 py-2 text-right">
-              <button v-if="canEdit" class="text-xs text-brand hover:underline" @click="openEdit(loc)">编辑</button>
-              <button v-if="canEdit" class="ml-3 text-xs text-danger hover:underline" @click="del(loc)">删除</button>
-              <span v-else class="text-xs text-ink-muted">只读</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+        <div class="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px] tabular-nums text-ink-muted">
+          <span class="rounded bg-cloud/80 px-1.5 py-0.5" :title="`${loc.lat}, ${loc.lng}`">{{ loc.lat }}, {{ loc.lng }}</span>
+          <span class="rounded bg-cloud/80 px-1.5 py-0.5">偏移 {{ loc.offset }} 米</span>
+        </div>
+
+        <!-- 操作：悬停浮现（触屏常显） -->
+        <div
+          v-if="canEdit"
+          class="absolute right-2.5 top-2.5 flex gap-1 opacity-100 transition group-hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+        >
+          <button
+            type="button"
+            class="grid h-7 w-7 place-items-center rounded-lg text-ink-muted transition hover:bg-cloud hover:text-brand"
+            title="编辑"
+            @click="openEdit(loc)"
+          >
+            <Icon name="edit" :size="13" />
+          </button>
+          <button
+            type="button"
+            class="grid h-7 w-7 place-items-center rounded-lg text-ink-muted transition hover:bg-danger/10 hover:text-danger"
+            title="删除"
+            @click="del(loc)"
+          >
+            <Icon name="trash" :size="13" />
+          </button>
+        </div>
+        <span v-else class="absolute right-2.5 top-2.5 rounded-full bg-cloud/80 px-1.5 py-0.5 text-[10px] text-ink-muted">只读</span>
+
+        <!-- 删除二次确认（行内展开，避免误删） -->
+        <div v-if="confirmingId === loc.id" class="mt-2.5 flex items-center justify-end gap-1.5 border-t border-ink/5 pt-2">
+          <span class="mr-auto text-[11px] text-danger">确认删除「{{ loc.name }}」？</span>
+          <button type="button" class="rounded-lg px-2 py-1 text-xs font-medium text-ink-muted transition hover:bg-cloud" @click="confirmingId = null">取消</button>
+          <button
+            type="button"
+            class="rounded-lg bg-danger px-2.5 py-1 text-xs font-medium text-white transition hover:bg-danger/90"
+            @click="confirmDel(loc)"
+          >确认</button>
+        </div>
+      </article>
+    </TransitionGroup>
 
     <!-- 分页（复用 BasePagination） -->
     <BasePagination
@@ -83,23 +122,24 @@
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div class="sm:col-span-2">
           <label class="mb-1.5 block text-sm font-medium text-ink-soft">名称</label>
-          <input v-model="form.name" class="w-full rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="对此位置的描述，如：3栋502寝室" />
+          <input v-model="form.name" class="login-input" placeholder="对此位置的描述，如：3栋502寝室" />
         </div>
         <div class="sm:col-span-2">
           <label class="mb-1.5 block text-sm font-medium text-ink-soft">地址</label>
-          <input v-model="form.address" class="w-full rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="第三方接口定位所需的地址参数（必填）" />
+          <input v-model="form.address" class="login-input" placeholder="第三方接口定位所需的地址参数（必填）" />
         </div>
         <div>
           <label class="mb-1.5 block text-sm font-medium text-ink-soft">纬度</label>
-          <input v-model="form.lat" class="w-full rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="纬度（必填）" />
+          <input v-model="form.lat" class="login-input" placeholder="纬度（必填）" />
         </div>
         <div>
           <label class="mb-1.5 block text-sm font-medium text-ink-soft">经度</label>
-          <input v-model="form.lng" class="w-full rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="经度（必填）" />
+          <input v-model="form.lng" class="login-input" placeholder="经度（必填）" />
         </div>
         <div class="sm:col-span-2">
-          <label class="mb-1.5 block text-sm font-medium text-ink-soft">坐标偏移（米，默认 10）</label>
-          <input v-model="form.offset" type="number" class="w-full rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="坐标偏移（米，默认 10）" />
+          <label class="mb-1.5 block text-sm font-medium text-ink-soft">坐标偏移（米）</label>
+          <input v-model="form.offset" type="number" class="login-input" placeholder="默认 10" />
+          <p class="mt-1.5 text-xs text-ink-muted">提交签到时在配置坐标周围随机偏移该距离，模拟真实 GPS 抖动。</p>
         </div>
       </div>
       <template #footer>
@@ -124,7 +164,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, nextTick } from 'vue'
+import { gsap } from 'gsap'
 import Icon from '@/components/Icon.vue'
 import BasePagination from '@/components/BasePagination.vue'
 import BaseModal from '@/components/BaseModal.vue'
@@ -139,6 +180,7 @@ const props = defineProps({
 const store = useSignConfigStore()
 const auth = useAuthStore()
 const isAdmin = computed(() => auth.isAdmin)
+const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 const scopes = [
   { value: 'system', label: '平台预设位置' },
@@ -180,6 +222,17 @@ function onQuery() {
 function onSize(s) {
   pageSize.value = Number(s)
 }
+
+// 卡片错峰入场（翻页/增删后重放；尊重减少动效偏好）
+watch(paged, async () => {
+  if (prefersReduced) return
+  await nextTick()
+  gsap.fromTo(
+    '.loc-card',
+    { opacity: 0, y: 10 },
+    { opacity: 1, y: 0, duration: 0.35, stagger: 0.05, ease: 'power2.out', clearProps: 'opacity,transform' }
+  )
+})
 
 // 模态框：添加 / 编辑
 const showModal = ref(false)
@@ -223,7 +276,14 @@ async function save() {
     saving.value = false
   }
 }
+
+// 删除：两步确认（第一次点出确认条，第二次才真正删除）
+const confirmingId = ref(null)
 function del(loc) {
+  confirmingId.value = loc.id
+}
+function confirmDel(loc) {
+  confirmingId.value = null
   store.deleteLocation({ scope: scope.value, id: loc.id })
 }
 </script>

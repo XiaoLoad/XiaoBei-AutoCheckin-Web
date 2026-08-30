@@ -23,14 +23,22 @@
             <button
               v-if="renamingId !== s.id"
               type="button"
-              class="min-w-0 flex-1 truncate text-left text-sm"
+              class="flex min-w-0 flex-1 items-center gap-1.5 text-left text-sm"
               @click="store.setActiveSet(s.id)"
             >
-              {{ s.name }}
+              <span class="min-w-0 flex-1 truncate">{{ s.name }}</span>
+              <!-- 套用数量：引用此套的账号数（去重 dorm/activity 同账号实例），便于管理前先看清影响面 -->
+              <span
+                v-if="setUsage[s.id]"
+                class="shrink-0 rounded-full bg-brand/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-brand"
+                :title="`${setUsage[s.id]} 个账号套用此配置套`"
+              >
+                {{ setUsage[s.id] }} 账号
+              </span>
             </button>
             <input
               v-else
-              :ref="(el) => setRenameInput(el)"
+              :ref="(el) => setRenameInput(el, s.id)"
               v-model="renameText"
               type="text"
               class="min-w-0 flex-1 rounded-md border border-brand/40 bg-white px-2 py-0.5 text-sm text-ink outline-none focus:ring-2 focus:ring-brand/10"
@@ -74,8 +82,17 @@
       <div v-if="!store.activeSet" class="dash-card flex min-h-[300px] items-center justify-center text-ink-muted">请先在左侧创建配置套</div>
       <template v-else>
         <div class="xb-reveal mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h3 class="text-sm font-semibold text-ink">正在编辑：{{ store.activeSet.name }}</h3>
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2">
+              <h3 class="text-sm font-semibold text-ink">正在编辑：{{ store.activeSet.name }}</h3>
+              <span
+                v-if="activeSetUsage"
+                class="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-medium leading-none text-brand"
+                :title="`${activeSetUsage} 个账号套用此配置套`"
+              >
+                {{ activeSetUsage }} 个账号套用
+              </span>
+            </div>
             <p class="text-xs text-ink-muted">配置套是一份完整模板；在「账号任务配置」里可指定某任务回填此套。</p>
           </div>
           <div class="flex items-center gap-2">
@@ -138,7 +155,7 @@
 </template>
 
 <script setup>
-import { ref, onActivated, onUnmounted, watch, nextTick } from 'vue'
+import { computed, ref, onActivated, onUnmounted, watch, nextTick } from 'vue'
 import { gsap } from 'gsap'
 import Icon from '@/components/Icon.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
@@ -154,6 +171,22 @@ import MasonryGrid from '@/components/signconfig/MasonryGrid.vue'
 
 const store = useSignConfigStore()
 
+// —— 套用数量：引用各配置套的账号数（scheduleBindings key 为 `${accountId}:${taskType}`，
+//     同账号寝/活两实例按账号去重），供列表徽标与编辑头部展示，方便改套前评估影响面 ——
+const setUsage = computed(() => {
+  const bySet = {}
+  for (const [key, b] of Object.entries(store.scheduleBindings || {})) {
+    if (!b || b.configSetId == null) continue
+    const accId = String(key).split(':')[0]
+    bySet[b.configSetId] = bySet[b.configSetId] || new Set()
+    bySet[b.configSetId].add(accId)
+  }
+  const out = {}
+  for (const [setId, accounts] of Object.entries(bySet)) out[setId] = accounts.size
+  return out
+})
+const activeSetUsage = computed(() => (store.activeSet ? setUsage.value[store.activeSet.id] || 0 : 0))
+
 // —— 应用全部：二次确认 ——
 const showApplyAll = ref(false)
 function onApplyAllConfirm() {
@@ -166,8 +199,11 @@ function onApplyAllConfirm() {
 // —— 重命名：原地行内编辑，不再在下方弹出独立输入框 ——
 const renamingId = ref('')
 const renameText = ref('')
-function setRenameInput(el) {
-  if (el) {
+function setRenameInput(el, id) {
+  // [重命名修复] 函数式 ref 在每次重渲染（如键入触发 v-model 更新）时都会重新执行，
+  // 无守卫的 select() 会把已键入内容重新全选、被下一个字符覆盖（表现为输入被清空重写）。
+  // 仅在"该行正处重命名态且输入框尚未聚焦"时聚焦并全选一次。
+  if (el && renamingId.value === id && document.activeElement !== el) {
     el.focus()
     el.select()
   }

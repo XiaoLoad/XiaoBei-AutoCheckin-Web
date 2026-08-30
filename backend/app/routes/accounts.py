@@ -86,7 +86,8 @@ def create_account():
     user = request.current_user
     if BAccount.query.filter_by(user_id=user.id, account=data['account']).first():
         return error(message='该 B 平台账号已存在', code=4103, status=409)
-    if (user.quota or 0) - (user.used_quota or 0) <= 0:
+    # 额度=账号数（产品定义）：已用现算，不再信任存储计数器（历史漂移已不可信）
+    if BAccount.query.filter_by(user_id=user.id).count() >= (user.quota or 0):
         return error(message='账号额度已用完，请联系管理员调整', code=4104, status=403)
     if _throttled(f'{user.id}:create:{data["account"]}'):
         return error(message='操作过于频繁，请稍后再试', code=4290, status=429)
@@ -109,8 +110,7 @@ def create_account():
     acc.set_profile(result.profile)
     acc.set_token(result.token)
     db.session.add(acc)
-
-    user.used_quota = (user.used_quota or 0) + 1
+    # 额度占用不再维护计数器：展示与校验一律按账号数现算（见 create 的额度校验）
     db.session.commit()
     return success(acc.to_dict(), message='添加成功', status=201)
 
@@ -173,8 +173,7 @@ def delete_account(account_id):
     # 此处为删账号级联路径的同源缺陷）。确认弹窗已告知"配置与日志一并移除"，故物理删除。
     SignRecord.query.filter_by(account_id=acc.id).delete()
     Schedule.query.filter_by(account_id=acc.id).delete()
-    user = request.current_user
-    user.used_quota = max(0, (user.used_quota or 0) - 1)
+    # 删除即释放额度：已用额度按账号数现算，无需维护计数器
     db.session.delete(acc)
     db.session.commit()
     # 事件钩子：清理该账号任务在调度器注册的 job（delete 走 ORM 批量删除，

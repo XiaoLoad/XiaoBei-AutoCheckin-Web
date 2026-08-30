@@ -185,7 +185,7 @@
               <td class="py-3 max-w-[260px]">
                 <RouterLink
                   v-if="r.result === 'fail'"
-                  :to="{ path: '/task-logs', query: { type: r.type.includes('活动') ? 'activity' : 'dorm', status: 'fail' } }"
+                  :to="{ path: '/task-logs', query: { accountId: r.accountId, type: r.type.includes('活动') ? 'activity' : 'dorm', status: 'fail' } }"
                   class="inline-flex items-center gap-1 text-xs font-medium text-danger hover:underline"
                 >
                   签到失败 · 查看详情

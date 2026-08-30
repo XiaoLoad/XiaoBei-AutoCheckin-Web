@@ -30,12 +30,6 @@ def me_overview():
     uid = request.current_user.id
     today = _today_local()
 
-    # 配额（users.quota / used_quota）
-    user = db.session.get(User, uid)
-    quota_limit = user.quota if user else 0
-    quota_used = user.used_quota if user else 0
-    quota_pct = round(quota_used / quota_limit * 100) if quota_limit else 0
-
     # 任务（schedules）：一次拉全后内存按账号分组，供资格判定与 sign_tasks 派生复用，
     # 避免每账号各查一遍 Schedule（sign_tasks 内部还会再查一次）造成 3N+ 查询
     schedules = Schedule.query.filter_by(user_id=uid).all()
@@ -47,6 +41,13 @@ def me_overview():
     # 并派生类型标签（寝室/活动/通用）+ 平台档案（姓名/学院/专业/班级）。
     accounts = BAccount.query.filter_by(user_id=uid).order_by(BAccount.id.desc()).all()
     account_total = len(accounts)
+
+    # 配额（users.quota 为上限；已用额度按产品定义恒等于平台账号数——
+    # 存储 used_quota 计数器已被历史操作污染出漂移，展示与校验一律现算账号数）
+    user = db.session.get(User, uid)
+    quota_limit = user.quota if user else 0
+    quota_used = account_total
+    quota_pct = round(quota_used / quota_limit * 100) if quota_limit else 0
 
     def _sign_tasks_of(acc_id):
         """该账号已添加定时任务的签到类型及启用态（对齐 BAccount.sign_tasks 口径，
@@ -177,6 +178,7 @@ def me_overview():
         prof = acc.profile if acc else {}
         log_items.append({
             'id': r.id,
+            'accountId': r.account_id,
             'time': (r.signed_at or r.created_at).strftime('%Y-%m-%d %H:%M') if (r.signed_at or r.created_at) else '',
             'name': prof.get('name') or '',
             'account': acc.account if acc else '',

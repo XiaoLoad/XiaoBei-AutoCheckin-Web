@@ -393,10 +393,11 @@ function logPill(status) {
 }
 
 onMounted(() => {
-  // 支持从仪表盘「签到失败 · 查看详情」等入口带筛选条件跳入（?type=&status=）
+  // 支持从仪表盘「签到失败 · 查看详情」等入口带筛选条件跳入（?accountId=&type=&status=）
   const q = route.query || {}
-  if (['all', 'dorm', 'activity'].includes(q.type)) store.typeFilter = q.type
-  if (['all', 'success', 'fail', 'skip'].includes(q.status)) store.statusFilter = q.status
+  if (/^\d+$/.test(String(q.accountId || ""))) store.selectedAccountId = Number(q.accountId);
+  if (["all", "dorm", "activity"].includes(q.type)) store.typeFilter = q.type;
+  if (["all", "success", "fail", "skip"].includes(q.status)) store.statusFilter = q.status;
   store.init();
 });
 </script>

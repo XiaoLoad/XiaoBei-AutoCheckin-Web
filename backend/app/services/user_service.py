@@ -14,14 +14,26 @@ def load_user(user_id):
 
 
 def user_summary():
-    """全表聚合，用于前端汇总卡片（总数 / 启用 / 禁用 / 额度使用）。"""
+    """全表聚合，用于前端汇总卡片（总数 / 启用 / 禁用 / 额度使用）。
+    已用额度按产品定义恒等于各用户的平台账号数，现算子查询聚合——
+    存储 used_quota 计数器已被历史操作污染（如 admin=128/实际 0），不再可信。"""
+    from app.models.b_account import BAccount
+
     total_users = User.query.count()
     enabled_count = User.query.filter_by(enabled=True).count()
-    agg = db.session.query(db.func.sum(User.quota), db.func.sum(User.used_quota)).first()
+    used_subq = (
+        db.session.query(BAccount.user_id, db.func.count(BAccount.id).label('cnt'))
+        .group_by(BAccount.user_id)
+        .subquery()
+    )
+    used_total = db.session.query(
+        db.func.coalesce(db.func.sum(used_subq.c.cnt), 0)
+    ).select_from(used_subq).scalar()
+    agg = db.session.query(db.func.sum(User.quota)).first()
     return {
         'total_users': total_users,
         'enabled': enabled_count,
         'disabled': total_users - enabled_count,
         'total_quota': int(agg[0] or 0),
-        'used_quota': int(agg[1] or 0),
+        'used_quota': int(used_total or 0),
     }

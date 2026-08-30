@@ -45,14 +45,19 @@ class User(db.Model):
         )
 
     def to_dict(self):
-        """对外安全的用户基本信息（绝不返回密码哈希）"""
+        """对外安全的用户基本信息（绝不返回密码哈希）。
+        已用额度按产品定义恒等于平台账号数（现算）——存储 used_quota 计数器
+        已被历史操作污染出漂移，不再对外展示。"""
+        from app.models.b_account import BAccount
+
+        used = BAccount.query.filter_by(user_id=self.id).count()
         return {
             'user_id': self.id,
             'username': self.username,
             'role': self.role,
             'enabled': self.enabled,
             'quota': self.quota,
-            'used_quota': self.used_quota,
+            'used_quota': used,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else '',
         }
 

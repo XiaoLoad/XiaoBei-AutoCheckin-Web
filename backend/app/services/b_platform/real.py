@@ -1,15 +1,21 @@
 # B 平台真实适配器：验证码 → 登录 → 学生信息 三步链路（报文来自 2026-08 抓包）
+# + 提交签到（模块 E）：know 提交契约经旧版 XiaoBeiCheck 生产环境验证；
+#   sign 模块为镜像推断（仅任务 id 字段名不同），待真机抓包核准——失败时
+#   fail_reason 透传平台 msg，便于定位修正。
 # 注意：密码传输编码是 Base64（非加密）；showCode 是测试环境的明文验证码后门，
 # 正式环境关闭时需在 solve_captcha 钩子接打码方案（本期不做）。
 import base64
 import json
 import os
+import random
+import string
+import time
 import warnings
 
 import requests
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
-from app.services.b_platform.base import BPlatformError, VerifyResult
+from app.services.b_platform.base import BPlatformError, CheckinResult, VerifyResult
 
 BASE_URL = 'https://xiaobei.yinghuaonline.com'
 
@@ -27,6 +33,48 @@ DEFAULT_UA = (
 )
 
 _TIMEOUT = 10
+_SUBMIT_TIMEOUT = (5, 30)
+_MAX_NET_RETRIES = 3
+
+# know/sign 双模块的路径与字段拼写映射（sign 为平台原生拼写差异，见接口文档 §5.8）
+_MODULES = {
+    'dorm': {
+        'kind': 'know',
+        'list': '/student/know/list',
+        'submit': '/student/know/updateStudentKnow',
+        'submit_no_file': '/student/know/updateStudentKnowNoFile',
+        'task_id_field': 'knowingId',
+        'finish_field': 'isFinishKnowing',
+        'need_photo_field': 'isPicture',
+    },
+    'activity': {
+        'kind': 'sign',
+        'list': '/student/sign/list',
+        'submit': '/student/sign/updateStudentSign',  # 镜像推断，待真机核准
+        'submit_no_file': '/student/sign/updateStudentSignNoFile',  # 镜像推断，待真机核准
+        'task_id_field': 'signId',
+        'finish_field': 'isFinishSign',
+        'need_photo_field': 'isPictrue',
+    },
+}
+
+
+def _module(task_type):
+    mod = _MODULES.get(task_type)
+    if not mod:
+        raise BPlatformError('unknown', f'未知任务类型：{task_type}')
+    return mod
+
+
+def generate_image_filename():
+    """B 平台提交图片文件名约定：{毫秒时间戳}{随机小写字母}.jpeg（旧版 generate_filename 同款）"""
+    ts = str(int(time.time() * 1000))
+    return f'{ts}{random.choice(string.ascii_lowercase)}.jpeg'
+
+
+def _is_submit_success(rsp):
+    """提交成功判定（旧版生产实证）：code==200 && msg=='操作成功'，或 code==6111（视作已接受）"""
+    return (rsp.get('code') == 200 and rsp.get('msg') == '操作成功') or rsp.get('code') == 6111
 
 
 class RealAdapter:
@@ -115,17 +163,109 @@ class RealAdapter:
         profile, bp_uid = self.fetch_profile(token, ua)
         return VerifyResult(ok=True, token=token, bp_uid=bp_uid, profile=profile)
 
-    def _request(self, method, path, token=None, params=None, json=None):
+    def _request(self, method, path, token=None, params=None, json=None, ua=None):
         """统一的 B 平台读取请求：拼 /xiaobei-api/ 前缀，走信封校验。"""
         url = f'{BASE_URL}/xiaobei-api/{path}'
         try:
             resp = requests.request(
-                method, url, headers=self._headers(None, token),
+                method, url, headers=self._headers(ua, token),
                 params=params, json=json, timeout=_TIMEOUT, verify=SSL_VERIFY,
             )
         except requests.RequestException as e:
             raise BPlatformError('network', f'请求 B 平台失败：{e}')
         return self._check(resp)
+
+    # ---- 提交签到（模块 E）----
+
+    def _file_headers(self, ua=None, token=None):
+        """multipart 提交头（对齐旧版 FILE_HEADERS）：不带 Content-Type，交由 requests 按 boundary 生成"""
+        headers = {'User-Agent': ua or DEFAULT_UA, 'Charset': 'UTF-8',
+                   'Connection': 'Keep-Alive', 'Accept-Encoding': 'gzip'}
+        if token:
+            headers['Authorization'] = f'Bearer {token}'
+        return headers
+
+    def find_active_task(self, session, task_type):
+        """查询进行中的签到任务（提交只能使用 /list 进行中任务的 id，overlist 的 id 不可用）。
+        返回 {'task': 归一任务(含 needPhoto/startTime/endTime), 'fence': 围栏列表}；
+        无未完成任务返回 None。会话 token 失效由 _check 抛 credential。"""
+        mod = _module(task_type)
+        data = self._request('GET', mod['list'].lstrip('/'), token=session.get('token'),
+                             params={'pageNum': 1, 'pageSize': 50}, ua=session.get('ua'))
+        rows = data.get('rows') or []
+        finish_field = mod['finish_field']
+        task = next((r for r in rows if str(r.get(finish_field)) == '0'), None)
+        if task is None:
+            return None
+        # 围栏：列表行通常不带 location，补查详情（fetch_task_detail 复用既有解析）
+        detail = self.fetch_task_detail(session.get('token'), mod['kind'], task.get('id'))
+        return {'task': self._unify_task(task, mod['kind']), 'fence': detail['geoFence']}
+
+    def submit_checkin(self, session, task_type, platform_task_id, location, address, remark, image=None):
+        """提交签到。image=None → 无图 JSON（photo:[]，size:"0"）；否则有图 multipart
+        （photo+file0 同图双文件部分，size:"1"，文件名 {毫秒}{随机小写字母}.jpeg）。
+
+        结果判定（旧版生产实证）：成功 = code==200&&msg=='操作成功' 或 code==6111；
+        code==200&&msg=='302' 为风控行为验证码（判失败，需人工）；msg 含 token 失效/认证失败
+        → credential（上层重登后重试一次）；业务错误（含中文提示）不重试直接失败；
+        网络异常指数退避重试 ≤3 次。CHECKIN_DRYRUN=1 时完整构造但不发送（演练模式）。"""
+        mod = _module(task_type)
+        data = {
+            mod['task_id_field']: str(platform_task_id),
+            'location': location or '',
+            'address': address or '',
+            'remark': remark or '签到',
+            'size': '1' if image else '0',
+        }
+        if os.getenv('CHECKIN_DRYRUN', '').lower() in ('1', 'true'):
+            safe_payload = {**data, 'image': image.get('filename') if image else None}
+            return CheckinResult(ok=True, status='skip',
+                                 fail_reason='演练：已构造提交未发送（CHECKIN_DRYRUN）',
+                                 detail={'payload': safe_payload})
+
+        url = f"{BASE_URL}{mod['submit'] if image else mod['submit_no_file']}"
+        last_err = None
+        for attempt in range(_MAX_NET_RETRIES):
+            try:
+                if image:
+                    filename = image.get('filename') or generate_image_filename()
+                    files = {
+                        'photo': (filename, image['bytes'], 'image/jpeg'),
+                        'file0': (filename, image['bytes'], 'image/jpeg'),
+                    }
+                    resp = requests.post(
+                        url, data=data, files=files,
+                        headers=self._file_headers(session.get('ua'), session.get('token')),
+                        timeout=_SUBMIT_TIMEOUT, verify=SSL_VERIFY)
+                else:
+                    resp = requests.post(
+                        url, json={**data, 'photo': []},
+                        headers=self._headers(session.get('ua'), session.get('token')),
+                        timeout=_SUBMIT_TIMEOUT, verify=SSL_VERIFY)
+                try:
+                    rsp = resp.json()
+                except ValueError:
+                    raise BPlatformError('unknown', f'B 平台返回了非 JSON 内容（HTTP {resp.status_code}）')
+
+                if rsp.get('code') == 200 and rsp.get('msg') == '302':
+                    return CheckinResult(ok=False, status='fail',
+                                         fail_reason='触发平台行为验证码（msg=302），需人工处理',
+                                         detail={'rsp': rsp})
+                if _is_submit_success(rsp):
+                    return CheckinResult(ok=True, status='success', detail={'rsp': rsp})
+                msg = rsp.get('msg') or ''
+                if 'token失效' in msg or '认证失败' in msg or resp.status_code == 401:
+                    raise BPlatformError('credential', f'登录态失效：{msg or resp.status_code}')
+                return CheckinResult(ok=False, status='fail',
+                                     fail_reason=f'B 平台拒绝：{msg or "code=" + str(rsp.get("code"))}',
+                                     detail={'rsp': rsp})
+            except BPlatformError:
+                raise
+            except requests.RequestException as e:
+                last_err = e
+                if attempt < _MAX_NET_RETRIES - 1:
+                    time.sleep(1 * (2 ** attempt))
+        raise BPlatformError('network', f'提交请求失败（已重试 {_MAX_NET_RETRIES} 次）：{last_err}')
 
     # ---- 历史签到读取（v1.5 抓包闭环：overlist → {id} 围栏 → listLog）----
     def fetch_history_tasks(self, token, kind, page_num=1, page_size=200):
@@ -244,10 +384,7 @@ class RealAdapter:
             })
         return out
 
-    # ---- 打卡执行（Module E，本期仍留桩）----
-    def checkin(self, session, task):
-        from app.services.b_platform.base import CheckinResult
-        return CheckinResult(ok=True, status='success', detail={'stub': True})
+    # ---- 提交签到入口见上方 find_active_task / submit_checkin（模块 E）----
 
 
 def map_student_info(data: dict):

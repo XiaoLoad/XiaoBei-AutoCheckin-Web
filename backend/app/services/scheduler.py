@@ -18,13 +18,15 @@ from apscheduler.executors.pool import ThreadPoolExecutor
 
 from app.extensions import db
 from app.models import BAccount, ConfigSet, Schedule, SignRecord
-from app.models.pools import PoolCredential
+from app.models.pools import PoolCredential, PoolLocation, PoolUa
 from app.models.system_config import get_setting
 from app.models.user import now_cst
+from app.services import geo
 from app.services.b_platform import get_adapter
 from app.services.b_platform.base import BPlatformError
+from app.services.b_platform.real import generate_image_filename
 from app.services.crypto import decrypt
-from app.services.image_store import consume_next_image
+from app.services.image_store import claim_image_for_submit, rollback_claim
 from app.services.push_render import build_ctx, send_channel
 from app.utils.schedule_utils import compute_next_run, extract_jitter_minutes, extract_schedule_time
 
@@ -246,6 +248,150 @@ def _resolve(schedule):
     return schedule.custom or {}
 
 
+def _resolve_ua(resolved):
+    """UA 解析：advanced.customUa 非空优先，其次 uaTemplateId → UA 模板池内容，否则 None（适配器默认 UA）"""
+    adv = (resolved or {}).get('advanced') or {}
+    custom = (adv.get('customUa') or '').strip()
+    if custom:
+        return custom
+    ua_id = adv.get('uaTemplateId')
+    if ua_id:
+        try:
+            ua = db.session.get(PoolUa, int(ua_id))
+            if ua is not None and (ua.content or '').strip():
+                return ua.content.strip()
+        except (TypeError, ValueError):
+            pass
+    return None
+
+
+def _load_location(resolved):
+    """位置池解析：返回 PoolLocation 或 None（locationId 缺失/非法/不可见均视为未配置）"""
+    loc_id = (resolved or {}).get('locationId')
+    if not loc_id:
+        return None
+    try:
+        return db.session.get(PoolLocation, int(loc_id))
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_platform_time(s):
+    """解析平台任务时间窗（know 'HH:mm:ss' / sign 'HH:mm'），非法返回 None"""
+    try:
+        parts = [int(x) for x in str(s).split(':')]
+        from datetime import time as dtime
+        return dtime(parts[0], parts[1], parts[2] if len(parts) > 2 else 0)
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
+def _checkin_flow(schedule, acc, session, resolved, remark):
+    """提交签到主流程（模块 E）。返回 (outcome, reason, extra)；extra 供推送与详情。
+
+    时序：找进行中任务 → 平台时间窗 → 定位（位置池优先，回退围栏中心）→ 围栏拦截
+    （配置套 fence.intercept 开关，默认开）→ 需图校验 → 认领图库图片 → 提交。
+    图片认领发生在提交前（提交需要图片字节）；提交失败或异常时回滚认领
+    （recycle/trash → 恢复 active；delete 不回滚）；credential 异常向上抛，
+    由 _execute 重登后整体重试（重试前同样回滚认领）。"""
+    uid = schedule.user_id
+    adapter = get_adapter()
+    image_cfg = (resolved or {}).get('image') or {}
+    strategy = image_cfg.get('strategy') if image_cfg.get('strategy') in ('recycle', 'trash', 'delete') else 'trash'
+    group_raw = image_cfg.get('groupId')
+    try:
+        group = int(group_raw) if group_raw not in (None, '', 0) else None
+    except (TypeError, ValueError):
+        group = None
+
+    claimed = None
+    try:
+        # ① 进行中任务（提交只能用 /list 的任务 id）
+        ctx = adapter.find_active_task(session, schedule.task_type)
+        if ctx is None:
+            return 'skip', '当前无进行中的签到任务', {}
+        task = ctx['task']
+
+        # ② 平台任务时间窗（know 'HH:mm:ss' / sign 'HH:mm'）
+        ts = _parse_platform_time(task.get('startTime'))
+        te = _parse_platform_time(task.get('endTime'))
+        now_t = now_cst().time()
+        if ts and te and (now_t < ts or now_t > te):
+            return 'skip', f'当前时间不在平台任务时间窗（{task.get("startTime")}~{task.get("endTime")}）', {}
+
+        # ③ 定位：位置池配置优先（按 offset_m 抖动）；未配置回退任务围栏中心（默认 10 米）；
+        #    均无则提交空定位（与旧版行为一致），记 warning 供详情展示
+        warning = None
+        loc = _load_location(resolved)
+        fence = (ctx.get('fence') or [{}])[0] if ctx.get('fence') else {}
+        if loc is not None and loc.lat is not None and loc.lng is not None:
+            lat, lng = geo.apply_location_jitter(loc.lat, loc.lng, loc.offset_m or 10)
+            address = loc.address or ''
+        elif fence.get('latitude') and fence.get('longitude'):
+            lat, lng = geo.apply_location_jitter(fence.get('latitude'), fence.get('longitude'), 10)
+            address = fence.get('location') or ''
+            warning = '未配置签到位置，已回退使用任务围栏中心'
+        else:
+            lat = lng = None
+            address = ''
+            warning = '未配置签到位置，将提交空定位'
+        location_str = f'{lng}:{lat}' if lat and lng else ''
+
+        # ④ 围栏拦截（配置套 fence.intercept，默认开）：配置点超出围栏半径则本地拒绝，
+        #    防止异常位置暴露风险；服务端已确认不做距离校验，拦截纯为客户端自保
+        intercept = bool((resolved.get('fence') or {}).get('intercept', True))
+        if intercept and fence and lat is not None and fence.get('latitude'):
+            dist = geo.haversine_m(lat, lng, fence.get('latitude'), fence.get('longitude'))
+            try:
+                radius = float(fence.get('radius') or 0)
+            except (TypeError, ValueError):
+                radius = 0
+            if dist is not None and radius > 0 and dist > radius:
+                return 'fail', (f'围栏拦截：配置位置距签到点 {int(dist)} 米，'
+                                f'超出围栏半径 {int(radius)} 米（请调整位置池坐标，'
+                                f'或在配置套中关闭围栏拦截）'), {}
+
+        # ⑤ 图片：任务需要图但未启用图库 → fail（宁可失败可感知，不静默交白卷）；
+        #    启用则先认领（原子抢占防同组并发取同一张），失败提交后回滚
+        need_photo = bool(task.get('needPhoto'))
+        if need_photo and not image_cfg.get('enabled'):
+            return 'fail', '该任务需要上传签到图片，请在配置套中启用图库并确认有可用图片', {}
+        if image_cfg.get('enabled'):
+            claimed = claim_image_for_submit(uid, group, strategy)
+            if not claimed:
+                return 'fail', '图库暂无可用图片，请先上传或调整取图范围', {}
+
+        # ⑥ 提交（know 实证契约 / sign 镜像契约）
+        image = ({'bytes': claimed['bytes'], 'filename': generate_image_filename()}
+                 if claimed else None)
+        submit_remark = remark if remark and remark != '—' else None
+        try:
+            result = adapter.submit_checkin(session, schedule.task_type, task.get('id'),
+                                            location_str, address, submit_remark, image)
+            if result.status != 'success' and claimed:
+                rollback_claim(claimed['id'], uid, strategy)
+                claimed = None
+        except Exception:
+            if claimed:
+                rollback_claim(claimed['id'], uid, strategy)
+                claimed = None
+            raise
+
+        extra = {'warning': warning, 'task_name': task.get('taskName') or '',
+                 'image_id': claimed['id'] if claimed else None, 'strategy': strategy}
+        if result.status == 'success':
+            return 'success', '', extra
+        return result.status, result.fail_reason or '平台返回失败', {}
+    except BPlatformError:
+        if claimed:
+            rollback_claim(claimed['id'], uid, strategy)
+        raise
+    except Exception:
+        if claimed:
+            rollback_claim(claimed['id'], uid, strategy)
+        raise
+
+
 def _execute(schedule):
     acc = db.session.get(BAccount, schedule.account_id)
     if acc is None or not acc.enabled:
@@ -254,6 +400,7 @@ def _execute(schedule):
 
     outcome = None
     reason = ''
+    extra = {}
     try:
         if acc.verify_status != 'ok':
             try:
@@ -274,23 +421,30 @@ def _execute(schedule):
             _commit_result(schedule, acc, 'skip', '配置缺失（配置套未绑定或已删除）')
             return
         # 本次实际提交的单条备注：多条随机选一、单条即用该条、无则占位；
-        # 同时交给 checkin（真实提交 B 平台用）与推送展示，保证「提交什么就推送什么」。
+        # 同时交给提交与推送展示，保证「提交什么就推送什么」。
         submitted_remark = _select_remark(resolved)
         session = {
             'token': acc.get_token(),
             'account': acc.account,
             'profile': acc.profile,
+            'ua': _resolve_ua(resolved),
         }
-        task = {'taskType': schedule.task_type, **resolved, 'submittedRemark': submitted_remark}
-        result = get_adapter().checkin(session, task)
-        if result is None or not result.ok:
-            reason = result.fail_reason if result else '无返回'
-            outcome = 'fail'
-        elif result.status == 'skip':
-            reason = result.fail_reason or '平台返回跳过'
-            outcome = 'skip'
-        else:
-            outcome = 'success'
+        try:
+            outcome, reason, extra = _checkin_flow(schedule, acc, session, resolved, submitted_remark)
+        except BPlatformError as e:
+            if e.kind != 'credential':
+                raise
+            # 登录态失效：重登刷新后整体重试一次（图片认领已在流程内回滚，重试重新认领）
+            log.info('任务 %s 提交遇登录态失效，重登后重试', schedule.id)
+            res = get_adapter().verify_and_fetch(acc.account, acc.get_password())
+            acc.set_token(res.token)
+            acc.set_profile(res.profile)
+            acc.bp_uid = res.bp_uid
+            acc.verify_status = 'ok'
+            acc.verified_at = now_cst()
+            db.session.flush()
+            session['token'] = res.token
+            outcome, reason, extra = _checkin_flow(schedule, acc, session, resolved, submitted_remark)
         # 统一在此回写：成功/失败/跳过都落 SignRecord 并回写任务与账号状态
         _commit_result(schedule, acc, outcome, reason)
     except BPlatformError as e:
@@ -305,47 +459,20 @@ def _execute(schedule):
         _commit_result(schedule, acc, 'fail', f'执行异常：{e}')
         return
 
-    # 后置动作（推送 / 消费图库图片）与「执行结果落库」解耦：失败仅记日志，
+    # 后置动作（推送）与「执行结果落库」解耦：失败仅记日志，
     # 绝不再写第二条 SignRecord，避免一次执行产生「成功 + 失败」两条重复日志
     try:
         if outcome is not None:
-            # 成功时先消费图片拿回 URL，供推送展示签到凭证图
+            # 成功且图片策略可回看时，推送带签到凭证图 URL（delete 已物理删除故无 URL）
             image_url = ''
-            if outcome == 'success':
-                image_url = _consume_configured_image(schedule, resolved) or ''
+            if outcome == 'success' and extra.get('image_id') and extra.get('strategy') in ('recycle', 'trash'):
+                base = os.getenv('PUSH_IMAGE_BASE', '').strip().rstrip('/')
+                if base:
+                    image_url = f"{base}/api/pools/images/{extra['image_id']}/file"
             dispatch_push(resolved, schedule, acc, outcome, reason,
                           image_url=image_url, submitted_remark=submitted_remark)
     except Exception as e:
         log.warning('任务 %s 后置动作失败（已落库的执行记录不受影响）：%s', schedule.id, e)
-
-
-def _consume_configured_image(schedule, resolved):
-    """按配置套 image 配置消费一张图库图片。
-    enabled 未开启直接跳过；groupId ''=全部图库，否则限定分组；strategy：recycle 轮回
-    （用尽整批回池）/ trash 回收站 / delete 删除，未知兜底 trash。无图仅记日志，不影响主链路。
-    返回可被推送展示的图片 URL（delete 策略已物理删除故返回空），无图返回空串。"""
-    cfg = (resolved or {}).get('image')
-    if not isinstance(cfg, dict) or not cfg.get('enabled'):
-        return ''
-    raw_group = cfg.get('groupId')
-    try:
-        group_id = int(raw_group) if raw_group not in (None, '', 0) else None
-    except (TypeError, ValueError):
-        group_id = None
-    strategy = cfg.get('strategy') if cfg.get('strategy') in ('recycle', 'trash', 'delete') else 'trash'
-    consumed = consume_next_image(schedule.user_id, group_id, strategy)
-    if consumed is None:
-        log.warning('任务 %s 签到成功但取图范围内无可用图片（范围=%s，策略=%s）',
-                    schedule.id, f'分组{group_id}' if group_id else '全部图库', strategy)
-        return ''
-    log.info('任务 %s 消费图片 #%s（策略=%s）', schedule.id, consumed, strategy)
-    # delete 策略已物理删除，仅 recycle/trash 仍可被外部预览（需配置 PUSH_IMAGE_BASE 公网地址）
-    if strategy == 'delete':
-        return ''
-    base = os.getenv('PUSH_IMAGE_BASE', '').strip().rstrip('/')
-    if not base:
-        return ''
-    return f'{base}/api/pools/images/{consumed}/file'
 
 
 def _select_remark(resolved):

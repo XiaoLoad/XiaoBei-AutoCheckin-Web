@@ -18,6 +18,9 @@ export function makeConfig() {
       mode: 'normal' // 签到模式：normal 普通 / holiday 节假日（运行时按年拉取第三方节假日接口）
     },
     locationId: null, // 引用型：所选位置 pool id（位置实体在位置池）
+    fence: {
+      intercept: true // 围栏拦截：提交前校验配置位置是否在任务围栏内，超出则不提交（防异常位置暴露）
+    },
     remarks: [], // 值型：备注列表，每任务独立，后台随机取一条
     image: {
       enabled: false, // 是否上传图片

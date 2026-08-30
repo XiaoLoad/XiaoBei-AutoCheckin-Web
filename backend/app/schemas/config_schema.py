@@ -1,7 +1,7 @@
 # 配置套入参校验层（零依赖，风格同 account_schema）。
 # 结构完整性由前端 validateConfig 负责 UX 提示；此处做类型/边界兜底，
 # 只放行已知顶层键，防脏数据入库膨胀 config_json。
-_ALLOWED_TOP = {'presetSetId', 'time', 'locationId', 'remarks', 'image', 'push', 'advanced'}
+_ALLOWED_TOP = {'presetSetId', 'time', 'locationId', 'remarks', 'image', 'push', 'advanced', 'fence'}
 _WEEKDAYS = set(range(1, 8))
 _MAX_NAME = 64
 
@@ -40,6 +40,9 @@ def sanitize_config(raw):
     for blk in ('image', 'push', 'advanced'):
         if not isinstance(raw.get(blk), dict):
             return False, None
+    # fence 为新增可选块（旧数据/旧客户端不带，执行端默认开）；出现时须为对象
+    if 'fence' in raw and not isinstance(raw['fence'], dict):
+        return False, None
     return True, raw
 
 

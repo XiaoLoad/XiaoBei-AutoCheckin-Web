@@ -1,7 +1,7 @@
 # 定时任务入参校验层（零依赖，风格同 account_schema / config_schema）
 _WEEKDAYS = set(range(1, 8))
 # overrides 允许覆盖的顶层配置键（与配置套 config 顶层结构对应）；浅合并语义，键整体替换
-_OVERRIDE_KEYS = {'time', 'locationId', 'remarks', 'image', 'push', 'advanced'}
+_OVERRIDE_KEYS = {'time', 'locationId', 'remarks', 'image', 'push', 'advanced', 'fence'}
 
 
 def _as_bool(v):

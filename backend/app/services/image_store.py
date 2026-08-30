@@ -220,6 +220,80 @@ def consume_image(image_id, user_id, strategy):
     return img
 
 
+def claim_image_for_submit(user_id, group_id=None, strategy='trash'):
+    """提交签到链路的图片认领：随机选一张 active 图 → 读出字节 → 按策略原子认领。
+    与 consume_next_image 的区别：字节与认领严格对应（读文件后按 id 认领，认领失败换一张重试），
+    供调度器在提交前取图、失败后回滚。返回 {'id', 'bytes', 'orig_name', 'mime'}；无可用图返回 None。
+
+    认领语义与 consume_image 一致：recycle → used（轮回复用）；trash → 回收站；delete →
+    删除记录与文件（字节已先读出，供提交使用）。strategy 未知按 trash。"""
+    from app.extensions import db
+    from app.models import PoolImage
+    from sqlalchemy import delete as sa_delete
+    from sqlalchemy import update
+
+    for _ in range(5):  # 认领冲突（并发抢占失败）最多换 5 张
+        q = db.session.query(PoolImage).filter(
+            PoolImage.user_id == user_id, PoolImage.status == 'active')
+        if group_id is not None:
+            q = q.filter(PoolImage.group_id == group_id)
+        candidates = q.order_by(PoolImage.id.desc()).all()
+        if not candidates:
+            return None
+        img = random.choice(candidates)
+        path = os.path.join(user_dir(user_id), os.path.basename(img.filename))
+        try:
+            with open(path, 'rb') as f:
+                data = f.read()
+        except OSError:
+            # 文件丢失：跳过该图，下一轮重选（候选里仍有其它图时）
+            continue
+
+        occupy = [PoolImage.id == img.id, PoolImage.user_id == user_id,
+                  PoolImage.status == 'active']
+        if strategy == 'delete':
+            row = db.session.get(PoolImage, img.id)
+            filename = row.filename
+            res = db.session.execute(
+                sa_delete(PoolImage).where(*occupy).execution_options(synchronize_session=False))
+            db.session.commit()
+            if res.rowcount == 1:
+                delete_file(user_id, filename)
+                return {'id': img.id, 'bytes': data,
+                        'orig_name': row.orig_name, 'mime': row.mime}
+        else:
+            recycle = strategy == 'recycle'
+            res = db.session.execute(
+                update(PoolImage).where(*occupy)
+                .values(status='used' if recycle else 'trash',
+                        trashed_at=None if recycle else now_cst())
+                .execution_options(synchronize_session=False))
+            db.session.commit()
+            if res.rowcount == 1:
+                return {'id': img.id, 'bytes': data,
+                        'orig_name': img.orig_name, 'mime': img.mime}
+    return None
+
+
+def rollback_claim(image_id, user_id, strategy):
+    """提交失败时回滚认领：recycle/trash → 恢复 active（幂等）；delete 不回滚
+    （记录与文件已物理删除，仅由调用方记日志）。"""
+    if strategy == 'delete':
+        return False
+    from app.extensions import db
+    from app.models import PoolImage
+    from sqlalchemy import update
+
+    res = db.session.execute(
+        update(PoolImage)
+        .where(PoolImage.id == image_id, PoolImage.user_id == user_id,
+               PoolImage.status.in_(['used', 'trash']))
+        .values(status='active', trashed_at=None)
+        .execution_options(synchronize_session=False))
+    db.session.commit()
+    return res.rowcount == 1
+
+
 def consume_next_image(user_id, group_id=None, strategy='trash'):
     """按取图范围随机消费一张图片（并发安全，供调度器打卡成功后调用）。
 

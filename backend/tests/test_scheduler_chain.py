@@ -161,7 +161,12 @@ def test_run_schedule_checkin_error_writes_fail(app, chain_user, monkeypatch):
         def verify_and_fetch(self, *a, **k):
             return VerifyResult(ok=True, token='t', bp_uid=1, profile={})
 
-        def checkin(self, session, task):
+        def find_active_task(self, session, task_type):
+            return {'task': {'id': 1, 'taskName': '失败任务', 'needPhoto': False,
+                             'startTime': '00:00:00', 'endTime': '23:59:59'},
+                    'fence': []}
+
+        def submit_checkin(self, *a, **k):
             raise BPlatformError('network', '断网了')
 
     monkeypatch.setattr(sch, 'get_adapter', lambda: FailAdapter())

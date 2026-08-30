@@ -147,6 +147,9 @@ const selectedLabel = computed(() => {
 })
 // 可输入模式：草稿文本（未聚焦时与所选 label 同步，聚焦时可键入筛选/取值）
 const draft = ref(selectedLabel.value)
+// 用户本次聚焦后是否已键入：openPanel 的异步全选仅在未键入时执行，
+// 避免聚焦后快速打字被迟到的 select() 全选覆盖（首个字符被"闪回"丢失）
+const draftDirty = ref(false)
 
 const filteredOptions = computed(() => {
   if (!props.searchable && !props.editable) return normalized.value
@@ -171,7 +174,8 @@ async function openPanel() {
   if (props.disabled || open.value) return
   open.value = true
   query.value = ''
-  if (props.editable) draft.value = selectedLabel.value
+  // 展开时同步草稿为所选 label；但"键入重开"路径（draftDirty=true）保留用户已键入文本
+  if (props.editable && !draftDirty.value) draft.value = selectedLabel.value
   const idx = normalized.value.findIndex((o) => o.value === props.modelValue)
   highlightedIndex.value = idx >= 0 ? idx : 0
   await nextTick()
@@ -182,7 +186,7 @@ async function openPanel() {
     // 待坐标稳定后基于最终矩形重算面板位置，避免面板悬空在上或错位。
     suppressScrollClose.value = true
     triggerInput.value.focus()
-    triggerInput.value.select()
+    if (!draftDirty.value) triggerInput.value.select()
     await nextTick()
     refinePlacement()
     requestAnimationFrame(() => { suppressScrollClose.value = false })
@@ -224,14 +228,17 @@ function onScrollClose(e) {
 function select(opt) {
   open.value = false
   query.value = ''
+  draftDirty.value = false
   if (props.editable) draft.value = opt.label
   emit('update:modelValue', opt.value)
 }
 
+// 关闭面板不再回退草稿：可输入模式下草稿的定稿/回退由 blur 的 commitDraft 与
+// Esc 显式处理——此前在外部 mousedown（close 先于 blur 执行）抢先回退，导致
+// 键入的值必须点击选项或回车才能生效（点击外部即丢失，表现为数字闪回旧值）
 function close() {
   open.value = false
   query.value = ''
-  if (props.editable) draft.value = selectedLabel.value
 }
 
 function scrollActiveIntoView() {
@@ -279,12 +286,16 @@ watch(selectedLabel, (v) => {
 
 function onEditableFocus() {
   if (props.disabled) return
+  draftDirty.value = false // 全新编辑会话：openPanel 可安全同步 label 并全选
   openPanel()
 }
 
 function onEditableInput(e) {
   draft.value = e.target.value
+  draftDirty.value = true
   query.value = e.target.value
+  // 面板意外关闭（如滚动）后继续键入时重新展开，保持"输入即筛选"的连续体验
+  if (!open.value) openPanel()
 }
 
 // 把键入文本解析为选项值：优先精确 label 匹配，其次按数字值匹配（时间补零场景），
@@ -340,6 +351,7 @@ function onEditableKeydown(e) {
 // 失焦时按键入内容定稿（选不到合法值则回退当前选择）；点击面板内选项时由选项 @click 覆盖。
 function onEditableBlur() {
   commitDraft()
+  draftDirty.value = false
 }
 
 // 搜索框键盘：上下移动、回车选择、Esc 关闭面板

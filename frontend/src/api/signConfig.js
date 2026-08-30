@@ -60,12 +60,15 @@ export async function fetchConfigMeta() {
 }
 
 // ── 用户配置套 ──
+// config 垫上 makeConfig() 骨架（浅合并，已存字段优先）：启动种子/历史数据可能存在
+// 空配置或仅含部分块的配置套，直接裸传会让 sections 读 config.time.startHour 等深层
+// 字段时渲染崩溃（曾致整个签到配置 keep-alive 子树白屏，图库入口随之不可用）
 const mapSetIn = (s) => ({
   id: String(s.id),
   name: s.name,
   isDefault: !!s.isDefault,
   // locationId 后端返回整数，前端选项值均为字符串；统一转字符串，避免 === 比对失败导致刷新后位置显示为空
-  config: { ...(s.config || {}), locationId: s.locationId != null ? String(s.locationId) : null }
+  config: { ...makeConfig(), ...(s.config || {}), locationId: s.locationId != null ? String(s.locationId) : null }
 })
 
 export async function fetchConfigSets() {

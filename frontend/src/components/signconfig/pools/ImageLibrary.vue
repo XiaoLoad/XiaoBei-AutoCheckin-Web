@@ -1,7 +1,8 @@
 <template>
-  <div class="flex min-h-0 gap-3">
+  <!-- 高度由父级弹性布局决定（原先写死 72vh，叠加页头后卡片底部超出视口贴边） -->
+  <div class="flex min-h-0 flex-1 gap-3">
     <!-- 左：分组侧栏（相册式管理 + 拖拽投放目标） -->
-    <aside class="flex h-[72vh] w-52 shrink-0 flex-col overflow-hidden rounded-2xl dash-card">
+    <aside class="flex min-h-0 w-52 shrink-0 flex-col overflow-hidden rounded-2xl dash-card">
       <div class="border-b border-ink/5 p-2">
         <div class="relative">
           <Icon name="search" :size="13" class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
@@ -127,7 +128,7 @@
 
     <!-- 右：图库网格 + 分页 -->
     <div
-      class="relative flex h-[72vh] min-w-0 flex-1 flex-col gap-3"
+      class="relative flex min-h-0 min-w-0 flex-1 flex-col gap-3"
       @dragenter.prevent="onFileDragEnter"
       @dragover.prevent="onFileDragOver"
       @dragleave="onFileDragLeave"
@@ -942,9 +943,11 @@ async function handleFiles(fileList) {
   }
 }
 
-// 点击选择文件：复用统一入口（兼容原上传方式）
+// 点击选择文件：复用统一入口（兼容原上传方式）。
+// [顺序敏感] 必须先把 FileList 物化成数组再清空 input.value——FileList 是活引用，
+// 清 value 会连带清空已捕获的文件列表，handleFiles 拿到空数组静默返回（上传按钮看似无效果）
 function onFilePicked(e) {
-  const files = e.target.files
+  const files = Array.from(e.target.files || [])
   e.target.value = ''
   handleFiles(files)
 }

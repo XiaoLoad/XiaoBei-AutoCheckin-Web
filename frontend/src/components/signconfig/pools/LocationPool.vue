@@ -54,7 +54,7 @@
           >
             <Icon name="map-pin" :size="16" />
           </span>
-          <div class="min-w-0 flex-1">
+          <div class="min-w-0 flex-1 pr-16">
             <div class="flex items-center gap-1.5">
               <p class="min-w-0 flex-1 truncate text-sm font-semibold text-ink" :title="loc.name">{{ loc.name }}</p>
               <span
@@ -74,7 +74,7 @@
         <!-- 操作：悬停浮现（触屏常显） -->
         <div
           v-if="canEdit"
-          class="absolute right-2.5 top-2.5 flex gap-1 opacity-100 transition group-hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+          class="absolute right-2.5 top-2.5 z-10 flex gap-1 opacity-100 transition group-hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
         >
           <button
             type="button"
@@ -93,7 +93,7 @@
             <Icon name="trash" :size="13" />
           </button>
         </div>
-        <span v-else class="absolute right-2.5 top-2.5 rounded-full bg-cloud/80 px-1.5 py-0.5 text-[10px] text-ink-muted">只读</span>
+        <span v-else class="absolute right-2.5 top-2.5 z-10 rounded-full bg-cloud/80 px-1.5 py-0.5 text-[10px] text-ink-muted">只读</span>
 
         <!-- 删除二次确认（行内展开，避免误删） -->
         <div v-if="confirmingId === loc.id" class="mt-2.5 flex items-center justify-end gap-1.5 border-t border-ink/5 pt-2">

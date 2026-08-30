@@ -1,10 +1,10 @@
 # 用户管理蓝图：列表（分页/过滤）、新增、编辑、禁用启用、删除（桩）
-# 前缀 /api/users；除列表外的写操作均限管理员
+# 前缀 /api/users；全部操作均限管理员——列表含全员用户名/角色/额度，不向普通用户开放
 from flask import Blueprint, request
 
 from app.extensions import db
 from app.models.user import User
-from app.utils.auth import admin_required, token_required
+from app.utils.auth import admin_required
 from app.utils.response import error, success
 from app.services.user_service import load_user, user_summary
 from app.schemas.user_schema import load_create, load_update
@@ -14,10 +14,11 @@ bp = Blueprint('users', __name__, url_prefix='/api/users')
 
 
 @bp.route('', methods=['GET'])
-@token_required
+@admin_required
 def list_users():
     """
-    用户列表：支持分页、关键词（用户名模糊）、角色过滤。
+    用户列表：支持分页、关键词（用户名模糊）、角色过滤。仅管理员可访问，
+    普通用户请求返回 403（响应体含全员用户名/角色/额度，属敏感信息）。
     返回结构：{ items, total, page, page_size, summary }
       summary 为全表聚合，用于前端汇总卡片（总数 / 启用 / 禁用 / 额度使用）。
     """
@@ -91,8 +92,13 @@ def update_user(user_id):
     if 'username' in data and data['username'] != user.username and User.query.filter_by(username=data['username']).first():
         return error(message='用户名已存在', code=4004, status=409)
 
+    # password 不能进 setattr 循环：模型列是 password_hash，setattr(user, 'password', 明文)
+    # 只会挂一个瞬时属性并在 commit 后丢弃（密码看似保存实则未变），必须走 set_password 哈希
+    password = data.pop('password', None)
     for key, value in data.items():
         setattr(user, key, value)
+    if password:
+        user.set_password(password)
     db.session.commit()
     user_changed.send('users.update', user=user)
     return success(user.to_dict(), message='保存成功')

@@ -40,6 +40,12 @@ def create_app(env_name=None):
     # 绑定数据库扩展
     db.init_app(app)
 
+    # 请求体超限（MAX_CONTENT_LENGTH）统一走 JSON 信封：Flask 默认 413 是 HTML 错误页，
+    # 前端 axios 拦截器按 {code, message, data} 解包会拿到 undefined.message
+    @app.errorhandler(413)
+    def _request_too_large(_e):
+        return error(message='上传内容超过大小限制（最大 8MB），请压缩后再试', code=4130, status=413)
+
     # 数据库结构以迁移链为唯一事实源（Flask-Migrate/Alembic）。
     # directory 用绝对路径：CLI（flask db ...）与工厂启动的工作目录可能不同，
     # 相对路径会有一边找不到迁移脚本。

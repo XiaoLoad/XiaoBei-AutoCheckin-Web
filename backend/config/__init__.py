@@ -39,6 +39,10 @@ class Config:
     UPLOAD_DIR = os.getenv('UPLOAD_DIR') or os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'uploads')
 
+    # 请求体上限（超出返回 413）：图库原图上限 5MB，加 multipart 编码开销留余量。
+    # 没有该上限时，超大 body 会被先整读进内存才撞上业务层 5MB 校验，存在资源耗尽风险
+    MAX_CONTENT_LENGTH = 8 * 1024 * 1024
+
 
 class DevelopmentConfig(Config):
     """开发环境配置"""

@@ -1,5 +1,6 @@
 <template>
   <div class="flex flex-1 min-h-0 flex-col gap-6">
+    <RefreshStrip v-if="store.refreshing" />
     <!-- 顶部：标题 + 一级 Tab 切换 -->
     <div class="dash-card fade-up shrink-0 p-3 sm:p-4">
       <div class="flex flex-wrap items-center gap-x-4 gap-y-3">
@@ -49,6 +50,7 @@ import { gsap } from 'gsap'
 import Icon from '@/components/Icon.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
 import { useAuthStore } from '@/stores/auth'
+import RefreshStrip from '@/components/RefreshStrip.vue'
 import DefaultConfigTab from '@/components/signconfig/DefaultConfigTab.vue'
 import AccountTaskConfigTab from '@/components/signconfig/AccountTaskConfigTab.vue'
 import MyResourcesTab from '@/components/signconfig/MyResourcesTab.vue'

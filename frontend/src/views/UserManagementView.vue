@@ -1,5 +1,6 @@
 <template>
   <div class="flex flex-1 min-h-0 flex-col gap-4 sm:gap-6">
+    <RefreshStrip v-if="refreshing" />
     <!-- 汇总卡片：移动端紧凑，避免挤压下方列表 -->
     <div class="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
       <StatCard label="用户总数" :value="summary.total_users" icon="users" tone="brand" delay="1" compact :loading="loading" />
@@ -270,6 +271,7 @@ import ConfirmModal from '@/components/ConfirmModal.vue'
 import UserFormModal from '@/components/UserFormModal.vue'
 import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
+import RefreshStrip from '@/components/RefreshStrip.vue'
 import { useUsersStore } from '@/stores/users'
 import { toast } from '@/utils/toast'
 import { storeToRefs } from 'pinia'

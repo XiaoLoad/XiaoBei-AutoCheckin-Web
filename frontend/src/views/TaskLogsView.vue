@@ -1,5 +1,6 @@
 <template>
   <div class="flex flex-1 min-h-0 flex-col gap-6">
+    <RefreshStrip v-if="refreshingLogs" />
     <!-- 概览：总执行 / 成功 / 失败 / 跳过 -->
     <div class="grid shrink-0 grid-cols-2 gap-4 lg:grid-cols-4">
       <StatCard
@@ -298,6 +299,7 @@ import Icon from "@/components/Icon.vue";
 import BaseSelect from "@/components/BaseSelect.vue";
 import StatCard from "@/components/StatCard.vue";
 import BasePagination from "@/components/BasePagination.vue";
+import RefreshStrip from '@/components/RefreshStrip.vue'
 
 const store = useTaskLogsStore();
 const route = useRoute();

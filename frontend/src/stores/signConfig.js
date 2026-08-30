@@ -138,12 +138,27 @@ export const useSignConfigStore = defineStore('signConfig', () => {
   // 保存时写回任务实例并解绑配置套（快照复制模型），绝不直接改共享配置套。
   const taskConfigDraft = ref(null)
   const draftSourceSnapshot = ref(null)
-  // 比对两份配置是否实质一致：位置 id 统一按字符串归一（来源套 locationId 经 mapSetIn 转字符串，
-  // 任务快照 locationId 为原始存储值，可能为字符串或数字），其余字段按 JSON 原文比较。
+  // 比对两份配置是否实质一致。
+  // [规范化] ① 骨架垫底：缺失的可选块（如 fence 之前的历史快照）与默认值视为一致，
+  //          避免骨架演进导致历史快照被误判"已不一致"；
+  //         ② 递归按键名排序：配置 JSON 的顶层/内层键序随写入路径不同（实测存在
+  //          makeConfig 序与字母序两种），JSON 原文比较对键序敏感会误判，故先规范化。
+  // 位置 id 统一按字符串归一（来源套经 mapSetIn 转字符串，任务快照可能为字符串或数字）。
+  function canonicalize(v) {
+    if (Array.isArray(v)) return v.map(canonicalize)
+    if (v && typeof v === 'object') {
+      const out = {}
+      for (const k of Object.keys(v).sort()) out[k] = canonicalize(v[k])
+      return out
+    }
+    return v
+  }
   function configsEqual(a, b) {
     if (a === b) return true
     if (!a || !b) return false
-    const norm = (c) => JSON.stringify({ ...c, locationId: c.locationId == null ? null : String(c.locationId) })
+    const norm = (c) => JSON.stringify(
+      canonicalize({ ...api.makeConfig(), ...(c || {}), locationId: c?.locationId == null ? null : String(c.locationId) })
+    )
     return norm(a) === norm(b)
   }
   function initTaskDraft() {

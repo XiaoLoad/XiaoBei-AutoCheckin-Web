@@ -1,6 +1,7 @@
 <template>
   <!-- 根容器：占满父级高度，列表卡片 flex-1 内部滚动，解决高度过低问题 -->
   <div class="flex flex-1 min-h-0 flex-col gap-6">
+    <RefreshStrip v-if="refreshing" />
     <!-- 统一操作栏：搜索 + 筛选 + 刷新 + 重置 + 新增，合并为一卡，简约单行布局。
          relative z-30 提升堆叠层级，确保内部下拉面板不被下方列表卡片遮挡。 -->
     <div class="dash-card fade-up relative z-30 shrink-0 p-3 sm:p-4">
@@ -201,6 +202,7 @@ import BaseSelect from '@/components/BaseSelect.vue'
 import BasePagination from '@/components/BasePagination.vue'
 import AccountFormModal from '@/components/AccountFormModal.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
+import RefreshStrip from '@/components/RefreshStrip.vue'
 
 // 领域状态下沉到 store：视图只做渲染与展示辅助，数据编排由 store 负责
 const store = useAccountsStore()

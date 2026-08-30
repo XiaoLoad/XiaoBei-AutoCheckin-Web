@@ -122,9 +122,10 @@ export const useTaskLogsStore = defineStore('taskLogs', () => {
 
   // 批量清理本人日志：before 必填（YYYY-MM-DD），可选叠加账号/类型/状态过滤
   async function purgeBefore(before, { accountId, type, status } = {}) {
-    await purgeTaskLogs({ before, accountId, type, status })
+    const res = await purgeTaskLogs({ before, accountId, type, status })
     page.value = 1
     await loadLogs()
+    return res  // 透出 { deleted } 供视图提示清理条数（此前漏 return 致视图读 undefined.deleted 报错）
   }
 
   return {

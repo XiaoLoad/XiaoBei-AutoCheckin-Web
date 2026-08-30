@@ -4,6 +4,7 @@
     class="flex flex-1 min-h-0 flex-col gap-6 transition-opacity"
     :class="store.refreshing && 'opacity-60 pointer-events-none'"
   >
+    <RefreshStrip v-if="store.refreshing" />
     <!-- 概览卡 -->
     <div class="dash-card fade-up shrink-0 p-4 sm:p-5">
       <div class="flex flex-wrap items-center justify-between gap-4">
@@ -149,6 +150,7 @@ import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { gsap } from 'gsap'
 import { useRouter } from 'vue-router'
 import { useSchedulesStore } from '@/stores/schedules'
+import RefreshStrip from '@/components/RefreshStrip.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
 import ScheduleCard from '@/components/schedules/ScheduleCard.vue'
 import ScheduleSettingsDrawer from '@/components/schedules/ScheduleSettingsDrawer.vue'

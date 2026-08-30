@@ -1,6 +1,7 @@
 <template>
   <!-- 静默刷新期（回到页面后台换新）整页降透明，统计卡/图表原地换数，不闪加载态 -->
   <div class="space-y-6 transition-opacity" :class="refreshing && 'opacity-60 pointer-events-none'">
+    <RefreshStrip v-if="refreshing" />
     <!--
       ============================================================
       普通用户仪表盘（A 平台 · 对接外部 B 打卡平台）
@@ -212,6 +213,7 @@ import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import BaseChart from '@/components/BaseChart.vue'
 import { useDashboardStore } from '@/stores/dashboard'
+import RefreshStrip from '@/components/RefreshStrip.vue'
 
 const store = useDashboardStore()
 const { overview: me, loading, refreshing } = storeToRefs(store)

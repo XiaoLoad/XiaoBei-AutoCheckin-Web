@@ -1,5 +1,6 @@
 <template>
   <div class="flex flex-1 min-h-0 flex-col gap-6">
+    <RefreshStrip v-if="refreshingRecords || refreshingCalendar" />
     <!-- 筛选卡片：账号决定看谁的数据；类型与状态同行双胶囊，竖线分隔，维度不同不合并为同一控件 -->
     <div class="dash-card fade-up relative z-30 shrink-0 p-3 sm:p-4">
       <div class="flex flex-wrap items-center gap-x-4 gap-y-3">
@@ -547,6 +548,7 @@ import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import StatCard from '@/components/StatCard.vue'
 import BasePagination from '@/components/BasePagination.vue'
+import RefreshStrip from '@/components/RefreshStrip.vue'
 
 const store = useSignRecordsStore()
 const {

@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-1 min-h-0 flex-col gap-6">
+  <div class="flex flex-col gap-6 lg:flex-1 lg:min-h-0">
     <RefreshStrip v-if="refreshingLogs" />
     <!-- 概览：总执行 / 成功 / 失败 / 跳过 -->
     <div class="grid shrink-0 grid-cols-2 gap-4 lg:grid-cols-4">
@@ -155,10 +155,10 @@
          min-h-[480px] 给列表卡片一个舒适下限（与 SignRecordsView 一致），短屏不至过矮、长屏仍随 flex-1 撑满。
          静默刷新期旧日志原地保留，仅整卡降透明并暂停交互（筛选/翻页/删除不再闪加载页） -->
     <div
-      class="dash-card fade-up flex flex-1 min-h-[480px] flex-col rounded-2xl transition-opacity"
+      class="dash-card fade-up flex flex-col rounded-2xl transition-opacity lg:min-h-[480px] lg:flex-1"
       :class="refreshingLogs && 'opacity-60 pointer-events-none'"
     >
-      <div class="flex-1 min-h-0 overflow-y-auto">
+      <div class="lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
       <ul v-if="loadingLogs" class="divide-y divide-ink/5">
         <li
           v-for="n in 6"

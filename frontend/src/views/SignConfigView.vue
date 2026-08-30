@@ -1,10 +1,11 @@
 <template>
-  <div class="flex flex-1 min-h-0 flex-col gap-6">
+  <div class="flex flex-col gap-6 lg:flex-1 lg:min-h-0">
     <RefreshStrip v-if="store.refreshing" />
     <!-- 顶部：标题 + 一级 Tab 切换 -->
     <div class="dash-card fade-up shrink-0 p-3 sm:p-4">
       <div class="flex flex-wrap items-center gap-x-4 gap-y-3">
-        <div class="flex items-center gap-2">
+        <!-- 长副标题在移动端隐藏（页签占满一行），≥420px 恢复展示 -->
+        <div class="hidden items-center gap-2 min-[420px]:flex">
           <span class="text-xs text-ink-muted">{{ subtitle }}</span>
         </div>
         <div v-if="tabs.length > 1" class="ml-auto inline-flex items-center rounded-xl bg-cloud p-1">
@@ -25,7 +26,7 @@
     <!-- 静默刷新期（再次进入页面后台换新）内容区降透明，已渲染的页签数据原地保留 -->
     <div
       ref="content"
-      class="min-h-0 flex-1 flex flex-col transition-opacity"
+      class="flex flex-col transition-opacity lg:flex-1 lg:min-h-0"
       :class="store.refreshing && 'opacity-60 pointer-events-none'"
     >
       <SignConfigSkeleton

@@ -1,7 +1,7 @@
 <template>
   <!-- 静默刷新期（回到页面后台换新）整页降透明并暂停交互，数据原地保留不闪加载页 -->
   <div
-    class="flex flex-1 min-h-0 flex-col gap-6 transition-opacity"
+    class="flex flex-col gap-6 transition-opacity lg:flex-1 lg:min-h-0"
     :class="store.refreshing && 'opacity-60 pointer-events-none'"
   >
     <RefreshStrip v-if="store.refreshing" />
@@ -105,7 +105,7 @@
       </div>
 
       <!-- 卡片网格：独立滚动区域 -->
-      <div v-else class="xb-scroll min-h-0 flex-1 overflow-auto">
+      <div v-else class="xb-scroll lg:flex-1 lg:min-h-0 lg:overflow-auto">
         <div ref="grid" class="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">
           <ScheduleCard
             v-for="s in paged"

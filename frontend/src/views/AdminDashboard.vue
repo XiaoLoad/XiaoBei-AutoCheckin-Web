@@ -144,7 +144,7 @@
           <div class="grid min-w-0 gap-4 sm:grid-cols-2">
             <div class="min-w-0">
               <p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">凭证异常账号</p>
-              <ul class="health-scroll max-h-44 space-y-1.5 overflow-y-auto pr-1">
+              <ul class="health-scroll space-y-1.5 overflow-y-auto pr-1 lg:max-h-44">
                 <li
                   v-for="row in health.invalidCredentials.list"
                   :key="'ic' + row.account"
@@ -164,7 +164,7 @@
             </div>
             <div class="min-w-0">
               <p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">疑似漏签任务</p>
-              <ul class="health-scroll max-h-44 space-y-1.5 overflow-y-auto pr-1">
+              <ul class="health-scroll space-y-1.5 overflow-y-auto pr-1 lg:max-h-44">
                 <li
                   v-for="row in health.staleSign.list"
                   :key="'st' + row.account + row.taskType"
@@ -207,7 +207,7 @@
               占用 ≥ {{ quota.warnRatio }}% · 共 {{ quota.warnTotal }} 人
             </span>
           </div>
-          <div class="health-scroll max-h-[340px] overflow-y-auto">
+          <div class="health-scroll overflow-y-auto lg:max-h-[340px]">
             <table class="w-full text-sm">
               <thead class="sticky top-0 bg-white">
                 <tr class="text-left text-ink-muted border-b border-ink/5">
@@ -254,7 +254,7 @@
           <h3 class="font-semibold text-ink">高频失败风险用户</h3>
           <span class="rounded-full bg-danger/10 px-2.5 py-0.5 text-xs font-medium text-danger">近 7 天 · 失败 ≥ 3 次或失败率 ≥ 50%</span>
         </div>
-        <div class="health-scroll max-h-[420px] overflow-y-auto">
+        <div class="health-scroll overflow-y-auto lg:max-h-[420px]">
           <table class="w-full text-sm">
             <thead>
               <tr class="text-left text-ink-muted border-b border-ink/5">
@@ -300,7 +300,7 @@
             </div>
           </div>
         </div>
-        <div class="health-scroll max-h-[420px] overflow-y-auto">
+        <div class="health-scroll overflow-y-auto lg:max-h-[420px]">
           <table class="w-full text-sm">
             <thead>
               <tr class="text-left text-ink-muted border-b border-ink/5">

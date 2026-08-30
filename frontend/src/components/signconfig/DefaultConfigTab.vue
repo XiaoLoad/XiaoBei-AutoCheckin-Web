@@ -1,7 +1,8 @@
 <template>
-  <div ref="root" class="flex flex-1 min-h-0 gap-4">
+  <!-- 移动端：纵向布局，配置套列表收纳为顶部切换器（重命名/删除等管理动作在桌面端进行） -->
+  <div ref="root" class="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:flex-row">
     <!-- 左：配置套列表（多项命名模板） -->
-    <aside class="flex w-56 shrink-0 flex-col overflow-hidden rounded-2xl dash-card xl:w-60">
+    <aside class="hidden w-56 shrink-0 flex-col overflow-hidden rounded-2xl dash-card lg:flex xl:w-60">
       <div class="flex shrink-0 items-center justify-between border-b border-ink/5 p-3">
         <span class="text-sm font-semibold text-ink">我的配置套</span>
         <button
@@ -78,7 +79,21 @@
     </aside>
 
     <!-- 右：选中配置套的六段编辑器 -->
-    <div class="xb-scroll flex-1 min-h-0 overflow-auto">
+    <div class="xb-scroll overflow-auto lg:flex-1 lg:min-h-0">
+      <!-- 移动端配置套切换器（桌面端见左侧列表） -->
+      <div class="mb-3 flex shrink-0 items-center gap-2 lg:hidden">
+        <div class="min-w-0 flex-1">
+          <BaseSelect v-model="store.activeSetId" :options="setOptions" :searchable="true" size="sm" placeholder="选择配置套" />
+        </div>
+        <button
+          type="button"
+          class="inline-flex h-9 shrink-0 items-center gap-1 rounded-lg bg-brand px-3 text-sm font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
+          :disabled="store.saving"
+          @click="store.createConfigSet()"
+        >
+          <Icon name="plus" :size="13" />新建
+        </button>
+      </div>
       <div v-if="!store.activeSet" class="dash-card flex min-h-[300px] items-center justify-center text-ink-muted">请先在左侧创建配置套</div>
       <template v-else>
         <div class="xb-reveal mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -158,6 +173,7 @@
 import { computed, ref, onActivated, onUnmounted, watch, nextTick } from 'vue'
 import { gsap } from 'gsap'
 import Icon from '@/components/Icon.vue'
+import BaseSelect from '@/components/BaseSelect.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
 import { toast } from '@/utils/toast'
@@ -170,6 +186,9 @@ import AdvancedSection from '@/components/signconfig/sections/AdvancedSection.vu
 import MasonryGrid from '@/components/signconfig/MasonryGrid.vue'
 
 const store = useSignConfigStore()
+
+// 移动端配置套切换器选项
+const setOptions = computed(() => store.userConfigSets.map((s) => ({ label: s.name, value: s.id })))
 
 // —— 套用数量：引用各配置套的账号数（scheduleBindings key 为 `${accountId}:${taskType}`，
 //     同账号寝/活两实例按账号去重），供列表徽标与编辑头部展示，方便改套前评估影响面 ——

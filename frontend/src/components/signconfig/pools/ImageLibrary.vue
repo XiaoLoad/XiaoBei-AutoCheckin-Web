@@ -1,8 +1,8 @@
 <template>
-  <!-- 高度由父级弹性布局决定（原先写死 72vh，叠加页头后卡片底部超出视口贴边） -->
-  <div class="flex min-h-0 flex-1 gap-3">
+  <!-- 高度由父级弹性布局决定；移动端纵向布局，分组侧栏限高收纳在顶部 -->
+  <div class="flex flex-col gap-3 lg:min-h-0 lg:flex-1 lg:flex-row">
     <!-- 左：分组侧栏（相册式管理 + 拖拽投放目标） -->
-    <aside class="flex min-h-0 w-52 shrink-0 flex-col overflow-hidden rounded-2xl dash-card">
+    <aside class="flex w-full shrink-0 flex-col overflow-hidden rounded-2xl dash-card lg:max-h-none lg:w-52">
       <div class="border-b border-ink/5 p-2">
         <div class="relative">
           <Icon name="search" :size="13" class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
@@ -14,7 +14,7 @@
           />
         </div>
       </div>
-      <div class="xb-scroll flex-1 min-h-0 overflow-auto p-1.5">
+      <div class="p-1.5 lg:flex-1 lg:min-h-0 lg:overflow-auto">
         <!-- 全部（非投放目标） -->
         <div
           class="flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1.5 text-sm transition"
@@ -128,7 +128,7 @@
 
     <!-- 右：图库网格 + 分页 -->
     <div
-      class="relative flex min-h-0 min-w-0 flex-1 flex-col gap-3"
+      class="relative flex min-w-0 flex-col gap-3 lg:min-h-0 lg:flex-1"
       @dragenter.prevent="onFileDragEnter"
       @dragover.prevent="onFileDragOver"
       @dragleave="onFileDragLeave"
@@ -256,7 +256,7 @@
         上传自动压缩至 ≤180KB（B 平台提交口径）；也可将图片直接拖拽到此处批量上传；轮回使用的图片消费后进入「已使用」保留不删；图库中「删除」会移入回收站，回收站内「删除」才永久移除（保留 7 天后也会自动清除）；点击图片打开灯箱预览，可缩放、左右切换。
       </p>
 
-      <div class="xb-scroll flex-1 min-h-0 overflow-y-auto overflow-x-hidden rounded-xl bg-cloud/40 px-1.5 py-1.5" :class="{ 'pb-28': uploadList.length }">
+      <div class="xb-scroll overflow-x-hidden rounded-xl bg-cloud/40 px-1.5 py-1.5 lg:flex-1 lg:min-h-0 lg:overflow-y-auto" :class="{ 'pb-28': uploadList.length }">
         <div v-if="pagedList.length === 0" class="flex h-full items-center justify-center text-sm text-ink-muted">
           {{ view === 'trash' ? '回收站为空' : view === 'used' ? '已使用列表为空' : '当前分组暂无图片' }}
         </div>

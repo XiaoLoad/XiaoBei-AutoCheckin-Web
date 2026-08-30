@@ -1,5 +1,5 @@
 <template>
-  <div class="flex h-screen overflow-hidden bg-cloud text-ink">
+  <div class="flex min-h-screen bg-cloud text-ink lg:h-screen lg:overflow-hidden">
     <!-- 侧边栏：PC 常驻，移动端抽屉 -->
     <aside
       class="fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-ink transition-transform duration-300 lg:static lg:translate-x-0"
@@ -115,7 +115,7 @@
       <!-- 内容滚动容器：保留 flex 列布局，使各页面根容器（flex-1）的高度分配与改动前一致，
            用户/账号管理等页的列表卡片固定高度与内部滚动不受影响。
            底部间距收归各页面根容器末尾的真实占位块（非滚动容器自身 padding，滚动时不被折叠），全站统一 24px。 -->
-      <main class="flex-1 flex flex-col overflow-y-auto p-4 sm:px-6 sm:pt-6 content-scroll">
+      <main class="flex flex-col p-4 sm:px-6 sm:pt-6 content-scroll lg:flex-1 lg:overflow-y-auto">
         <RouterView />
       </main>
     </div>

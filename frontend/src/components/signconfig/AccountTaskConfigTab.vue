@@ -1,7 +1,8 @@
 <template>
-  <div class="flex flex-1 min-h-0 gap-4">
+  <!-- 移动端：纵向布局，账号树限高收纳在顶部（先选账号任务，编辑器在下方） -->
+  <div class="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:flex-row">
     <!-- 左：账号 → 任务 树（搜索 + 折叠，应对账号过多） -->
-    <aside class="flex w-60 shrink-0 flex-col overflow-hidden rounded-2xl dash-card xl:w-64">
+    <aside class="flex w-full shrink-0 flex-col overflow-hidden rounded-2xl dash-card lg:max-h-none lg:w-60 xl:w-64">
       <div class="shrink-0 space-y-2 border-b border-ink/5 p-2">
         <div class="flex items-center gap-2 rounded-lg bg-cloud px-2.5">
           <Icon name="search" :size="14" class="shrink-0 text-ink-muted" />
@@ -21,7 +22,7 @@
         </div>
       </div>
 
-      <div class="xb-scroll flex-1 min-h-0 overflow-auto p-2">
+      <div class="p-2 lg:flex-1 lg:min-h-0 lg:overflow-auto">
         <p v-if="filtered.length === 0" class="px-2 py-8 text-center text-xs text-ink-muted">未找到匹配账号</p>
         <div v-for="a in filtered" :key="a.id" class="mb-1">
           <button
@@ -59,7 +60,7 @@
     </aside>
 
     <!-- 右：编辑器 -->
-    <div class="xb-scroll flex-1 min-h-0 overflow-auto">
+    <div class="xb-scroll overflow-auto lg:flex-1 lg:min-h-0">
       <div v-if="!store.taskConfig" class="dash-card flex min-h-[300px] items-center justify-center text-ink-muted">请选择左侧账号任务</div>
       <template v-else>
         <div class="mb-3 space-y-3">

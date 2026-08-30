@@ -3,14 +3,14 @@
     <Transition name="modal">
       <div
         v-if="modelValue"
-        class="fixed inset-0 z-[1000] flex items-center justify-center p-4"
+        class="fixed inset-0 z-[1000] flex items-center justify-center p-4 max-sm:items-end max-sm:p-0"
         role="dialog"
         aria-modal="true"
       >
         <div class="absolute inset-0 bg-ink/50 backdrop-blur-[2px]" @click="onOverlayClick" />
 
         <div
-          class="modal-panel relative flex w-full flex-col overflow-hidden rounded-2xl bg-white shadow-2xl shadow-ink/20"
+          class="modal-panel relative flex w-full flex-col overflow-hidden rounded-2xl bg-white shadow-2xl shadow-ink/20 max-sm:rounded-b-none max-sm:rounded-t-2xl max-sm:max-h-[90dvh]"
           :class="[sizeClass, size === 'sm' ? 'max-h-[90vh]' : 'max-h-[92vh]']"
           @click.stop
         >

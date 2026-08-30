@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-1 min-h-0 flex-col gap-4 sm:gap-6">
+  <div class="flex flex-col gap-4 sm:gap-6 lg:flex-1 lg:min-h-0">
     <RefreshStrip v-if="refreshing" />
     <!-- 汇总卡片：移动端紧凑，避免挤压下方列表 -->
     <div class="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
@@ -66,7 +66,7 @@
     <!-- 用户列表：桌面用表格（表头固定、列对齐），移动端用卡片，页面主体高度固定。
          静默刷新期旧数据原地保留，仅整卡降透明并暂停交互（无感换新，不整块替换） -->
     <div
-      class="dash-card flex min-h-[260px] flex-1 flex-col overflow-hidden transition-opacity sm:min-h-0"
+      class="dash-card flex flex-col overflow-hidden transition-opacity lg:min-h-[260px] lg:flex-1 sm:min-h-0"
       :class="refreshing && 'opacity-60 pointer-events-none'"
     >
       <!-- 加载中 -->
@@ -173,7 +173,7 @@
       </div>
 
       <!-- 移动端卡片列表（<1024px）：无横向溢出、操作便捷 -->
-      <div class="xb-scroll min-h-0 flex-1 overflow-auto lg:hidden">
+      <div class="xb-scroll overflow-auto lg:hidden lg:flex-1 lg:min-h-0">
         <div class="space-y-3 p-3">
           <div
             v-for="item in rows"

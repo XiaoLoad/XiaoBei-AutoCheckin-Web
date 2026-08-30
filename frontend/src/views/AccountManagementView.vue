@@ -1,6 +1,6 @@
 <template>
   <!-- 根容器：占满父级高度，列表卡片 flex-1 内部滚动，解决高度过低问题 -->
-  <div class="flex flex-1 min-h-0 flex-col gap-6">
+  <div class="flex flex-col gap-6 lg:flex-1 lg:min-h-0">
     <RefreshStrip v-if="refreshing" />
     <!-- 统一操作栏：搜索 + 筛选 + 刷新 + 重置 + 新增，合并为一卡，简约单行布局。
          relative z-30 提升堆叠层级，确保内部下拉面板不被下方列表卡片遮挡。 -->
@@ -77,7 +77,7 @@
     <!-- 列表卡片：账号卡片网格（桌面/移动同一套），卡片 flex-1 内部滚动，底部固定分页。
          静默刷新期旧数据原地保留，仅整卡降透明并暂停交互 -->
     <div
-      class="dash-card fade-up flex flex-1 min-h-0 flex-col overflow-hidden rounded-2xl transition-opacity"
+      class="dash-card fade-up flex flex-col overflow-hidden rounded-2xl transition-opacity lg:flex-1 lg:min-h-0"
       :class="refreshing && 'opacity-60 pointer-events-none'"
     >
       <!-- 加载态 -->
@@ -90,7 +90,7 @@
       </div>
 
       <!-- 账号卡片网格：1 列（小屏）/ 2 列（sm）/ 3 列（xl） -->
-      <div v-else class="xb-scroll min-h-0 flex-1 overflow-auto p-3 sm:p-4">
+      <div v-else class="xb-scroll overflow-auto p-3 sm:p-4 lg:flex-1 lg:min-h-0">
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <article
             v-for="item in pagedRows"

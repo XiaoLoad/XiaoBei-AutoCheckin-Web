@@ -1,6 +1,6 @@
 <template>
   <!-- flex-1 min-h-0：填满签到配置页内容区，使图库等子页可内部滚动而非把卡片撑出视口 -->
-  <div class="flex min-h-0 flex-1 flex-col gap-4">
+  <div class="flex flex-col gap-4 lg:min-h-0 lg:flex-1">
     <div class="inline-flex shrink-0 rounded-xl bg-cloud p-1 text-sm">
       <button
         v-for="t in tabs"
@@ -15,9 +15,9 @@
     </div>
 
     <!-- 弹性填充卡片：图库需要视口内滚动（避免底部贴边）；其余资源池列表少时卡片同高留白，与全站卡片观感一致 -->
-    <div class="dash-card fade-up flex min-h-[420px] flex-1 flex-col p-4">
+    <div class="dash-card fade-up flex flex-col p-4 lg:min-h-0 lg:flex-1">
       <LocationPool v-if="store.resourceSubTab === 'locations'" :fixed-scope="isAdmin ? 'system' : 'user'" />
-      <ImageLibrary v-else-if="store.resourceSubTab === 'images'" class="min-h-0 flex-1" />
+      <ImageLibrary v-else-if="store.resourceSubTab === 'images'" />
       <CredentialPool v-else-if="store.resourceSubTab === 'credentials'" />
       <UaTemplates v-else-if="store.resourceSubTab === 'ua'" />
     </div>

@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-1 min-h-0 flex-col gap-6">
+  <div class="flex flex-col gap-6 lg:flex-1 lg:min-h-0">
     <RefreshStrip v-if="refreshingRecords || refreshingCalendar" />
     <!-- 筛选卡片：账号决定看谁的数据；类型与状态同行双胶囊，竖线分隔，维度不同不合并为同一控件 -->
     <div class="dash-card fade-up relative z-30 shrink-0 p-3 sm:p-4">
@@ -148,7 +148,7 @@
         </div>
 
         <div
-          class="xb-scroll flex-1 min-h-0 overflow-auto px-2 transition-opacity sm:px-3"
+          class="xb-scroll overflow-auto px-2 transition-opacity sm:px-3 lg:flex-1 lg:min-h-0"
           :class="refreshingRecords && 'opacity-60 pointer-events-none'"
         >
           <!-- 加载中（仅首次进入，之后翻页/筛选原地静默换新） -->
@@ -458,7 +458,7 @@
         <!-- 日期网格：flex-1 自适应铺满，6 行等分，内部不滚动。
              静默刷新期（切月取数）格子先以无记录灰渲染，数据到位即着色，不闪加载页 -->
         <div
-          class="grid min-h-0 flex-1 grid-cols-7 grid-rows-6 gap-1.5 px-3 pb-3 pt-1 transition-opacity sm:px-4"
+          class="grid grid-cols-7 grid-rows-6 gap-1.5 px-3 pb-3 pt-1 transition-opacity sm:px-4 lg:flex-1 lg:min-h-0"
           :class="refreshingCalendar && 'opacity-60 pointer-events-none'"
         >
           <template v-if="(loadingRecords && !listLoaded) || (loadingCalendar && !calendarLoaded)">

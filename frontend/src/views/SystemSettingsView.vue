@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-1 min-h-0 flex-col gap-4 sm:gap-6">
+  <div class="flex flex-col gap-4 sm:gap-6 lg:flex-1 lg:min-h-0">
     <!--
       总布局：分割线行置于卡片外、每个模块独立成卡。
       管理员：左列「账户安全」「系统参数」两张白卡纵排；
@@ -57,7 +57,7 @@
             <div class="flex justify-end sm:col-span-3">
               <button
                 type="submit"
-                class="rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand/25 transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+                class="w-full rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand/25 transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
                 :disabled="pwdSubmitting || !pwdForm.old || !pwdForm.next || !pwdForm.confirm"
               >
                 {{ pwdSubmitting ? '提交中…' : '修改密码' }}
@@ -123,7 +123,7 @@
               <button
                 type="button"
                 :disabled="saving || !hasDirtyChanges"
-                class="rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-brand/25 transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+                class="w-full rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-brand/25 transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
                 @click="onSaveSettings"
               >
                 {{ saving ? '保存中…' : '保存设置' }}

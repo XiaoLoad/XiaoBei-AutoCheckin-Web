@@ -22,7 +22,7 @@ def _field_str(v):
 
 
 def load_location(payload):
-    """位置池入参：name/lat/lng 必填，offset 0~500 米默认 10"""
+    """位置池入参：name/lat/lng/address 必填，offset 0~500 米默认 10"""
     payload = payload or {}
     name = str(payload.get('name') or '').strip()[:64]
     if not name:
@@ -38,13 +38,15 @@ def load_location(payload):
     lat, lng = _f('lat'), _f('lng')
     if lat is None or lng is None:
         return False, None, '经纬度须为有效数字', 4301
+    address = str(payload.get('address') or '').strip()[:255]
+    if not address:
+        return False, None, '地址号不能为空', 4302
     try:
         offset = int(payload.get('offset', 10))
     except (TypeError, ValueError, OverflowError):
         offset = 10
     offset = min(max(offset, 0), 500)
-    data = {'name': name,
-            'address': str(payload.get('address') or '').strip()[:255],
+    data = {'name': name, 'address': address,
             'lat': lat, 'lng': lng, 'offset_m': offset,
             'enabled': bool(payload.get('enabled', True))}
     return True, data, '', 0

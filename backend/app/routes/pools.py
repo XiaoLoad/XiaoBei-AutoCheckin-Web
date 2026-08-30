@@ -321,4 +321,4 @@ def test_push_credential(cred_id):
     ok, err = send_channel(c.channel, key, ctx, template)
     if ok:
         return success(message='测试推送已发送，请查收')
-    return error(message=f'测试推送失败：{err}', code=4324, status=502)
+    return error(message=f'测试推送失败：{err}', code=4324, status=400)

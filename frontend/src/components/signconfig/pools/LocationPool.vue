@@ -123,8 +123,8 @@
     <BaseModal v-model="showModal" :title="editingId ? '编辑位置' : '添加位置'" :size="pickerMode === 'map' ? '2xl' : 'md'">
       <!-- 名称（两模式共用）：地图拾取会把识别到的地址回填到这里，用户可编辑 -->
       <div class="mb-3">
-        <label class="mb-1.5 block text-sm font-medium text-ink-soft">名称</label>
-        <input v-model="form.name" class="login-input" placeholder="对此位置的描述，如：3栋502寝室" @input="nameTouched = true" />
+        <label class="mb-1.5 block text-sm font-medium text-ink-soft">名称 <span class="text-red-500">*</span></label>
+        <input v-model="form.name" class="login-input" placeholder="对此位置的描述，如：3栋502寝室" @input="onNameInput" />
       </div>
 
       <!-- 模式切换 -->
@@ -147,7 +147,7 @@
         </button>
       </div>
 
-      <!-- 地图拾取：搜索/点击落点 + 逆地理编码识别地址（回填到名称）；地址号由用户手动填写 -->
+      <!-- 地图拾取：搜索/点击落点 + 逆地理编码（回填到名称）；地址号为学校签到必填参数 -->
       <div v-if="pickerMode === 'map'" class="mb-3">
         <AmapPicker
           :model-value="pickedPoint"
@@ -155,20 +155,36 @@
           @update:model-value="onPointPicked"
           @unavailable="pickerMode = 'manual'"
         />
+        <div class="mt-3">
+          <label class="mb-1.5 block text-sm font-medium text-ink-soft">
+            地址号 <span class="text-red-500">*</span>
+            <span class="font-normal text-ink-muted">（学校签到所需参数）</span>
+          </label>
+          <input v-model="form.address" class="login-input" placeholder="如：1388号" />
+        </div>
+        <div class="mt-2.5 flex items-center gap-1.5 rounded-lg bg-cloud/70 px-2.5 py-1.5 text-xs">
+          <span class="shrink-0 rounded bg-white px-1.5 py-0.5 tabular-nums text-ink-soft">
+            {{ pickedPoint ? `${pickedPoint.lng}, ${pickedPoint.lat}` : '—, —' }}
+          </span>
+          <span v-if="!pickedPoint" class="text-warning">请先在地图上拾取位置（点击地图或搜索地点）</span>
+        </div>
       </div>
 
       <!-- 手动输入：地址号 + 经纬度 -->
       <div v-else class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div class="sm:col-span-2">
-          <label class="mb-1.5 block text-sm font-medium text-ink-soft">地址号</label>
-          <input v-model="form.address" class="login-input" placeholder="如：1388号（B 平台提交所需，选填）" />
+          <label class="mb-1.5 block text-sm font-medium text-ink-soft">
+            地址号 <span class="text-red-500">*</span>
+            <span class="font-normal text-ink-muted">（学校签到所需参数）</span>
+          </label>
+          <input v-model="form.address" class="login-input" placeholder="如：1388号" />
         </div>
         <div>
-          <label class="mb-1.5 block text-sm font-medium text-ink-soft">纬度</label>
+          <label class="mb-1.5 block text-sm font-medium text-ink-soft">纬度 <span class="text-red-500">*</span></label>
           <input v-model="form.lat" class="login-input" placeholder="纬度（必填）" />
         </div>
         <div>
-          <label class="mb-1.5 block text-sm font-medium text-ink-soft">经度</label>
+          <label class="mb-1.5 block text-sm font-medium text-ink-soft">经度 <span class="text-red-500">*</span></label>
           <input v-model="form.lng" class="login-input" placeholder="经度（必填）" />
         </div>
       </div>
@@ -280,10 +296,9 @@ const saving = ref(false)
 const form = reactive({ name: '', address: '', lat: '', lng: '', offset: '' })
 // 添加方式：map=高德地图拾取（默认，未配置 Key 时选择器内提示并可一键切手动）/ manual=手动输入
 const pickerMode = ref('map')
-// 名称回填规则：拾取地址仅回填到「名称」且不覆盖用户手改过的名称
-// （nameTouched：编辑已有位置=true；名称被手改=true）
+// 名称回填规则：拾取地址回填到「名称」，仅当用户未手动编辑过名称时回填
+// （nameTouched 记录用户是否手改过，避免覆盖用户手填内容）
 const nameTouched = ref(false)
-const lastAutoName = ref('')
 // 当前表单坐标映射为拾取器点位（编辑已有位置时自动定位）
 const pickedPoint = computed(() =>
   form.lat !== '' && form.lng !== '' && !Number.isNaN(Number(form.lat))
@@ -294,19 +309,24 @@ function onPointPicked(p) {
   if (!p || p.lat == null || p.lng == null) return
   form.lat = String(p.lat)
   form.lng = String(p.lng)
+  // 拾取地址回填到「名称」：仅当用户尚未手动编辑过名称时回填，避免覆盖手填内容
+  // （编辑已有位置时同样生效——重新拾取会把名称更新为拾取到的地址）
   if (p.address && !nameTouched.value) {
     form.name = p.address
-    lastAutoName.value = p.address
   }
 }
-// 保存校验：名称 + 经纬度必填；地址号按接口文档为选填
-const canSave = computed(() => Boolean(form.name && form.lat !== '' && form.lng !== ''))
+// 保存校验：名称/地址号/经纬度全部必填
+const canSave = computed(() => Boolean(form.name && form.address && form.lat !== '' && form.lng !== ''))
+
+function onNameInput() {
+  // 用户手改名称后，自动回填让位（后续拾取不再覆盖手填内容）
+  nameTouched.value = true
+}
 
 function openAdd() {
   editingId.value = ''
   pickerMode.value = 'map'
   nameTouched.value = false
-  lastAutoName.value = ''
   form.name = ''
   form.address = ''
   form.lat = ''
@@ -317,8 +337,7 @@ function openAdd() {
 function openEdit(loc) {
   editingId.value = loc.id
   pickerMode.value = 'map'
-  nameTouched.value = true // 已有名称是用户起的，拾取不覆盖
-  lastAutoName.value = ''
+  nameTouched.value = false
   form.name = loc.name
   form.address = loc.address
   form.lat = loc.lat

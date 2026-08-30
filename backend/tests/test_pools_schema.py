@@ -4,7 +4,7 @@ from app.schemas.pools_schema import (load_location, load_ua, load_credential,
 
 
 def test_location_ok_and_offset_clamp():
-    ok, d, _, _ = load_location({'name': '寝室', 'lat': '30.5', 'lng': '120.4', 'offset': 9999})
+    ok, d, _, _ = load_location({'name': '寝室', 'address': '1388号', 'lat': '30.5', 'lng': '120.4', 'offset': 9999})
     assert ok and d['offset_m'] == 500 and isinstance(d['lat'], float)
 
 

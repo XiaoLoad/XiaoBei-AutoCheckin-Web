@@ -4,13 +4,21 @@
 # PushPlus 长度守卫：标题≤100 字、内容≤20000 字（取实名用户下限，会员更高，保守值避免被截断）。
 import logging
 import os
+import warnings
 
 import requests
 from app.extensions import db
 from app.models.pools import PoolLocation
 from app.models.user import now_cst
+from urllib3.exceptions import InsecureRequestWarning
 
 log = logging.getLogger('push')
+
+# 推送目标（Server酱 / PushPlus）与 B 平台同理：部分域名证书链不完整（缺中间签发者），
+# 本机标准校验必失败；默认关闭校验与 B 平台对齐。PUSH_VERIFY_SSL=1 可开启（配合系统信任库）。
+PUSH_VERIFY_SSL = (os.getenv('PUSH_VERIFY_SSL') or '').lower() in ('1', 'true')
+if not PUSH_VERIFY_SSL:
+    warnings.simplefilter('ignore', InsecureRequestWarning)
 
 PUSHPLUS_TITLE_MAX = 100
 PUSHPLUS_CONTENT_MAX = 20000
@@ -253,7 +261,8 @@ def send_channel(channel, key_or_fields, ctx, template='html'):
     if channel == 'serverchan':
         try:
             resp = requests.post(f'https://sctapi.ftqq.com/{key_or_fields}.send',
-                                 data={'title': title, 'desp': render_txt(ctx)}, timeout=8)
+                                 data={'title': title, 'desp': render_txt(ctx)}, timeout=8,
+                                 verify=PUSH_VERIFY_SSL)
         except Exception as e:
             return False, str(e)
         try:
@@ -270,7 +279,7 @@ def send_channel(channel, key_or_fields, ctx, template='html'):
             resp = requests.post('https://www.pushplus.plus/send',
                                  json={'token': key_or_fields, 'title': title,
                                        'content': render(ctx, fmt), 'template': fmt},
-                                 timeout=8)
+                                 timeout=8, verify=PUSH_VERIFY_SSL)
         except Exception as e:
             return False, str(e)
         try:

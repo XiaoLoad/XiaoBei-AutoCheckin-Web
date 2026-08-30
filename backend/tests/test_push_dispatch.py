@@ -186,3 +186,49 @@ def test_send_channel_non_json_response_is_failure(monkeypatch):
     ok, err = send_channel('serverchan', 'SCTx', ctx)
     assert ok is False
     assert '502' in err
+
+
+def _resolved_multi(uid=None):
+    return {'push': {
+        'channels': ['pushplus', 'email'],
+        'useOwnCredential': False,
+        'credIds': {'serverchan': None, 'pushplus': None, 'email': None},
+        'cred': {
+            'pushplusToken': 'PPTok',
+            'emailSmtp': 'smtp.example.com', 'emailFrom': 'a@b.com',
+            'emailPass': 'pw', 'emailTo': 'c@d.com',
+        },
+        'notify': {'success': True, 'skip': False, 'fail': False},
+    }}
+
+
+def test_dispatch_push_one_channel_exception_does_not_block_others(app_ctx, monkeypatch):
+    """某通道内部异常（如 PushPlus 网络错误抛 RuntimeError）不得阻断其它通道。
+    回归：dispatch_push 循环曾缺 try/except，单个 send_channel 抛异常会令整个循环崩溃，
+    后续通道（如邮件）整体不推送，表现为「设置了推送但从不推送」且无从排查。"""
+    uid = _uid(sch.db)
+    calls = []
+    def fake_send_channel(channel, key, ctx, template):
+        calls.append(channel)
+        if channel == 'pushplus':
+            raise RuntimeError('模拟 PushPlus 网络异常')
+        return True, ''
+    monkeypatch.setattr(sch, 'send_channel', fake_send_channel)
+    sch.dispatch_push(_resolved_multi(), _FakeSchedule(uid), _FakeAcc(), 'success')
+    assert 'pushplus' in calls
+    assert 'email' in calls  # 关键断言：pushplus 异常后仍尝试了 email
+
+
+def test_dispatch_push_one_channel_business_failure_does_not_block_others(app_ctx, monkeypatch):
+    """某通道业务失败（返回 (False, 原因)）同样不得阻断其它通道"""
+    uid = _uid(sch.db)
+    calls = []
+    def fake_send_channel(channel, key, ctx, template):
+        calls.append(channel)
+        if channel == 'pushplus':
+            return False, 'token 失效'
+        return True, ''
+    monkeypatch.setattr(sch, 'send_channel', fake_send_channel)
+    sch.dispatch_push(_resolved_multi(), _FakeSchedule(uid), _FakeAcc(), 'success')
+    assert calls == ['pushplus', 'email']
+

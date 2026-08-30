@@ -285,7 +285,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { storeToRefs } from "pinia";
 import { useTaskLogsStore } from "@/stores/taskLogs";
@@ -298,7 +298,6 @@ import BasePagination from "@/components/BasePagination.vue";
 const store = useTaskLogsStore();
 const route = useRoute();
 const {
-  accounts,
   selectedAccountId,
   loadingAccounts,
   typeFilter,

@@ -54,10 +54,18 @@ def load_update(payload):
             return False, None, 'mode 仅支持 follow / custom / standalone', 4403
         data['mode'] = payload['mode']
     if 'config' in payload:
-        # 任务自持完整配置（standalone 权威来源）：整体透传，由路由写入 config_json
+        # 任务自持完整配置（standalone 权威来源）：与配置套同一套结构兜底清洗——
+        # 只放行已知顶层键、校验 time/remarks/image/push/advanced 形状，
+        # 防止任务侧成为绕过 config_schema 的脏数据入口（config_json 膨胀/调度器解析异常）
         if not isinstance(payload['config'], dict):
             return False, None, 'config 应为配置对象', 4414
-        data['config'] = payload['config']
+        from app.schemas.config_schema import sanitize_config
+        ok_cfg, cfg = sanitize_config(payload['config'])
+        if not ok_cfg:
+            return False, None, ('任务配置结构不合法：顶层仅接受 '
+                                 'time/locationId/remarks/image/push/advanced/presetSetId，'
+                                 '且 time.weekdays 必填（1~7）'), 4415
+        data['config'] = cfg
     if 'configSetId' in payload:
         v = payload['configSetId']
         if v is not None and not isinstance(v, int):

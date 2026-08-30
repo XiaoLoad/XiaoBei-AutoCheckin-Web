@@ -230,13 +230,10 @@
 import { ref, computed } from 'vue'
 import StatCard from '@/components/StatCard.vue'
 import BaseChart from '@/components/BaseChart.vue'
-import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 
-// ===== 当前角色（mock；真实由后端按 token 返回）=====
-// [权限判断] role === '管理员' 时渲染本页；否则应由 DashboardView 分发到 UserDashboard
-const role = '管理员'
-const isAdmin = role === '管理员'
+// [权限判断] 本页仅管理员可达（分发见 DashboardView；路由守卫二次校验）。
+// 页内数据仍为设计稿演示常量，管理员真实聚合接口（/api/admin/*）落地后整体替换。
 
 // ===== 状态映射 =====
 const statusMeta = {

@@ -63,21 +63,21 @@ export const useUsersStore = defineStore('users', () => {
     if (kwTimer) clearTimeout(kwTimer)
     kwTimer = setTimeout(() => {
       page.value = 1
-      fetchUsers()
+      fetchUsers().catch(() => {}) // 失败已由 request.js 全局 toast，这里只吞 rejection
     }, 300)
   }
   function onFilterChange() {
     page.value = 1
-    fetchUsers()
+    fetchUsers().catch(() => {})
   }
   function onPageChange(p) {
     page.value = p
-    fetchUsers()
+    fetchUsers().catch(() => {})
   }
   function onPageSizeChange(size) {
     pageSize.value = size
     page.value = 1
-    fetchUsers()
+    fetchUsers().catch(() => {})
   }
 
   function openAdd() {

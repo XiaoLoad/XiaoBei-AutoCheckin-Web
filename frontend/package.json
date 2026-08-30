@@ -8,7 +8,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "echo \"no linter configured\""
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "format": "prettier --write \"src/**/*.{vue,js,css}\""
   },
   "dependencies": {
     "axios": "^1.7.7",
@@ -22,7 +24,12 @@
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.1.4",
     "autoprefixer": "^10.4.20",
+    "eslint": "^10.9.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-vue": "^10.10.0",
+    "globals": "^17.11.0",
     "postcss": "^8.4.47",
+    "prettier": "^3.9.6",
     "tailwindcss": "^3.4.14",
     "vite": "^5.4.10"
   }

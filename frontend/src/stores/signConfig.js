@@ -1,15 +1,11 @@
-// 签到配置领域状态（Pinia）：收纳用户配置套 / 任务实例配置 / 四类资源池的 mock 数据与 UI 状态。
-// 后端接入时只需改 api/signConfig.js，本 store 与视图无需变动。
+// 签到配置领域状态（Pinia）：收纳用户配置套 / 任务实例配置 / 四类资源池的真实后端数据
+// 与 UI 状态。接口细节见 api/signConfig.js，本 store 只做编排与本地派生。
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import { useAuthStore } from '@/stores/auth'
 import { toast } from '@/utils/toast'
 import * as api from '@/api/signConfig'
 
 export const useSignConfigStore = defineStore('signConfig', () => {
-  const auth = useAuthStore()
-  const isAdmin = computed(() => auth.isAdmin)
-
   const loading = ref(true)
   const saving = ref(false)
 
@@ -135,19 +131,10 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     if (d) return d.id
     return userConfigSets.value[0]?.id || ''
   })
-  // 当前任务绑定的配置套 id（来自后端 Schedule.config_set_id）
-  const boundSetId = computed(() => {
-    const b = scheduleBindings.value[taskConfigKey.value]
-    return b && b.configSetId ? b.configSetId : null
-  })
   // 任务自持配置草稿：账号任务配置界面编辑的是「本任务配置」的副本，
   // 保存时写回任务实例并解绑配置套（快照复制模型），绝不直接改共享配置套。
   const taskConfigDraft = ref(null)
   const draftSourceSnapshot = ref(null)
-  function setName(id) {
-    const s = userConfigSets.value.find((x) => x.id === id)
-    return s ? s.name : '已删除配置套'
-  }
   // 比对两份配置是否实质一致：位置 id 统一按字符串归一（来源套 locationId 经 mapSetIn 转字符串，
   // 任务快照 locationId 为原始存储值，可能为字符串或数字），其余字段按 JSON 原文比较。
   function configsEqual(a, b) {
@@ -173,8 +160,6 @@ export const useSignConfigStore = defineStore('signConfig', () => {
   // 任务配置即当前编辑草稿（深拷贝自来源，修改仅作用于本任务，不影响共享配置套）
   const taskConfig = computed(() => taskConfigDraft.value)
 
-  // 当前编辑对象所隶属的配置套 id：已绑定用绑定套；未绑定用下拉所选套，回退默认套。
-  const activeConfigSetId = computed(() => effectiveBindSetId.value)
   // 当前任务「是否脏」：草稿相对来源快照有改动时为 true（保存按钮可点 / 启用前校验）。
   const isDirty = computed(() => {
     const cfg = taskConfigDraft.value
@@ -652,45 +637,48 @@ export const useSignConfigStore = defineStore('signConfig', () => {
   }
 
   // ── 资源池：图库 ──
-  async function trashImage(id) {
+  async function trashImage(id, opts) {
     saving.value = true
     try {
-      imageLibrary.value = await api.trashImage(id)
+      imageLibrary.value = await api.trashImage(id, opts)
     } finally {
       saving.value = false
     }
   }
-  async function restoreImage(id) {
+  async function restoreImage(id, opts) {
     saving.value = true
     try {
-      imageLibrary.value = await api.restoreImage(id)
+      imageLibrary.value = await api.restoreImage(id, opts)
     } finally {
       saving.value = false
     }
   }
-  async function deleteImage(id) {
+  async function deleteImage(id, opts) {
     saving.value = true
     try {
-      imageLibrary.value = await api.deleteImage(id)
+      imageLibrary.value = await api.deleteImage(id, opts)
+      // 记录已物理删除，同步释放缩略图 objectURL（缓存只增不减会跨会话残留）
+      api.releaseImageBlob(id)
     } finally {
       saving.value = false
     }
   }
   // 手动标记为已使用（图库页演示/手动流转；recycle 策略消费后也落到 used 状态）
-  async function markUsed(id) {
+  async function markUsed(id, opts) {
     saving.value = true
     try {
-      imageLibrary.value = await api.markImageUsed(id)
+      imageLibrary.value = await api.markImageUsed(id, opts)
     } finally {
       saving.value = false
     }
   }
   // 上传图片：走真实归一化管线，成功后刷新图库数组（groupId 指定上传目标分组）
-  // onProgress 透传单张上传进度（0~100），供图库页批量/拖拽上传展示进度
-  async function uploadImage(file, groupId = null, onProgress) {
+  // onProgress 透传单张上传进度（0~100），供图库页批量/拖拽上传展示进度；
+  // opts.silent 透传批量上传（队列 UI 自行展示逐文件失败），单张上传不传走全局 toast
+  async function uploadImage(file, groupId = null, onProgress, opts) {
     saving.value = true
     try {
-      imageLibrary.value = await api.uploadImage(file, groupId, onProgress)
+      imageLibrary.value = await api.uploadImage(file, groupId, onProgress, opts)
     } finally {
       saving.value = false
     }
@@ -724,10 +712,10 @@ export const useSignConfigStore = defineStore('signConfig', () => {
       saving.value = false
     }
   }
-  async function moveImage(id, groupId = null) {
+  async function moveImage(id, groupId = null, opts) {
     saving.value = true
     try {
-      imageLibrary.value = await api.moveImageToGroup(id, groupId)
+      imageLibrary.value = await api.moveImageToGroup(id, groupId, opts)
     } finally {
       saving.value = false
     }

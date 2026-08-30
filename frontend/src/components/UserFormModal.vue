@@ -1,139 +1,116 @@
 <template>
-  <Teleport to="body">
-    <Transition name="modal">
-      <div
-        v-if="modelValue"
-        class="fixed inset-0 z-[1000] flex items-center justify-center p-4"
-        role="dialog"
-        aria-modal="true"
-      >
-        <div class="absolute inset-0 bg-ink/50 backdrop-blur-[2px]" @click="onCancel" />
+  <!-- 新增/编辑用户弹窗：基于 BaseModal 组装（遮罩/ESC/滚动锁定/过渡均由骨架提供）。
+       表单只包字段区（回车触发 submit），底部按钮在 footer 插槽经 click 提交。 -->
+  <BaseModal
+    :model-value="modelValue"
+    size="md"
+    :title="mode === 'edit' ? '编辑用户' : '新增用户'"
+    @update:model-value="(v) => emit('update:modelValue', v)"
+    @cancel="onCancel"
+  >
+    <form class="space-y-4" @submit.prevent="onSubmit">
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-ink-soft">用户名</label>
+        <input
+          v-model.trim="form.username"
+          type="text"
+          maxlength="64"
+          placeholder="字母、数字、下划线、连字符、点及中文"
+          class="login-input"
+          :class="errors.username && 'border-danger focus:border-danger focus:ring-danger/10'"
+          @input="onUsernameInput"
+        />
+        <p v-if="errors.username" class="mt-1 text-xs text-danger">{{ errors.username }}</p>
+      </div>
 
-        <div class="modal-panel relative flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl shadow-ink/20" @click.stop>
-          <!-- 标题 -->
-          <div class="flex shrink-0 items-center justify-between px-5 pt-5">
-            <h3 class="text-base font-semibold text-ink">
-              {{ mode === 'edit' ? '编辑用户' : '新增用户' }}
-            </h3>
-            <button
-              type="button"
-              class="grid h-8 w-8 place-items-center rounded-lg text-ink-muted transition hover:bg-cloud hover:text-ink"
-              aria-label="关闭"
-              @click="onCancel"
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-ink-soft">
+          密码
+          <span class="font-normal text-ink-muted">{{ mode === 'edit' ? '（留空则不修改）' : '' }}</span>
+        </label>
+        <input
+          v-model="form.password"
+          type="password"
+          maxlength="64"
+          placeholder="至少 6 位"
+          class="login-input"
+          :class="errors.password && 'border-danger focus:border-danger focus:ring-danger/10'"
+          @input="onPasswordInput"
+        />
+        <p v-if="errors.password" class="mt-1 text-xs text-danger">{{ errors.password }}</p>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-ink-soft">角色</label>
+          <BaseSelect
+            v-model="form.role"
+            placeholder="角色"
+            :options="[
+              { label: '普通用户', value: 'user' },
+              { label: '管理员', value: 'admin' }
+            ]"
+          />
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-ink-soft">状态</label>
+          <button
+            type="button"
+            class="flex h-[46px] w-full items-center justify-between rounded-xl border border-ink/10 bg-cloud/60 px-4 text-sm transition"
+            :class="form.enabled ? 'text-success' : 'text-ink-muted'"
+            @click="form.enabled = !form.enabled"
+          >
+            <span>{{ form.enabled ? '启用' : '禁用' }}</span>
+            <span
+              class="relative h-5 w-9 rounded-full transition"
+              :class="form.enabled ? 'bg-success' : 'bg-ink/25'"
             >
-              <Icon name="close" :size="18" />
-            </button>
-          </div>
-
-          <!-- 表单 -->
-          <form class="flex flex-1 min-h-0 flex-col overflow-hidden" @submit.prevent="onSubmit">
-            <div class="flex-1 min-h-0 space-y-4 overflow-y-auto px-5 pb-4 pt-3">
-            <div>
-              <label class="mb-1.5 block text-sm font-medium text-ink-soft">用户名</label>
-              <input
-                v-model.trim="form.username"
-                type="text"
-                maxlength="64"
-                placeholder="字母、数字、下划线、连字符、点及中文"
-                class="login-input"
-                :class="errors.username && 'border-danger focus:border-danger focus:ring-danger/10'"
-                @input="onUsernameInput"
+              <span
+                class="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all"
+                :class="form.enabled ? 'left-[18px]' : 'left-0.5'"
               />
-              <p v-if="errors.username" class="mt-1 text-xs text-danger">{{ errors.username }}</p>
-            </div>
-
-            <div>
-              <label class="mb-1.5 block text-sm font-medium text-ink-soft">
-                密码
-                <span class="font-normal text-ink-muted">{{ mode === 'edit' ? '（留空则不修改）' : '' }}</span>
-              </label>
-              <input
-                v-model="form.password"
-                type="password"
-                maxlength="64"
-                placeholder="至少 6 位"
-                class="login-input"
-                :class="errors.password && 'border-danger focus:border-danger focus:ring-danger/10'"
-                @input="onPasswordInput"
-              />
-              <p v-if="errors.password" class="mt-1 text-xs text-danger">{{ errors.password }}</p>
-            </div>
-
-            <div class="grid grid-cols-2 gap-4">
-              <div>
-                <label class="mb-1.5 block text-sm font-medium text-ink-soft">角色</label>
-                <BaseSelect
-                  v-model="form.role"
-                  placeholder="角色"
-                  :options="[
-                    { label: '普通用户', value: 'user' },
-                    { label: '管理员', value: 'admin' }
-                  ]"
-                />
-              </div>
-              <div>
-                <label class="mb-1.5 block text-sm font-medium text-ink-soft">状态</label>
-                <button
-                  type="button"
-                  class="flex h-[46px] w-full items-center justify-between rounded-xl border border-ink/10 bg-cloud/60 px-4 text-sm transition"
-                  :class="form.enabled ? 'text-success' : 'text-ink-muted'"
-                  @click="form.enabled = !form.enabled"
-                >
-                  <span>{{ form.enabled ? '启用' : '禁用' }}</span>
-                  <span
-                    class="relative h-5 w-9 rounded-full transition"
-                    :class="form.enabled ? 'bg-success' : 'bg-ink/25'"
-                  >
-                    <span
-                      class="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all"
-                      :class="form.enabled ? 'left-[18px]' : 'left-0.5'"
-                    />
-                  </span>
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label class="mb-1.5 block text-sm font-medium text-ink-soft">额度（总次数）</label>
-              <input
-                v-model.number="form.quota"
-                type="number"
-                min="0"
-                class="login-input"
-                :class="errors.quota && 'border-danger focus:border-danger focus:ring-danger/10'"
-                @input="errors.quota = ''"
-              />
-              <p v-if="errors.quota" class="mt-1 text-xs text-danger">{{ errors.quota }}</p>
-            </div>
-            </div>
-
-            <!-- 操作 -->
-            <div class="flex shrink-0 gap-3 border-t border-ink/5 bg-white px-5 py-4">
-              <button
-                type="button"
-                class="flex-1 rounded-xl border border-ink/10 px-4 py-2.5 text-sm font-medium text-ink-soft transition hover:bg-cloud"
-                @click="onCancel"
-              >
-                取消
-              </button>
-              <button
-                type="submit"
-                class="flex-1 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand/25 transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
-                :disabled="submitting"
-              >
-                {{ submitting ? '保存中…' : '保存' }}
-              </button>
-            </div>
-          </form>
+            </span>
+          </button>
         </div>
       </div>
-    </Transition>
-  </Teleport>
+
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-ink-soft">额度（总次数）</label>
+        <input
+          v-model.number="form.quota"
+          type="number"
+          min="0"
+          class="login-input"
+          :class="errors.quota && 'border-danger focus:border-danger focus:ring-danger/10'"
+          @input="errors.quota = ''"
+        />
+        <p v-if="errors.quota" class="mt-1 text-xs text-danger">{{ errors.quota }}</p>
+      </div>
+    </form>
+
+    <template #footer>
+      <button
+        type="button"
+        class="flex-1 rounded-xl border border-ink/10 px-4 py-2.5 text-sm font-medium text-ink-soft transition hover:bg-cloud"
+        @click="onCancel"
+      >
+        取消
+      </button>
+      <button
+        type="button"
+        class="flex-1 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand/25 transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+        :disabled="submitting"
+        @click="onSubmit"
+      >
+        {{ submitting ? '保存中…' : '保存' }}
+      </button>
+    </template>
+  </BaseModal>
 </template>
 
 <script setup>
-import { reactive, ref, watch } from 'vue'
-import Icon from '@/components/Icon.vue'
+import { reactive, watch } from 'vue'
+import BaseModal from '@/components/BaseModal.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 
 const props = defineProps({
@@ -259,23 +236,3 @@ function onCancel() {
 
 defineExpose({ close })
 </script>
-
-<style scoped>
-.modal-enter-active,
-.modal-leave-active {
-  transition: opacity 0.2s ease;
-}
-.modal-enter-from,
-.modal-leave-to {
-  opacity: 0;
-}
-.modal-enter-active .modal-panel,
-.modal-leave-active .modal-panel {
-  transition: transform 0.22s ease, opacity 0.22s ease;
-}
-.modal-enter-from .modal-panel,
-.modal-leave-to .modal-panel {
-  transform: translateY(8px) scale(0.98);
-  opacity: 0;
-}
-</style>

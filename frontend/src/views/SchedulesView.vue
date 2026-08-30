@@ -122,7 +122,7 @@
         :page-size="pageSize"
         :total="total"
         @update:page="page = $event"
-        @update:page-size="pageSize = $event"
+        @update:page-size="onPageSizeChange"
       />
     </div>
 
@@ -218,6 +218,10 @@ const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
 })
+function onPageSizeChange(size) {
+  pageSize.value = size
+  page.value = 1 // 改每页条数回到第一页，避免当前页越界空列表
+}
 
 function openDrawer(schedule) {
   drawerSchedule.value = schedule

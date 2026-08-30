@@ -95,7 +95,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import Icon from '@/components/Icon.vue'
 
 const props = defineProps({
@@ -377,7 +377,6 @@ watch(open, (v) => {
   }
 })
 
-onMounted(() => document.removeEventListener('mousedown', onDocClick))
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', onDocClick)
   window.removeEventListener('resize', onResize)

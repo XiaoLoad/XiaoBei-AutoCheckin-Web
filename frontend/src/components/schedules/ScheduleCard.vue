@@ -163,7 +163,10 @@ const modeText = computed(() => (props.schedule.mode === 'follow' ? '跟随配�
 const noConfigSet = computed(() => props.schedule.mode === 'follow' && !props.schedule.configSetId)
 const nextRunText = computed(() => {
   if (!props.schedule.enabled) return '未开启'
-  return props.schedule.nextRunAt || '暂不可执行'
+  if (!props.schedule.nextRunAt) return '暂不可执行'
+  // nextRunAt 是未叠加随机延迟的基线时刻（后端唯一事实源）；有随机延迟时标注漂移上限
+  const jitter = props.schedule.nextRunJitterMin || 0
+  return jitter > 0 ? `${props.schedule.nextRunAt}（随机±${jitter}分）` : props.schedule.nextRunAt
 })
 const lastRunText = computed(() => {
   const s = props.schedule

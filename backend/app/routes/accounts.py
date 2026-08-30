@@ -1,5 +1,6 @@
 # B 平台账号蓝图：CRUD + 凭据预检 + 重校验 + 记录分页
 # 前缀 /api/accounts；资源严格按当前登录用户隔离（user_id 过滤，杜绝越权）
+import re
 import time
 
 from flask import Blueprint, request
@@ -167,8 +168,11 @@ def delete_account(account_id):
         return error(message='账号不存在', code=4040, status=404)
 
     sched_ids = [s.id for s in Schedule.query.filter_by(account_id=acc.id).all()]
-    Schedule.query.filter_by(account_id=acc.id).delete()
+    # 顺序敏感：sign_records.schedule_id 外键无级联规则，必须先删签到记录再删任务，
+    # 否则任务被记录引用，DELETE schedules 触发 MySQL 1451（0.35.0 修过删单任务的同类问题，
+    # 此处为删账号级联路径的同源缺陷）。确认弹窗已告知"配置与日志一并移除"，故物理删除。
     SignRecord.query.filter_by(account_id=acc.id).delete()
+    Schedule.query.filter_by(account_id=acc.id).delete()
     user = request.current_user
     user.used_quota = max(0, (user.used_quota or 0) - 1)
     db.session.delete(acc)
@@ -274,31 +278,96 @@ def _call_with_refresh(account, call):
 @bp.route('/<int:account_id>/sign-records', methods=['GET'])
 @token_required
 def list_sign_records(account_id):
-    """合并寝/活历史任务（各自取全量后后端排序分页），支持类型筛选。数据来自 B 平台。"""
+    """合并寝/活历史任务（各自取全量后后端排序筛选分页），数据来自 B 平台。
+
+    查询参数：
+      type       dorm | activity | all（默认 all）
+      status     all | signed | unsigned | needPhoto（默认 all，按平台回传 finished/needPhoto 过滤）
+      date_from / date_to  YYYY-MM-DD，任务区间（startDate~endDate）与窗口重叠者入选；
+                 日历月视图按 42 格网格窗口取数，列表点选某天时 from=to=当天
+      page / page_size    常规分页
+
+    响应：{ items, total, page, page_size, overview, meta }
+      overview  全历史口径统计（type+status 过滤、不受日期窗口影响）：total/finished/unsigned/needPhoto/rate
+      meta      全历史口径的最早/最晚任务日期（earliest_date/latest_date），驱动日历「最近有数据月份」
+    """
     acc = _load_owned(account_id)
     if not acc:
         return error(message='账号不存在', code=4040, status=404)
     try:
         page = max(1, int(request.args.get('page', 1)))
-        page_size = min(1000, max(1, int(request.args.get('page_size', 10))))
+        page_size = min(200, max(1, int(request.args.get('page_size', 10))))
     except (TypeError, ValueError):
         page, page_size = 1, 10
     type_filter = (request.args.get('type') or 'all').strip()
+    status_filter = (request.args.get('status') or 'all').strip()
+    date_from = (request.args.get('date_from') or '').strip() or None
+    date_to = (request.args.get('date_to') or '').strip() or None
+    # 日期窗口合法性兜底：非法格式视为未传（避免用户手改 URL 时 500）
+    for raw in (date_from, date_to):
+        if raw and not re.match(r'^\d{4}-\d{2}-\d{2}$', raw):
+            return error(message='date_from/date_to 格式应为 YYYY-MM-DD', code=4304, status=400)
+    if status_filter not in ('all', 'signed', 'unsigned', 'needPhoto'):
+        return error(message='status 仅支持 all/signed/unsigned/needPhoto', code=4305, status=400)
 
     def _fetch(ad, tk):
         merged = ad.fetch_history_tasks(tk, 'know') + ad.fetch_history_tasks(tk, 'sign')
         if type_filter in ('dorm', 'activity'):
             merged = [t for t in merged if t['type'] == type_filter]
-        merged.sort(key=lambda t: (t['startDate'], t['startTime']), reverse=True)
-        return merged
 
-    merged, err = _call_with_refresh(acc, _fetch)
+        def _range_of(t):
+            s = (t.get('startDate') or '')[:10]
+            e = (t.get('endDate') or s)[:10]
+            return s, e
+
+        # 全历史统计与最近数据月份：type 过滤后、status/日期过滤前计算（原前端口径：
+        # 统计卡跟随状态筛选、不受日历点选影响；日历跳转看的是全部数据的最近月份）
+        finished = sum(1 for t in merged if t.get('finished'))
+        need_photo = sum(1 for t in merged if t.get('needPhoto'))
+        total_all = len(merged)
+        dates = [d for t in merged for d in _range_of(t) if d]
+        overview = {
+            'total': total_all,
+            'finished': finished,
+            'unsigned': total_all - finished,
+            'needPhoto': need_photo,
+            'rate': round(finished / total_all * 100) if total_all else 0,
+        }
+        meta = {'earliest_date': min(dates) if dates else None,
+                'latest_date': max(dates) if dates else None}
+
+        if status_filter == 'signed':
+            merged = [t for t in merged if t.get('finished')]
+        elif status_filter == 'unsigned':
+            merged = [t for t in merged if not t.get('finished')]
+        elif status_filter == 'needPhoto':
+            merged = [t for t in merged if t.get('needPhoto')]
+
+        # 日期窗口：任务区间与窗口有重叠即入选（覆盖长任务跨月/跨日的日历语义）
+        if date_from or date_to:
+            def _overlap(t):
+                s, e = _range_of(t)
+                if not s:
+                    return False
+                if date_from and e < date_from:
+                    return False
+                if date_to and s > date_to:
+                    return False
+                return True
+            merged = [t for t in merged if _overlap(t)]
+
+        merged.sort(key=lambda t: (t['startDate'], t['startTime']), reverse=True)
+        return {'merged': merged, 'overview': overview, 'meta': meta}
+
+    result, err = _call_with_refresh(acc, _fetch)
     if err:
         return err
+    merged, overview, meta = result['merged'], result['overview'], result['meta']
     total = len(merged)
     start = (page - 1) * page_size
     items = merged[start:start + page_size]
-    return success({'items': items, 'total': total, 'page': page, 'page_size': page_size})
+    return success({'items': items, 'total': total, 'page': page, 'page_size': page_size,
+                    'overview': overview, 'meta': meta})
 
 
 @bp.route('/<int:account_id>/sign-records/<int:task_id>/detail', methods=['GET'])

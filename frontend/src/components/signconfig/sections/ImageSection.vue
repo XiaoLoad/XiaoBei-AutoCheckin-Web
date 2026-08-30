@@ -45,7 +45,7 @@ import BaseSelect from '@/components/BaseSelect.vue'
 import Icon from '@/components/Icon.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
 
-const props = defineProps({
+defineProps({
   config: { type: Object, required: true },
   source: { type: String, default: '' }
 })

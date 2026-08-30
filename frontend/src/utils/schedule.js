@@ -1,4 +1,8 @@
-// 定时调度相关的纯计算工具（前端框架阶段，无后端）。
+// 定时调度相关的纯计算工具。
+// [职责边界] 线上展示的「下次执行时间」唯一事实源是后端 schedule.nextRunAt
+// （基线时刻 + nextRunJitterMin 随机延迟上限，见 api/schedules.js mapItem）；
+// 本文件的 computeNextRun 仅用于「定时设置抽屉」里对未保存表单的实时预览，
+// 不再用于列表/卡片渲染，避免与后端口径漂移（窗口天数/兜底默认值均不同）。
 // 明确区分两层时间：
 //   - 业务层：配置套 time（startHour/endHour/weekdays/randomDelayMax）——"这次签到长什么样"
 //   - 调度层：定时任务的"何时触发"。默认跟随配置套（在配置套星期 + startHour 触发，带抖动），

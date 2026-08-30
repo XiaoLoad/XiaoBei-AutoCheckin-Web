@@ -1,6 +1,10 @@
 // axios 实例封装：统一 baseURL、超时、请求/响应拦截、并发取消
+// [错误提示约定] 失败默认由本模块统一 toast（store/视图无需各自 catch+toast）；
+// 调用方若自行处理错误（如批量操作逐条汇总、表单内联提示），在请求配置传
+// { silent: true } 关闭全局提示，避免双重 toast。
 import axios from 'axios'
 import { bus, EVENTS } from '@/utils/eventBus'
+import { toast } from '@/utils/toast'
 
 const service = axios.create({
   // 开发环境通过 Vite 代理转发到后端（见 vite.config.js）
@@ -56,7 +60,9 @@ service.interceptors.response.use(
     const res = response.data
     // 约定后端成功时 code === 0
     if (res.code !== 0 && res.code !== undefined) {
-      return Promise.reject(new Error(res.message || '请求失败'))
+      const message = res.message || '请求失败'
+      if (!response.config.silent) toast(message, 'error')
+      return Promise.reject(new Error(message))
     }
     return res.data
   },
@@ -81,6 +87,9 @@ service.interceptors.response.use(
       localStorage.removeItem('token')
       localStorage.removeItem('user')
       if (location.pathname !== '/login') location.href = '/login'
+    } else if (!error.config?.silent) {
+      // 统一错误提示（401 已由跳转登录页兜底，不再叠加 toast）
+      toast(message, 'error')
     }
     error.message = message
     return Promise.reject(error)

@@ -26,7 +26,7 @@ from app.services.b_platform.base import BPlatformError
 from app.services.crypto import decrypt
 from app.services.image_store import consume_next_image
 from app.services.push_render import build_ctx, send_channel
-from app.utils.schedule_utils import compute_next_run, extract_schedule_time
+from app.utils.schedule_utils import compute_next_run, extract_jitter_minutes, extract_schedule_time
 
 log = logging.getLogger('scheduler')
 
@@ -175,16 +175,12 @@ def _prune_old_sign_records():
 
 
 def _extract_jitter(schedule):
-    """随机延迟上限（分钟）→ 供 CronTrigger jitter 使用（秒）。
+    """随机延迟上限（分钟）→ 供 CronTrigger.jitter 使用（秒）。
     统一从解析后的配置 time.randomDelayMax 取（standalone/follow 二者均落在 _resolve 的完整配置里）；
     custom 为内联 time-only 扁平结构，随机延迟在 schedule.custom 顶层。旧实现对 standalone 误读
-    schedule.custom（空）导致 jitter=0、多任务整点一起触发，现已修正。"""
-    if schedule.mode == 'custom':
-        return int((schedule.custom or {}).get('randomDelayMax') or 0)
-    resolved = _resolve(schedule)
-    if resolved is None:
-        return 0
-    return int((resolved.get('time') or {}).get('randomDelayMax') or 0)
+    schedule.custom（空）导致 jitter=0、多任务整点一起触发，现已修正。
+    口径实现在 schedule_utils.extract_jitter_minutes（与前端展示的 nextRunJitterMin 共用）。"""
+    return extract_jitter_minutes(schedule)
 
 
 def _register_job(schedule):

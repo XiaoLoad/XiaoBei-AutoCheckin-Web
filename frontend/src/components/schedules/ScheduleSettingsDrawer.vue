@@ -169,6 +169,7 @@ const form = reactive({
 })
 
 const followText = computed(() => nextRunSummary('follow', form.custom, configMeta))
+// 仅预览未保存的表单改动；线上展示走后端 nextRunAt（见 utils/schedule.js 头注释的职责边界）
 const previewText = computed(() => {
   const date = computeNextRun(form.mode, form.custom, configMeta)
   return formatNextRun(date).text

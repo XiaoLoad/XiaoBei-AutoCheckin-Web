@@ -38,7 +38,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch } from 'vue'
+import { reactive, computed, watch } from 'vue'
 import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import BaseModal from '@/components/BaseModal.vue'

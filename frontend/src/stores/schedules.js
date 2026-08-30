@@ -5,7 +5,7 @@ import { ref, computed } from 'vue'
 import { toast } from '@/utils/toast'
 import * as api from '@/api/schedules'
 import { useSignConfigStore } from '@/stores/signConfig'
-import { computeNextRun, formatNextRun, nextRunSummary } from '@/utils/schedule'
+import { nextRunSummary } from '@/utils/schedule'
 
 // 开启前预校验：返回 null 表示可开启，否则返回错误文案（与后端 4401/4402 呼应）
 function enableBlockReason(s) {
@@ -42,15 +42,8 @@ export const useSchedulesStore = defineStore('schedules', () => {
     }
     return useSignConfigStore().taskConfigMetaOf(accountId, taskType)
   }
-  // 计算某任务的"下一次执行" Date
-  function nextRunOf(s) {
-    return computeNextRun(s.mode, s.custom, configMetaOf(s.accountId, s.taskType))
-  }
-  // 计算某任务的"下一次执行"可读文案
-  function nextRunTextOf(s) {
-    return formatNextRun(nextRunOf(s)).text
-  }
-  // 模式摘要文案（卡片 chip 使用）
+  // 模式摘要文案（卡片 chip 使用）。下次执行时间的唯一事实源是后端 nextRunAt
+  // （含 jitter 口径，见 utils/schedule.js 头注释）；本地不再重复实现一份计算
   function nextRunSummaryOf(s) {
     return nextRunSummary(s.mode, s.custom, configMetaOf(s.accountId, s.taskType))
   }
@@ -171,8 +164,6 @@ export const useSchedulesStore = defineStore('schedules', () => {
     saving,
     schedules,
     configMetaOf,
-    nextRunOf,
-    nextRunTextOf,
     nextRunSummaryOf,
     load,
     toggle,

@@ -37,12 +37,18 @@ def _make_cred(db, user_id, channel, fields):
     return c.id
 
 
-def _capture(monkeypatch):
+def _capture(monkeypatch, body=None):
+    """伪造 requests.post：默认返回各通道业务成功码；body 可覆盖以模拟平台拒绝。
+    HTTP 层通不代表送达——业务码校验依赖响应体，fake 须提供 json()。"""
     calls = []
 
     def fake_post(url, **kw):
         calls.append((url, kw))
-        return type('R', (), {'status_code': 200})()
+        if body is None:
+            payload = {'code': 200, 'msg': 'ok'} if 'pushplus' in url else {'code': 0, 'message': ''}
+        else:
+            payload = body
+        return type('R', (), {'status_code': 200, 'json': lambda self: payload})()
 
     monkeypatch.setattr(sch.requests, 'post', fake_post)
     return calls
@@ -131,3 +137,52 @@ def test_dispatch_skip_fires_when_notify_skip_on(app_ctx, monkeypatch):
 
     assert len(calls) == 1
     assert '跳过' in calls[0][1]['data']['title']
+
+
+def _resolved_for(channels, cred_ids=None, cred=None, uid=None):
+    return {'push': {
+        'channels': channels,
+        'useOwnCredential': cred_ids is not None,
+        'credIds': cred_ids or {'serverchan': None, 'pushplus': None, 'email': None},
+        'cred': cred or {},
+        'notify': {'success': True, 'skip': False, 'fail': False},
+    }}
+
+
+def test_send_channel_serverchan_rejected_on_business_code(monkeypatch):
+    """ServerChan HTTP 200 但 code!=0（如 key 无效）必须判失败并带回平台原因"""
+    from app.services.push_render import send_channel, build_ctx
+    monkeypatch.setattr(
+        sch.requests, 'post',
+        lambda url, **kw: type('R', (), {'status_code': 200,
+                                         'json': lambda self: {'code': 400, 'message': '无效的key'}})())
+    ctx = build_ctx(_FakeAcc(), _FakeSchedule(1), {}, 'success')
+    ok, err = send_channel('serverchan', 'SCTbad', ctx)
+    assert ok is False
+    assert 'code=400' in err and '无效的key' in err
+
+
+def test_send_channel_pushplus_rejected_on_business_code(monkeypatch):
+    """PushPlus HTTP 200 但 code!=200（如 token 失效）必须判失败并带回平台原因"""
+    from app.services.push_render import send_channel, build_ctx
+    monkeypatch.setattr(
+        sch.requests, 'post',
+        lambda url, **kw: type('R', (), {'status_code': 200,
+                                         'json': lambda self: {'code': 903, 'msg': 'token验证失败'}})())
+    ctx = build_ctx(_FakeAcc(), _FakeSchedule(1), {}, 'success')
+    ok, err = send_channel('pushplus', 'PPTbad', ctx)
+    assert ok is False
+    assert 'code=903' in err and 'token验证失败' in err
+
+
+def test_send_channel_non_json_response_is_failure(monkeypatch):
+    """响应体非 JSON（网关错误页等）不得假报成功"""
+    from app.services.push_render import send_channel, build_ctx
+    monkeypatch.setattr(
+        sch.requests, 'post',
+        lambda url, **kw: type('R', (), {'status_code': 502,
+                                         'json': lambda self: (_ for _ in ()).throw(ValueError())})())
+    ctx = build_ctx(_FakeAcc(), _FakeSchedule(1), {}, 'success')
+    ok, err = send_channel('serverchan', 'SCTx', ctx)
+    assert ok is False
+    assert '502' in err

@@ -644,7 +644,7 @@ async function confirmBatchMove() {
   const ids = [...selectedIds.value]
   batchMoving.value = true
   try {
-    const { successIds, failed } = await runBatch(ids, (id) => store.moveImage(id, target))
+    const { successIds, failed } = await runBatch(ids, (id) => store.moveImage(id, target, { silent: true }))
     showBatchMove.value = false
     clearSelect()
     const gname = target == null ? '未分组' : (store.imageGroups.find((g) => g.id === target)?.name || '分组')
@@ -665,7 +665,7 @@ function confirmBatchTrash() {
 async function confirmBatchTrashOk() {
   const ids = [...selectedIds.value]
   showBatchTrash.value = false
-  const { successIds, failed } = await runBatch(ids, (id) => store.trashImage(id))
+  const { successIds, failed } = await runBatch(ids, (id) => store.trashImage(id, { silent: true }))
   clearSelect()
   if (successIds.length) {
     undoState.value.ids = successIds
@@ -681,7 +681,7 @@ async function undoBatchTrash() {
   undoState.value.visible = false
   if (undoState.value.timer) clearTimeout(undoState.value.timer)
   if (!ids.length) return
-  const { failed } = await runBatch(ids, (id) => store.restoreImage(id))
+  const { failed } = await runBatch(ids, (id) => store.restoreImage(id, { silent: true }))
   if (failed.length) toast(`撤销失败 ${failed.length} 张`, 'error')
   else toast(`已撤销，恢复 ${ids.length} 张至图库`, 'success')
 }
@@ -695,7 +695,7 @@ function confirmBatchPurge() {
 async function confirmBatchPurgeOk() {
   const ids = [...selectedIds.value]
   showBatchPurge.value = false
-  const { successIds, failed } = await runBatch(ids, (id) => store.deleteImage(id))
+  const { successIds, failed } = await runBatch(ids, (id) => store.deleteImage(id, { silent: true }))
   clearSelect()
   if (failed.length) toast(`已删除 ${successIds.length} 张，${failed.length} 张失败`, 'error')
   else toast(`已永久删除 ${successIds.length} 张`, 'success')
@@ -705,7 +705,7 @@ async function confirmBatchPurgeOk() {
 async function batchMarkUsed() {
   if (!selectedIds.value.size) return
   const ids = [...selectedIds.value]
-  const { successIds, failed } = await runBatch(ids, (id) => store.markUsed(id))
+  const { successIds, failed } = await runBatch(ids, (id) => store.markUsed(id, { silent: true }))
   clearSelect()
   if (failed.length) toast(`已标记 ${successIds.length} 张，${failed.length} 张失败`, 'error')
   else toast(`已标记 ${successIds.length} 张为已使用`, 'success')
@@ -715,7 +715,7 @@ async function batchMarkUsed() {
 async function batchRestore() {
   if (!selectedIds.value.size) return
   const ids = [...selectedIds.value]
-  const { successIds, failed } = await runBatch(ids, (id) => store.restoreImage(id))
+  const { successIds, failed } = await runBatch(ids, (id) => store.restoreImage(id, { silent: true }))
   clearSelect()
   if (failed.length) toast(`已恢复 ${successIds.length} 张，${failed.length} 张失败`, 'error')
   else toast(`已恢复 ${successIds.length} 张至图库`, 'success')
@@ -927,7 +927,7 @@ async function handleFiles(fileList) {
       const it = uploadList.value[i]
       it.status = 'uploading'
       try {
-        await store.uploadImage(files[i], uploadGroupId.value, (p) => { it.progress = p })
+        await store.uploadImage(files[i], uploadGroupId.value, (p) => { it.progress = p }, { silent: true })
         it.status = 'done'
         it.progress = 100
         okCount += 1
@@ -1064,6 +1064,11 @@ function onPageSizeChange(size) {
 
 // 缩略图预取：只拉当前页，翻页时增量加载
 watch(pagedList, async (rows) => {
+  // 清理已删除图片的镜像条目（物理删除时 blobCache 已 revoke，这里仅丢弃组件级引用）
+  const alive = new Set(store.imageLibrary.map((i) => i.id))
+  for (const k of Object.keys(urls)) {
+    if (!alive.has(Number(k)) && !alive.has(k)) delete urls[k]
+  }
   for (const r of rows) {
     if (!urls[r.id]) {
       try { urls[r.id] = await fetchImageBlobUrl(r.id) } catch { /* 文件丢失时留图标占位 */ }

@@ -453,10 +453,10 @@
 
         <!-- 日期网格：flex-1 自适应铺满，6 行等分，内部不滚动 -->
         <div class="grid min-h-0 flex-1 grid-cols-7 grid-rows-6 gap-1.5 px-3 pb-3 pt-1 sm:px-4">
-          <template v-if="loadingRecords">
+          <template v-if="loadingRecords || loadingCalendar">
             <div class="col-span-7 flex items-center justify-center text-sm text-ink-muted">加载中…</div>
           </template>
-          <template v-else-if="statusTasks.length === 0">
+          <template v-else-if="stats.total === 0">
             <div class="col-span-7 flex flex-col items-center justify-center gap-2 text-ink-muted">
               <Icon name="calendar" :size="34" class="opacity-40" />
               <p class="text-sm">{{ statusFilter === 'all' ? `${calendarLabel} 暂无签到任务` : '当前筛选条件下没有签到任务' }}</p>
@@ -515,7 +515,7 @@
             <button type="button" class="ml-1 rounded-md px-2 py-0.5 font-medium text-brand hover:bg-brand/10" @click="store.setView('list')">查看当天任务</button>
             <button type="button" class="ml-1 rounded-md px-2 py-0.5 font-medium text-ink-muted hover:bg-cloud" @click="store.clearDayFilter">清除筛选</button>
           </span>
-          <template v-else-if="statusTasks.length > 0 && !monthHasTask">
+          <template v-else-if="stats.total > 0 && !monthHasTask">
             <span>本月暂无签到记录</span>
             <button v-if="bestDataMonth" type="button" class="ml-1 rounded-md px-2 py-0.5 font-medium text-brand hover:bg-brand/10" @click="store.jumpToBestMonth">查看 {{ bestDataMonth.y }}年{{ bestDataMonth.m }}月</button>
           </template>
@@ -548,7 +548,7 @@ const {
   selectedAccountId,
   loadingAccounts,
   loadingRecords,
-  statusTasks,
+  loadingCalendar,
   typeFilter,
   statusFilter,
   viewMode,

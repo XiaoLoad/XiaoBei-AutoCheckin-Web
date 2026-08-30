@@ -215,12 +215,13 @@
 
       <!-- 分页 -->
       <div v-if="!loading && rows.length" class="shrink-0 border-t border-ink/5 px-3 py-2">
-        <Pagination
+        <BasePagination
           :page="page"
           :page-size="pageSize"
           :total="displayTotal"
           :page-size-options="[10, 20, 50]"
           :disabled="loading"
+          show-jump
           @update:page="store.onPageChange"
           @update:page-size="store.onPageSizeChange"
         />
@@ -251,9 +252,6 @@
       @cancel="store.closeDelete"
     />
 
-    <!-- 轻量提示：右下角深色底，样式收敛到共享组件 PageToast（与系统设置页同一出口） -->
-    <PageToast :show="toast.show" :message="toast.message" :type="toast.type" />
-
     <!-- 底部间距占位：真实在流子元素，盒高计入 scrollHeight，不受滚动容器末端 padding/margin 折叠影响；
          -mt-4 sm:-mt-6 抵消根容器 gap-4 sm:gap-6，确保底部间距精确 24px、与其它页面一致 -->
     <div class="h-6 shrink-0 -mt-4 sm:-mt-6" aria-hidden="true"></div>
@@ -261,51 +259,39 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive } from 'vue'
+import { computed, onMounted } from 'vue'
 import StatCard from '@/components/StatCard.vue'
-import Pagination from '@/components/Pagination.vue'
+import BasePagination from '@/components/BasePagination.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
 import UserFormModal from '@/components/UserFormModal.vue'
 import Icon from '@/components/Icon.vue'
-import PageToast from '@/components/PageToast.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import { useUsersStore } from '@/stores/users'
+import { toast } from '@/utils/toast'
 import { storeToRefs } from 'pinia'
 
 // 领域状态下沉到 store：视图只做渲染、展示辅助与 toast 提示
 const store = useUsersStore()
 const {
-  list,
-  total,
   page,
   pageSize,
   keyword,
   roleFilter,
   loading,
   summary,
-  hiddenIds,
   showForm,
   formMode,
   editingUser,
   formSubmitting,
   showDelete,
-  deletingUser,
   deleting,
   rows,
   displayTotal,
   quotaRate
 } = storeToRefs(store)
 
-// 轻量提示
-const toast = reactive({ show: false, message: '', type: 'success' })
-let toastTimer = null
-function showToast(message, type = 'success') {
-  toast.message = message
-  toast.type = type
-  toast.show = true
-  if (toastTimer) clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => (toast.show = false), 2600)
-}
+// 提示口径：成功/自定义文案用全局 toast 就地展示；接口失败由 request.js 统一 toast，
+// 本视图的 catch 只吞掉 rejection（避免未处理 Promise 告警），不再重复提示
 
 // 删除确认文案
 const deleteMessage = computed(() =>
@@ -338,32 +324,32 @@ function quotaTextClass(item) {
 
 // 事件包装：调用 store action 并负责 toast 反馈
 function refresh() {
-  store.fetchUsers().catch((e) => showToast(e.message || '获取用户列表失败', 'error'))
+  store.fetchUsers().catch(() => {})
 }
 async function onToggle(item) {
   const next = !item.enabled
   try {
     await store.toggleStatus(item)
-    showToast(next ? '已启用该用户' : '已禁用该用户', 'success')
-  } catch (e) {
-    showToast(e.message || '状态更新失败', 'error')
+    toast(next ? '已启用该用户' : '已禁用该用户', 'success')
+  } catch {
+    /* 失败已由 request.js 全局 toast */
   }
 }
 async function onConfirmDelete() {
   const name = store.deletingUser?.username
   try {
     await store.confirmDelete()
-    showToast(`已删除用户「${name}」`, 'success')
-  } catch (e) {
-    showToast(e.message || '删除失败', 'error')
+    toast(`已删除用户「${name}」`, 'success')
+  } catch {
+    /* 失败已由 request.js 全局 toast */
   }
 }
 async function onSubmit(payload) {
   try {
     await store.handleFormSubmit(payload)
-    showToast(store.formMode === 'add' ? '用户创建成功' : '保存成功', 'success')
-  } catch (e) {
-    showToast(e.message || '操作失败', 'error')
+    toast(store.formMode === 'add' ? '用户创建成功' : '保存成功', 'success')
+  } catch {
+    /* 失败已由 request.js 全局 toast */
   }
 }
 

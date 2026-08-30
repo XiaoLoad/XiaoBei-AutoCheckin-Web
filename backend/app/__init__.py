@@ -28,6 +28,7 @@ from app.services.scheduler import init_scheduler
 def create_app(env_name=None):
     app = Flask(__name__)
     app.config.from_object(get_config(env_name))
+    _assert_production_secrets(app)
 
     # 跨域：开发环境允许前端 5173 端口访问，并放行 Authorization 头
     CORS(
@@ -89,6 +90,32 @@ def create_app(env_name=None):
 def _migrations_dir(app):
     """迁移脚本目录：backend/migrations（app 包的上一级）"""
     return os.path.join(os.path.dirname(app.root_path), 'migrations')
+
+
+# 开发默认值（与 config.Config 中的 fallback 保持一致）；生产环境命中即拒绝启动
+_DEV_DEFAULT_SECRET_KEY = 'dev-secret-key'
+_DEV_DEFAULT_JWT_SECRET = 'dev-jwt-secret-change-me'
+_DEV_DEFAULT_DB_URI = 'mysql+pymysql://root:123456@localhost:3306/xiaobei_auto?charset=utf8mb4'
+
+
+def _assert_production_secrets(app):
+    """生产环境密钥守护：SECRET_KEY 派生 Fernet 凭据加密、JWT 签发会话，
+    若仍为公开在仓库里的开发默认值，等于凭据与会话对任何拿到代码的人透明。
+    命中即拒绝启动（而非降级警告），逼出 .env 配置。"""
+    if app.config.get('ENV') != 'production':
+        return
+    problems = []
+    if app.config['SECRET_KEY'] == _DEV_DEFAULT_SECRET_KEY:
+        problems.append('SECRET_KEY 仍为开发默认值')
+    if app.config['JWT_SECRET_KEY'] == _DEV_DEFAULT_JWT_SECRET:
+        problems.append('JWT_SECRET_KEY 仍为开发默认值')
+    if app.config['SQLALCHEMY_DATABASE_URI'] == _DEV_DEFAULT_DB_URI:
+        problems.append('数据库连接串仍为开发默认（root/123456）')
+    if problems:
+        raise RuntimeError(
+            '生产环境启动被拒绝：' + '；'.join(problems)
+            + '。请在环境变量或 backend/.env 中配置后再以 production 启动'
+        )
 
 
 def _init_database(app):

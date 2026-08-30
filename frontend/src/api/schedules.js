@@ -35,7 +35,9 @@ function mapItem(it) {
     custom: normalizeCustom(it.custom),
     overrides: it.overrides || {},
     enabled: !!it.enabled,
+    // nextRunAt 为未叠加随机延迟的基线时刻（后端唯一事实源）；nextRunJitterMin 供卡片标注「±N分」
     nextRunAt: it.nextRunAt || '',
+    nextRunJitterMin: it.nextRunJitterMin || 0,
     lastRun: it.lastRunAt || '',
     lastStatus: it.lastStatus || 'never',
     runCount: it.runCount || 0
@@ -48,16 +50,17 @@ export async function fetchSchedules() {
   return (data.items || []).map(mapItem)
 }
 
-// 更新单个定时任务（保存定时设置：mode / custom）
+// 更新单个定时任务（保存定时设置：mode / custom / config / 绑定变更）
+// silent：调用方（schedules / signConfig store）均自带 catch+toast，关闭全局提示避免双重
 export async function updateSchedule(payload) {
   const { id, ...rest } = payload
-  const data = await request({ url: `/schedules/${id}`, method: 'put', data: rest })
+  const data = await request({ url: `/schedules/${id}`, method: 'put', data: rest, silent: true })
   return mapItem(data)
 }
 
 // 开启 / 暂停 单个定时任务
 export async function toggleSchedule(id, enabled) {
-  const data = await request({ url: `/schedules/${id}`, method: 'put', data: { enabled } })
+  const data = await request({ url: `/schedules/${id}`, method: 'put', data: { enabled }, silent: true })
   return mapItem(data)
 }
 
@@ -65,22 +68,24 @@ export async function toggleSchedule(id, enabled) {
 export async function createSchedule(payload) {
   const data = await request({
     url: '/schedules', method: 'post',
-    data: { accountId: payload.accountId, taskType: payload.taskType }
+    data: { accountId: payload.accountId, taskType: payload.taskType },
+    silent: true
   })
   return mapItem(data)
 }
 
 // 删除定时任务实例
 export async function deleteSchedule(id) {
-  await request({ url: `/schedules/${id}`, method: 'delete' })
+  await request({ url: `/schedules/${id}`, method: 'delete', silent: true })
 }
 
 // ── 任务实例与配置套的绑定（真实 /api/schedules）──
 // 返回 { `${accountId}:${taskType}`: { scheduleId, configSetId, enabled, overrides, 运行信息 } }，
 // configSetId 为 null 表示未绑定；overrides 为字段级覆盖（顶层配置键 → 替换值）。
 // [类型约定] id 统一字符串化：需与 userConfigSets 的 id（mapSetIn 已 String）严格相等匹配
+// silent：signConfig.refreshBindings 刻意吞错降级为空绑定，失败不打扰全局
 export async function fetchScheduleBindings() {
-  const data = await request({ url: '/schedules', method: 'get' })
+  const data = await request({ url: '/schedules', method: 'get', silent: true })
   const map = {}
   for (const s of (data.items || [])) {
     map[`${s.accountId}:${s.taskType}`] = {
@@ -98,11 +103,4 @@ export async function fetchScheduleBindings() {
 }
 
 // 将某配置套应用到任务：仅传 configSetId，后端自动置 mode=follow
-export async function bindScheduleConfigSet(scheduleId, configSetId) {
-  const data = await request({
-    url: `/schedules/${scheduleId}`,
-    method: 'put',
-    data: { configSetId: configSetId == null ? null : Number(configSetId) }
-  })
-  return mapItem(data)
-}
+// （历史上另有 bindScheduleConfigSet 直通包装，已随「套用即快照」语义并入 updateSchedule 删除）

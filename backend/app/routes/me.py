@@ -36,14 +36,36 @@ def me_overview():
     quota_used = user.used_quota if user else 0
     quota_pct = round(quota_used / quota_limit * 100) if quota_limit else 0
 
+    # 任务（schedules）：一次拉全后内存按账号分组，供资格判定与 sign_tasks 派生复用，
+    # 避免每账号各查一遍 Schedule（sign_tasks 内部还会再查一次）造成 3N+ 查询
+    schedules = Schedule.query.filter_by(user_id=uid).all()
+    scheds_by_account = {}
+    for s in schedules:
+        scheds_by_account.setdefault(s.account_id, []).append(s)
+
     # 账号（本人 b_accounts）；仪表盘仅展示「已启用定时任务且配置了配置套」的账号，
     # 并派生类型标签（寝室/活动/通用）+ 平台档案（姓名/学院/专业/班级）。
     accounts = BAccount.query.filter_by(user_id=uid).order_by(BAccount.id.desc()).all()
     account_total = len(accounts)
 
-    def _account_qualifies(acc):
+    def _sign_tasks_of(acc_id):
+        """该账号已添加定时任务的签到类型及启用态（对齐 BAccount.sign_tasks 口径，
+        但吃内存分组数据，不再逐账号回查）。"""
+        rows = scheds_by_account.get(acc_id, [])
+        out = []
+        for t in ('dorm', 'activity'):
+            s = next((x for x in rows if x.task_type == t), None)
+            out.append({
+                'type': t,
+                'enabled': bool(s.enabled) if s else False,
+                'exists': s is not None,
+                'configSetId': s.config_set_id if (s and s.config_set_id is not None) else None,
+            })
+        return out
+
+    def _account_qualifies(acc_id):
         """账号是否「启用了定时任务且配置了配置套」（follow 引用配置套或 standalone 自持配置）。"""
-        for s in Schedule.query.filter_by(account_id=acc.id).all():
+        for s in scheds_by_account.get(acc_id, []):
             if s.enabled and (s.config_set_id is not None or s.has_own_config):
                 return True
         return False
@@ -62,10 +84,10 @@ def me_overview():
 
     account_items = []
     for a in accounts:
-        if not _account_qualifies(a):
+        if not _account_qualifies(a.id):
             continue
         p = a.profile
-        st = a.sign_tasks()
+        st = _sign_tasks_of(a.id)
         account_items.append({
             'id': a.id,
             'account': a.account,
@@ -83,8 +105,7 @@ def me_overview():
     # 最近打卡时间倒序（无时间排末尾），让「最近活跃」的账号靠前
     account_items.sort(key=lambda x: x['lastSignIn'] or '0000', reverse=True)
 
-    # 任务（schedules 计数 / 启用计数）
-    schedules = Schedule.query.filter_by(user_id=uid).all()
+    # 任务计数（复用已拉取的全量列表）
     tasks_total = len(schedules)
     tasks_active = sum(1 for s in schedules if s.enabled)
 

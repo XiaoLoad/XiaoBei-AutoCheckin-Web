@@ -225,33 +225,19 @@
     <!-- 底部间距占位：真实在流子元素，盒高计入 scrollHeight，不受滚动容器末端 padding/margin 折叠影响；
          -mt-4 sm:-mt-6 抵消根容器 gap-4 sm:gap-6，确保底部间距精确 24px、与其它页面一致 -->
     <div class="h-6 shrink-0 -mt-4 sm:-mt-6" aria-hidden="true"></div>
-
-    <!-- 轻量提示：右下角深色底，与全站页面动作反馈一致 -->
-    <PageToast :show="toast.show" :message="toast.message" :type="toast.type" />
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import Icon from '@/components/Icon.vue'
-import PageToast from '@/components/PageToast.vue'
 import ConfigToggle from '@/components/signconfig/ConfigToggle.vue'
 import * as authApi from '@/api/auth'
 import { getSettings, updateSettings, getSystemInfo } from '@/api/settings'
 import { useAuthStore } from '@/stores/auth'
+import { toast } from '@/utils/toast'
 
 const auth = useAuthStore()
-
-// ==================== 页面级轻提示（右下角深色底，状态本地持有） ====================
-const toast = reactive({ show: false, message: '', type: 'success' })
-let toastTimer = null
-function showToast(message, type = 'success') {
-  toast.message = message
-  toast.type = type
-  toast.show = true
-  if (toastTimer) clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => (toast.show = false), 2600)
-}
 
 // ==================== 区一：修改密码 ====================
 const pwdForm = reactive({ old: '', next: '', confirm: '' })
@@ -277,12 +263,12 @@ async function onChangePassword() {
   pwdSubmitting.value = true
   try {
     await authApi.changePassword({ old_password: pwdForm.old, new_password: pwdForm.next })
-    showToast('密码修改成功', 'success')
+    toast('密码修改成功', 'success')
     pwdForm.old = ''
     pwdForm.next = ''
     pwdForm.confirm = ''
-  } catch (err) {
-    showToast(err.message || '密码修改失败', 'error')
+  } catch {
+    /* 失败已由 request.js 全局 toast 提示 */
   } finally {
     pwdSubmitting.value = false
   }
@@ -313,8 +299,8 @@ async function loadSettings() {
   try {
     const data = await getSettings()
     applyItems(data.items)
-  } catch (err) {
-    showToast(err.message || '系统参数加载失败', 'error')
+  } catch {
+    /* 失败已由 request.js 全局 toast 提示 */
   } finally {
     settingsLoading.value = false
   }
@@ -340,9 +326,9 @@ async function onSaveSettings() {
   try {
     const data = await updateSettings(changed)
     applyItems(data.items)
-    showToast('设置已保存', 'success')
-  } catch (err) {
-    showToast(err.message || '保存失败', 'error')
+    toast('设置已保存', 'success')
+  } catch {
+    /* 失败已由 request.js 全局 toast 提示 */
   } finally {
     saving.value = false
   }
@@ -351,8 +337,6 @@ async function onSaveSettings() {
 // ==================== 区三：系统信息（仅管理员） ====================
 const sysInfo = ref(null)
 const infoLoading = ref(false)
-// 最近一次刷新时间（HH:mm:ss）：让刷新按钮有可感知的结果反馈
-const lastRefreshed = ref('')
 
 const dbOk = computed(() => sysInfo.value?.database?.status === 'ok')
 // 环境状态点：生产绿（稳定信号）/ 非生产琥珀（提示信号）；徽标文字恒白，颜色只落在圆点上
@@ -370,11 +354,6 @@ const startedAtLabel = computed(() => {
   return raw ? '启动于 ' + raw.slice(5, 16) : ''
 })
 const usersTotal = computed(() => String(sysInfo.value?.users?.total ?? '-'))
-const usersByRole = computed(() => {
-  const u = sysInfo.value?.users
-  if (!u) return ''
-  return '管理员 ' + u.admins + ' · 用户 ' + u.users
-})
 
 function formatUptime(seconds) {
   if (seconds === undefined || seconds === null) return '-'
@@ -390,9 +369,8 @@ async function loadSystemInfo() {
   infoLoading.value = true
   try {
     sysInfo.value = await getSystemInfo()
-    lastRefreshed.value = new Date().toTimeString().slice(0, 8)
-  } catch (err) {
-    showToast(err.message || '系统信息加载失败', 'error')
+  } catch {
+    /* 失败已由 request.js 全局 toast 提示 */
   } finally {
     infoLoading.value = false
   }

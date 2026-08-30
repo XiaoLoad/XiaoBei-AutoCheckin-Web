@@ -1,17 +1,21 @@
-// 签到记录领域状态（Pinia）：收纳账号列表 / 选中账号 / 类型筛选 / 视图模式 / 分页 /
-// 日历定位 / 任务列表 / 展开详情。数据来自 B 平台、经后端代理读取（api/signRecords.js），
-// 本 store 只做编排。
+// 签到记录领域状态（Pinia）：收纳账号列表 / 选中账号 / 类型与状态筛选 / 视图模式 /
+// 服务端分页 / 日历定位 / 任务列表 / 展开详情。数据来自 B 平台、经后端代理读取
+// （api/signRecords.js），本 store 只做编排。
 //
-// 账号 / 类型切换走显式 selectAccount / setType，不依赖 watch 隐式链路。
+// [数据口径（服务端分页改造）]
+// - 列表：page/pageSize/type/status/日期窗口全部由后端筛选分页，前端不再全量拉取；
+//   统计卡（overview）与最近数据月份（meta.latest）由后端按全历史口径随每次响应返回，
+//   与「统计跟随状态筛选、不受日历点选影响」的原口径一致。
+// - 日历：按 42 格网格窗口（date_from=首格日、date_to=末格日）向后端取当窗任务，
+//   前端按任务区间展开着色；结果按 账号|类型|状态|年月 缓存，切月不重复请求。
+// - 竞态守卫：列表请求带序号、日历请求带 key 比对，仅采纳最新一次的结果，
+//   杜绝快速切换账号/类型时旧响应覆盖新数据。
+//
 // 日历着色直接用任务列表自带的 finished（isFinishKnowing / isFinishSign）——2026-08-29
-// 抓包实证该字段会取 0 表示漏签（如 07.02查寝签到、05.28班会签到），无需再逐任务查
-// listLog 聚合，日历因此即时渲染、没有「待聚合」等待。listLog 仅用于展开详情按需拉取。
+// 抓包实证该字段会取 0 表示漏签，无需逐任务查 listLog；listLog 仅用于展开详情按需拉取。
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { fetchAccounts, fetchSignRecords, fetchTaskDetail } from '@/api/signRecords'
-
-// 历史任务量有限（寝/活各自数十~数百级），一次拉全量后在客户端分页，统计口径才与全局一致
-const ALL_PAGE_SIZE = 9999
 
 // 本地日期格式（避开 toISOString 的 UTC 时区偏移，否则 GMT+8 会差一天）
 function fmt(d) {
@@ -32,7 +36,7 @@ function normalizeDate(s) {
   return /^\d{4}-\d{2}-\d{2}$/.test(head) ? head : null
 }
 
-// 展开任务日期区间覆盖的每一天（含端点）；默认单日。上限 92 天，避免长任务淹没整月。
+// 展开任务日期区间覆盖的每一天（含端点）；默认单日。上限 92 天，避免长任务淹没日历。
 function eachDayInRange(start, end) {
   const out = []
   const s = normalizeDate(start)
@@ -50,12 +54,21 @@ function eachDayInRange(start, end) {
   return out
 }
 
+const EMPTY_OVERVIEW = { total: 0, finished: 0, unsigned: 0, needPhoto: 0, rate: 0 }
+
 export const useSignRecordsStore = defineStore('signRecords', () => {
   const accounts = ref([])
   const selectedAccountId = ref(null)
   const loadingAccounts = ref(false)
   const loadingRecords = ref(false)
-  const tasks = ref([]) // 当前账号 + 类型下的全部历史任务（后端已合并排序）
+  const loadingCalendar = ref(false)
+  // 当前列表页数据（服务端分页的一页）与服务端总数
+  const tasks = ref([])
+  const total = ref(0)
+  // 全历史口径统计（后端随列表响应返回，status 筛选跟随、日期窗口不影响）
+  const overview = ref({ ...EMPTY_OVERVIEW })
+  // 全历史口径最近有任务的日期（'YYYY-MM-DD'，驱动日历「最近有数据月份」）
+  const dataLatest = ref(null)
 
   // 类型筛选：all（全部）| dorm（寝室签到）| activity（活动签到）
   const typeFilter = ref('all')
@@ -63,7 +76,7 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
   const statusFilter = ref('all')
   // 视图模式：list（列表）| calendar（日历）
   const viewMode = ref('list')
-  // 列表分页：当前页 / 每页条数（作用于已拉取的全量任务；dayFilter 时作用于当日子集）
+  // 列表分页：当前页 / 每页条数（服务端分页）
   const page = ref(1)
   const pageSize = ref(10)
 
@@ -72,6 +85,16 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
   const calendarYear = ref(now.getFullYear())
   const calendarMonth = ref(now.getMonth() + 1)
   const dayFilter = ref(null) // 'YYYY-MM-DD' 或 null
+
+  // 日历月份数据缓存：`${accountId}|${type}|${status}|${y}-${m}` -> 日期聚合
+  // （key 含筛选维度，天然隔离，无需手动失效）
+  const monthCache = ref({})
+  const monthKey = computed(
+    () =>
+      `${selectedAccountId.value}|${typeFilter.value}|${statusFilter.value}|` +
+      `${calendarYear.value}-${String(calendarMonth.value).padStart(2, '0')}`
+  )
+  const monthDays = computed(() => monthCache.value[monthKey.value] || null)
 
   // 展开详情：taskId -> { loading, open, geoFence, logs, error }
   const details = ref({})
@@ -89,60 +112,16 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     () => accounts.value.find((a) => toNum(a.id) === selectedAccountId.value) || null
   )
 
-  // 状态筛选后的任务：统计卡与日历着色的共同口径。
-  // 刻意不叠加日历点选的某天（dayFilter）——下钻只是临时查看，不该让概览指标跟着跳变。
-  const statusTasks = computed(() => {
-    const st = statusFilter.value
-    if (st === 'signed') return tasks.value.filter((t) => t.finished)
-    if (st === 'unsigned') return tasks.value.filter((t) => !t.finished)
-    if (st === 'needPhoto') return tasks.value.filter((t) => t.needPhoto)
-    return tasks.value
-  })
+  // 统计卡口径：后端全历史统计（type+status 过滤，与日历口径一致、不受日历点选影响）
+  const stats = computed(() => overview.value)
 
-  // 统计：签到总任务 / 已签到 / 未签到 / 满勤率（与日历口径一致，不受日历点选的某天影响）
-  const stats = computed(() => {
-    const list = statusTasks.value
-    const total = list.length
-    const finished = list.filter((t) => t.finished).length
-    return {
-      total,
-      finished,
-      unsigned: total - finished,
-      needPhoto: list.filter((t) => t.needPhoto).length,
-      rate: total ? Math.round((finished / total) * 100) : 0,
-    }
-  })
+  // 列表当前页（服务端分页结果；保留 pagedRows 名称以维持视图契约）
+  const pagedRows = computed(() => tasks.value)
 
-  // 列表可见任务：状态筛选之上再叠加日历点选的某天
-  const visibleTasks = computed(() => {
-    if (!dayFilter.value) return statusTasks.value
-    return statusTasks.value.filter((t) =>
-      eachDayInRange(t.startDate, t.endDate).includes(dayFilter.value)
-    )
-  })
-
-  const total = computed(() => visibleTasks.value.length)
   const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
-  const pagedRows = computed(() => {
-    const start = (page.value - 1) * pageSize.value
-    return visibleTasks.value.slice(start, start + pageSize.value)
-  })
 
-  // 每日签到统计：直接按任务自身的 finished（isFinishKnowing / isFinishSign）聚合到日期。
-  // overlist 已给出每条任务的签到状态（2026-08-29 抓包实证：isFinishKnowing/isFinishSign
-  // 存在 0 值，正是漏签），故无需再逐任务查 listLog —— 日历可即时着色，不再有「待聚合」等待。
-  // 同一天可能有多条任务，因此分别统计已签 / 漏签条数。
-  const dayStats = computed(() => {
-    const acc = {}
-    for (const t of statusTasks.value) {
-      for (const d of eachDayInRange(t.startDate, t.endDate)) {
-        const s = acc[d] || (acc[d] = { signed: 0, unsigned: 0 })
-        if (t.finished) s.signed += 1
-        else s.unsigned += 1
-      }
-    }
-    return acc
-  })
+  // 每日签到统计：由日历窗口内任务按自身 finished 聚合到日期（服务端已按窗口取数）
+  const dayStats = computed(() => monthDays.value || {})
 
   // 日历网格：以周日为一周起点；当天只要有漏签即标红，全部完成才标绿，无任务为灰
   const calendarWeeks = computed(() => {
@@ -182,24 +161,12 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     calendarWeeks.value.some((w) => w.some((c) => c.state !== 'none'))
   )
 
-  // 最近有数据的月份：取任务区间起点与已签日期中最晚的一个（用于自动跳转 / 一键回到最新）
+  // 最近有数据的月份：后端 meta.latest_date（全历史口径），用于自动跳转 / 一键回到最新
   const bestDataMonth = computed(() => {
-    let best = null
-    const consider = (y, m) => {
-      if (!best || y > best.y || (y === best.y && m > best.m)) best = { y, m }
-    }
-    for (const t of statusTasks.value) {
-      const s = normalizeDate(t.startDate)
-      if (s) {
-        const [y, m] = s.split('-').map(Number)
-        consider(y, m)
-      }
-    }
-    for (const d of Object.keys(dayStats.value)) {
-      const [y, m] = d.split('-').map(Number)
-      consider(y, m)
-    }
-    return best
+    const d = dataLatest.value
+    if (!d) return null
+    const [y, m] = d.split('-').map(Number)
+    return { y, m }
   })
 
   // 本月概览（签名元素）：按任务条数统计已签 / 漏签 / 完成率，仅统计当月真实格
@@ -213,9 +180,9 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
         unsigned += c.unsigned
       }
     }
-    const total = signed + unsigned
-    const rate = total ? Math.round((signed / total) * 100) : 0
-    return { signed, unsigned, total, rate }
+    const total2 = signed + unsigned
+    const rate = total2 ? Math.round((signed / total2) * 100) : 0
+    return { signed, unsigned, total: total2, rate }
   })
 
   async function loadAccounts() {
@@ -237,40 +204,90 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     await loadRecords()
   }
 
-  async function loadRecords() {
+  // 拉取列表页（服务端分页）。dayFilter 点选时窗口收窄为当天，统计卡仍为全历史口径
+  let listSeq = 0
+  async function loadList() {
     if (!selectedAccountId.value) {
       tasks.value = []
-      logsCache.value = {}
-      details.value = {}
-      dayFilter.value = null
+      total.value = 0
+      overview.value = { ...EMPTY_OVERVIEW }
+      dataLatest.value = null
       return
     }
+    const seq = ++listSeq
+    const day = dayFilter.value
     loadingRecords.value = true
-    details.value = {}
-    page.value = 1
-    dayFilter.value = null
-    // 账号 / 类型已变，旧的任务签到缓存（展开详情用）作废
-    logsCache.value = {}
     try {
       const res = await fetchSignRecords(selectedAccountId.value, {
         type: typeFilter.value,
-        page: 1,
-        pageSize: ALL_PAGE_SIZE,
+        status: statusFilter.value,
+        page: page.value,
+        pageSize: pageSize.value,
+        dateFrom: day || undefined,
+        dateTo: day || undefined,
       })
-      tasks.value = res.items || []
-      // 当前月无数据则自动跳到最近有数据的月份，避免日历一片空白
-      syncCalendarToData()
+      if (seq !== listSeq) return // 竞态守卫：仅采纳最新请求
+      tasks.value = res.items
+      total.value = res.total
+      if (res.overview) overview.value = res.overview
+      if (res.meta && res.meta.latest_date) dataLatest.value = res.meta.latest_date
     } finally {
-      loadingRecords.value = false
+      if (seq === listSeq) loadingRecords.value = false
     }
-    // 日历着色直接来自任务列表的 finished 字段，无需任何额外聚合请求
+  }
+
+  // 拉取日历 42 格网格窗口的任务并聚合着色（按 账号|类型|状态|年月 缓存）
+  let monthSeq = 0
+  async function loadMonth() {
+    if (!selectedAccountId.value) return
+    const key = monthKey.value
+    if (monthCache.value[key]) return
+    const seq = ++monthSeq
+    const y = calendarYear.value
+    const m = calendarMonth.value
+    const lead = new Date(y, m - 1, 1).getDay() // 周日=0
+    const first = new Date(y, m - 1, 1 - lead)
+    const last = new Date(first)
+    last.setDate(first.getDate() + 41)
+    loadingCalendar.value = true
+    try {
+      const res = await fetchSignRecords(selectedAccountId.value, {
+        type: typeFilter.value,
+        status: statusFilter.value,
+        page: 1,
+        pageSize: 200, // 单月窗口内的任务量级，200 足够（后端上限 200）
+        dateFrom: fmt(first),
+        dateTo: fmt(last),
+      })
+      if (seq !== monthSeq || key !== monthKey.value) return // 切月竞态守卫
+      const acc = {}
+      for (const t of res.items) {
+        for (const d of eachDayInRange(t.startDate, t.endDate)) {
+          const s = acc[d] || (acc[d] = { signed: 0, unsigned: 0 })
+          if (t.finished) s.signed += 1
+          else s.unsigned += 1
+        }
+      }
+      monthCache.value = { ...monthCache.value, [key]: acc }
+    } finally {
+      if (seq === monthSeq) loadingCalendar.value = false
+    }
+  }
+
+  // 账号/类型切换的整备动作：重置分页与日历点选、作废展开缓存，列表与日历各拉各的
+  async function loadRecords() {
+    details.value = {}
+    page.value = 1
+    dayFilter.value = null
+    logsCache.value = {}
+    await Promise.all([loadList(), loadMonth()])
+    // 当前月无数据则自动跳到最近有数据的月份，避免日历一片空白
+    syncCalendarToData()
   }
 
   function setType(t) {
     if (typeFilter.value === t) return
     typeFilter.value = t
-    page.value = 1
-    dayFilter.value = null
     loadRecords()
   }
 
@@ -280,24 +297,35 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     page.value = 1
   }
 
+  // 状态筛选已下沉服务端：切换即重新拉列表与日历（统计卡由后端 overview 直接给出）
   function setStatus(s) {
     if (statusFilter.value === s) return
     statusFilter.value = s
     page.value = 1
+    dayFilter.value = null
+    void loadList()
+    void loadMonth()
   }
 
   function setPage(p) {
-    if (p >= 1 && p <= totalPages.value) page.value = p
+    if (p >= 1 && p <= totalPages.value && p !== page.value) {
+      page.value = p
+      void loadList()
+    }
   }
   function setPageSize(s) {
-    pageSize.value = Number(s)
+    const n = Number(s)
+    if (n === pageSize.value) return
+    pageSize.value = n
     page.value = 1
+    void loadList()
   }
 
-  // 切月统一入口：改月份后立即补拉该月所需的签到记录
+  // 切月统一入口：改月份后补拉该月日历数据（有缓存即命中，不发请求）
   function setMonth(y, m) {
     calendarYear.value = y
     calendarMonth.value = m
+    void loadMonth()
   }
 
   function prevMonth() {
@@ -316,12 +344,14 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     const next = dayFilter.value === d ? null : d
     dayFilter.value = next
     page.value = 1
+    void loadList()
     // 在日历里点某天即切到列表看当天明细，省去手动切换视图（取消选中不跳转）
     if (next && viewMode.value === 'calendar') viewMode.value = 'list'
   }
   function clearDayFilter() {
     dayFilter.value = null
     page.value = 1
+    void loadList()
   }
 
   // 展开 / 收起：优先用预拉缓存，否则懒加载地理围栏 + 签到记录
@@ -370,18 +400,15 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     void loadRecords()
   }
 
-  // 当前月无数据则自动跳到最近有数据的月份（基于任务区间与已签日期取最晚月份）
+  // 当前月无数据则自动跳到最近有数据的月份（后端 meta.latest_date，全历史口径）
   function syncCalendarToData() {
-    if (!tasks.value.length) return
-    const hasCurrent = calendarWeeks.value.some((w) =>
-      w.some((c) => c.inMonth && c.state !== 'none')
-    )
-    if (hasCurrent) return
-    const best = bestDataMonth.value
-    if (best) {
-      calendarYear.value = best.y
-      calendarMonth.value = best.m
-    }
+    if (!dataLatest.value) return
+    const cached = monthCache.value[monthKey.value]
+    if (cached && Object.keys(cached).length) return
+    const [y, m] = dataLatest.value.split('-').map(Number)
+    calendarYear.value = y
+    calendarMonth.value = m
+    void loadMonth()
   }
 
   // 手动跳到最近有数据的月份
@@ -398,7 +425,9 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     selectedAccountId,
     loadingAccounts,
     loadingRecords,
+    loadingCalendar,
     tasks,
+    total,
     typeFilter,
     statusFilter,
     viewMode,
@@ -412,12 +441,9 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     dayStats,
     accountOptions,
     selectedAccount,
-    statusTasks,
     stats,
-    visibleTasks,
-    total,
-    totalPages,
     pagedRows,
+    totalPages,
     calendarWeeks,
     calendarLabel,
     isCurrentMonth,

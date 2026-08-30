@@ -7,7 +7,7 @@
 //  5. 尊重 prefers-reduced-motion，减少动态用户的不适；
 //  6. 防御性：入场动画只做"叠加效果"，绝不让元素永久停留在隐藏态——动画完成/中断/异常/超时
 //     都会强制清除内联样式回到 CSS 默认可见态，避免登录按钮等关键元素卡在 visibility:hidden。
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
 import { gsap } from 'gsap'
 
 // 所有参与入场动画的目标选择器

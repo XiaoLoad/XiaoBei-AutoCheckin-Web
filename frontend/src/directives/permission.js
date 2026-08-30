@@ -8,11 +8,12 @@
 // 思路参考 vue-element-admin 的 permission 指令，但鉴权决策收敛到 auth store 的 role。
 import { useAuthStore } from '@/stores/auth'
 
-// 单一决策：当前角色是否满足指令要求的角色集合
+// 单一决策：当前角色是否满足指令要求的角色集合。
+// 不为 admin 做全局绕过——与 router 的 hasRole / auth.canAccess 三处必须同口径：
+// 管理员绕过会让侧边栏出现路由并未挂载的「普通用户专属」菜单（点击即"无权限"）。
 export function hasRole(role, value) {
   if (!value) return true
   const allowed = Array.isArray(value) ? value : [value]
-  if (role === 'admin') return true // 管理员拥有全部权限
   return allowed.includes(role)
 }
 

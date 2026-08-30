@@ -1,35 +1,14 @@
 <template>
-  <Teleport to="body">
-    <Transition name="modal">
-      <div
-        v-if="modelValue"
-        class="fixed inset-0 z-[1000] flex items-center justify-center p-4"
-        role="dialog"
-        aria-modal="true"
-      >
-        <div class="absolute inset-0 bg-ink/50 backdrop-blur-[2px]" @click="onCancel" />
-
-        <div
-          class="modal-panel relative flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl shadow-ink/20"
-          @click.stop
-        >
-          <!-- 标题 -->
-          <div class="flex items-center justify-between px-5 pt-5">
-            <h3 class="text-base font-semibold text-ink">
-              {{ mode === 'edit' ? '编辑 B 平台账号' : '新增 B 平台账号' }}
-            </h3>
-            <button
-              type="button"
-              class="grid h-8 w-8 place-items-center rounded-lg text-ink-muted transition hover:bg-cloud hover:text-ink"
-              aria-label="关闭"
-              @click="onCancel"
-            >
-              <Icon name="close" :size="18" />
-            </button>
-          </div>
-
-          <form class="flex flex-1 min-h-0 flex-col overflow-hidden" @submit.prevent="onSubmit">
-            <div class="flex-1 min-h-0 space-y-5 overflow-y-auto px-5 pb-2 pt-4">
+  <!-- 新增/编辑 B 平台账号弹窗：基于 BaseModal 组装（遮罩/ESC/滚动锁定/过渡均由骨架提供）。
+       表单只包字段区（回车触发 submit），底部按钮在 footer 插槽经 click 提交。 -->
+  <BaseModal
+    :model-value="modelValue"
+    size="xl"
+    :title="mode === 'edit' ? '编辑 B 平台账号' : '新增 B 平台账号'"
+    @update:model-value="(v) => emit('update:modelValue', v)"
+    @cancel="onCancel"
+  >
+    <form class="space-y-5" @submit.prevent="onSubmit">
             <!-- 账号信息 -->
             <div class="space-y-4">
               <div>
@@ -143,34 +122,31 @@
               </div>
               <p class="mt-2 text-xs text-ink-muted">账号密码校验通过后，个人信息由 B 平台自动获取并回填，无需手动操作。</p>
             </div>
-            </div>
+    </form>
 
-            <!-- 操作 -->
-            <div class="flex shrink-0 gap-3 border-t border-ink/5 bg-white px-5 py-4">
-              <button
-                type="button"
-                class="flex-1 rounded-xl border border-ink/10 px-4 py-2.5 text-sm font-medium text-ink-soft transition hover:bg-cloud"
-                @click="onCancel"
-              >
-                取消
-              </button>
-              <button
-                type="submit"
-                class="flex-1 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand/25 transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
-                :disabled="submitting"
-              >
-                {{ submitting ? '保存中…' : '保存' }}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </Transition>
-  </Teleport>
+    <template #footer>
+      <button
+        type="button"
+        class="flex-1 rounded-xl border border-ink/10 px-4 py-2.5 text-sm font-medium text-ink-soft transition hover:bg-cloud"
+        @click="onCancel"
+      >
+        取消
+      </button>
+      <button
+        type="button"
+        class="flex-1 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand/25 transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+        :disabled="submitting"
+        @click="onSubmit"
+      >
+        {{ submitting ? '保存中…' : '保存' }}
+      </button>
+    </template>
+  </BaseModal>
 </template>
 
 <script setup>
 import { reactive, ref, watch } from 'vue'
+import BaseModal from '@/components/BaseModal.vue'
 import Icon from '@/components/Icon.vue'
 import { fetchProfile } from '@/api/accounts'
 
@@ -304,23 +280,3 @@ function onCancel() {
 
 defineExpose({ close })
 </script>
-
-<style scoped>
-.modal-enter-active,
-.modal-leave-active {
-  transition: opacity 0.2s ease;
-}
-.modal-enter-from,
-.modal-leave-to {
-  opacity: 0;
-}
-.modal-enter-active .modal-panel,
-.modal-leave-active .modal-panel {
-  transition: transform 0.22s ease, opacity 0.22s ease;
-}
-.modal-enter-from .modal-panel,
-.modal-leave-to .modal-panel {
-  transform: translateY(8px) scale(0.98);
-  opacity: 0;
-}
-</style>

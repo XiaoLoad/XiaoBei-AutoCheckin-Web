@@ -48,7 +48,7 @@
             class="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-ink/10 text-ink-muted transition hover:bg-cloud hover:text-ink"
             aria-label="刷新"
             :disabled="loading"
-            @click="store.load"
+            @click="refresh"
           >
             <Icon name="refresh" :size="17" :class="loading && 'spin-refresh'" />
           </button>
@@ -137,21 +137,22 @@
             <!-- 操作行：右对齐 -->
             <div class="mt-2.5 flex items-center justify-end gap-1 border-t border-ink/5 pt-2">
               <button class="rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand transition hover:bg-brand/10" @click="store.openEdit(item)">编辑</button>
-              <button class="rounded-lg px-2.5 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-cloud" @click="store.onToggle(item)">{{ item.enabled ? '禁用' : '启用' }}</button>
+              <button class="rounded-lg px-2.5 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-cloud" @click="onToggle(item)">{{ item.enabled ? '禁用' : '启用' }}</button>
               <button class="rounded-lg px-2.5 py-1.5 text-xs font-medium text-danger transition hover:bg-danger/10" @click="store.askDelete(item)">删除</button>
             </div>
           </article>
         </div>
       </div>
 
-      <!-- 分页（复用用户管理页 Pagination 组件） -->
+      <!-- 分页（与用户管理页同一出口：BasePagination） -->
       <div v-if="!loading && filtered.length > 0" class="shrink-0 border-t border-ink/5 px-3 py-2">
-        <Pagination
+        <BasePagination
           :page="page"
           :page-size="pageSize"
           :total="filtered.length"
           :page-size-options="[10, 20, 50]"
           :disabled="loading"
+          show-jump
           @update:page="store.onPageChange"
           @update:page-size="store.onPageSizeChange"
         />
@@ -164,7 +165,7 @@
       :mode="formMode"
       :account="editing"
       :submitting="submitting"
-      @submit="store.onSubmitForm"
+      @submit="onSubmitForm"
       @cancel="store.closeForm"
     />
 
@@ -178,7 +179,7 @@
       cancel-text="取消"
       danger
       :confirming="deleting"
-      @confirm="store.confirmDelete"
+      @confirm="onConfirmDelete"
       @cancel="store.closeDelete"
     />
 
@@ -193,7 +194,7 @@ import { useAccountsStore } from '@/stores/accounts'
 import { storeToRefs } from 'pinia'
 import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
-import Pagination from '@/components/Pagination.vue'
+import BasePagination from '@/components/BasePagination.vue'
 import AccountFormModal from '@/components/AccountFormModal.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
 
@@ -201,7 +202,6 @@ import ConfirmModal from '@/components/ConfirmModal.vue'
 const store = useAccountsStore()
 const {
   loading,
-  accounts,
   keyword,
   typeFilter,
   signFilter,
@@ -219,6 +219,20 @@ const {
   filtered,
   pagedRows
 } = storeToRefs(store)
+
+// 事件包装：失败时 rejection 已由 request.js 全局 toast 提示，这里吞掉避免未处理告警
+function refresh() {
+  store.load().catch(() => {})
+}
+function onSubmitForm(payload) {
+  store.onSubmitForm(payload).catch(() => {})
+}
+function onToggle(item) {
+  store.onToggle(item).catch(() => {})
+}
+function onConfirmDelete() {
+  store.confirmDelete().catch(() => {})
+}
 
 // 自定义下拉选项（通用数据：{ label, value }）
 const typeOptions = [
@@ -284,8 +298,8 @@ function deptText(item) {
   return [p.college, p.major, p.className].filter(Boolean).join(' · ')
 }
 
-// 首次加载（store 内部负责拉取与状态管理）
-store.load()
+// 首次加载（store 内部负责拉取与状态管理；失败由全局 toast 提示）
+refresh()
 </script>
 
 <style scoped>

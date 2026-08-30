@@ -246,25 +246,41 @@ def send_channel(channel, key_or_fields, ctx, template='html'):
     """单通道真实发送；返回 (ok, errmsg)。
     - pushplus：按 template(html/txt/markdown) 渲染并传 template 参数，HTML 优雅卡片；
     - serverchan / email：仅纯文本（desp / body），用 txt 渲染。
-    title 含姓名 + 状态，且统一做长度守卫。"""
+    title 含姓名 + 状态，且统一做长度守卫。
+    业务结果校验：HTTP 通了不代表送达——serverchan code!=0 / pushplus code!=200
+    （如 token 失效）一律视为失败并把平台原因带回，杜绝「凭证无效却报推送成功」。"""
     title = _truncate(_title(ctx), PUSHPLUS_TITLE_MAX)
     if channel == 'serverchan':
         try:
-            requests.post(f'https://sctapi.ftqq.com/{key_or_fields}.send',
-                          data={'title': title, 'desp': render_txt(ctx)}, timeout=8)
-            return True, ''
+            resp = requests.post(f'https://sctapi.ftqq.com/{key_or_fields}.send',
+                                 data={'title': title, 'desp': render_txt(ctx)}, timeout=8)
         except Exception as e:
             return False, str(e)
+        try:
+            body = resp.json()
+        except ValueError:
+            return False, f'ServerChan 响应非 JSON（HTTP {resp.status_code}）'
+        if resp.status_code != 200 or body.get('code') != 0:
+            return False, (f"ServerChan 推送被拒（code={body.get('code')}，"
+                           f"{body.get('message') or f'HTTP {resp.status_code}'}）")
+        return True, ''
     if channel == 'pushplus':
         fmt = template if template in TEMPLATES else 'html'
         try:
-            requests.post('https://www.pushplus.plus/send',
-                          json={'token': key_or_fields, 'title': title,
-                                'content': render(ctx, fmt), 'template': fmt},
-                          timeout=8)
-            return True, ''
+            resp = requests.post('https://www.pushplus.plus/send',
+                                 json={'token': key_or_fields, 'title': title,
+                                       'content': render(ctx, fmt), 'template': fmt},
+                                 timeout=8)
         except Exception as e:
             return False, str(e)
+        try:
+            body = resp.json()
+        except ValueError:
+            return False, f'PushPlus 响应非 JSON（HTTP {resp.status_code}）'
+        if resp.status_code != 200 or body.get('code') != 200:
+            return False, (f"PushPlus 推送被拒（code={body.get('code')}，"
+                           f"{body.get('msg') or f'HTTP {resp.status_code}'}）")
+        return True, ''
     if channel == 'email':
         try:
             send_email(key_or_fields, title, render_txt(ctx))

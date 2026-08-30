@@ -27,7 +27,6 @@ export default {
 
     let colOf = [] // 固定：第 i 张卡片归属的列
     let currentCols = 1
-    let currentColWidth = 0
     let frozenBottom = 0 // 静止态底边：结构变化/刷新时重算，内容增减时冻结
     let ro = null
     let isRelayouting = false
@@ -125,7 +124,6 @@ export default {
       }
       containerHeight.value = Math.max(0, maxBottom - GAP)
       currentCols = cols
-      currentColWidth = colWidth
       styles.value = ns
       await nextTick()
       isRelayouting = false

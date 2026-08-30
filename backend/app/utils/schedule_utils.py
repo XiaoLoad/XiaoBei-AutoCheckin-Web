@@ -42,6 +42,28 @@ def extract_schedule_time(schedule):
     return _extract_schedule_time(schedule)
 
 
+def extract_jitter_minutes(schedule):
+    """随机延迟上限（分钟）：standalone（config_json 非空）与 follow（配置套+字段级覆盖
+    浅合并，overrides 顶层键整体替换）从解析后配置的 time.randomDelayMax 取；
+    custom 从内联顶层取。调度器注册 CronTrigger.jitter 与任务详情展示（nextRunJitterMin）
+    共用同一口径，避免「展示与实际注册各算各的」漂移。"""
+    if schedule.mode == 'custom':
+        return int((schedule.custom or {}).get('randomDelayMax') or 0)
+    if schedule.has_own_config:
+        cfg = schedule.config or {}
+    elif schedule.mode == 'follow':
+        cfg = {}
+        if schedule.config_set_id:
+            from app.models.config_set import ConfigSet
+            cs = db.session.get(ConfigSet, schedule.config_set_id)
+            if cs:
+                cfg = dict(cs.config or {})
+        cfg.update(schedule.overrides or {})
+    else:
+        cfg = {}
+    return int((cfg.get('time') or {}).get('randomDelayMax') or 0)
+
+
 def compute_next_run(schedule, base=None):
     """基于当前/给定时刻计算下次执行时间（朴素中国本地时间）。无有效时刻返回 None。"""
     hour, minute, weekdays = _extract_schedule_time(schedule)

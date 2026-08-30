@@ -58,6 +58,7 @@ class Schedule(db.Model):
 
     def to_dict(self):
         from app.models.b_account import BAccount
+        from app.utils.schedule_utils import extract_jitter_minutes
         acc = db.session.get(BAccount, self.account_id)
         profile = acc.profile if acc else {}
         task_label = '寝室签到' if self.task_type == 'dorm' else '活动签到'
@@ -82,7 +83,9 @@ class Schedule(db.Model):
             'custom': self.custom,
             'overrides': self.overrides,
             'enabled': bool(self.enabled),
+            # next_run_at 是未叠加随机延迟的基线时刻；实际执行在其后 randomDelayMax 分钟内随机漂移
             'nextRunAt': self.next_run_at.strftime('%Y-%m-%d %H:%M') if self.next_run_at else '',
+            'nextRunJitterMin': extract_jitter_minutes(self) if self.enabled else 0,
             'lastRunAt': self.last_run_at.strftime('%Y-%m-%d %H:%M') if self.last_run_at else '',
             'lastStatus': self.last_status or 'never',
             'runCount': self.run_count,

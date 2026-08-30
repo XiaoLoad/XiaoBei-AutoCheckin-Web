@@ -1,8 +1,9 @@
-// 签到配置模块 API（二期已接真：/api/config-sets 与 /api/pools）。
-// 视图形状沿用 mock 时代约定（system/user 双位置列表、sizeKb/inTrash、credentials.fields、
+// 签到配置模块 API（/api/config-sets 与 /api/pools）。
+// 视图形状沿用早期前端约定（system/user 双位置列表、sizeKb/inTrash、credentials.fields、
 // uaTemplates.ua 等），由本适配层与后端领域形状互转。
 // 任务实例与配置套的绑定（config_set_id）由 /api/schedules 提供，本文件不再持久化任务配置。
 import request from '@/api/request'
+import { bus, EVENTS } from '@/utils/eventBus'
 import { fetchAccounts } from './accounts'
 
 // 配置对象工厂：六类配置的默认骨架（值型随"配置套 → 任务实例"两层继承）
@@ -91,8 +92,9 @@ export async function deleteConfigSet(id) {
 }
 
 // 应用全部：把当前配置套配置覆盖写入所有「已套用」该套的账号任务配置（需二次确认，后端执行）
+// silent：store 层 catch 后用更贴身的文案提示，不走全局 toast
 export async function applyConfigSetToAll(id) {
-  const data = await request({ url: `/config-sets/${id}/apply-all`, method: 'post' })
+  const data = await request({ url: `/config-sets/${id}/apply-all`, method: 'post', silent: true })
   return data || {}
 }
 
@@ -177,13 +179,14 @@ export async function testPushCredential(id, template = 'html') {
 
 // 图库：真实上传（可指定分组）/ 回收站 / 删除
 // onProgress 透传 axios 上传进度（0~100），用于拖拽/批量上传的进度展示
-export async function uploadImage(file, groupId = null, onProgress) {
+export async function uploadImage(file, groupId = null, onProgress, opts = {}) {
   const fd = new FormData()
   fd.append('file', file)
   if (groupId != null) fd.append('groupId', String(groupId))
   await request({
     url: '/pools/images', method: 'post', data: fd,
     headers: { 'Content-Type': 'multipart/form-data' }, timeout: 30000,
+    silent: !!opts.silent,
     onUploadProgress: onProgress
       ? (e) => {
           const total = e.total || file.size || 0
@@ -194,21 +197,23 @@ export async function uploadImage(file, groupId = null, onProgress) {
   })
   return (await refreshPools()).imageLibrary
 }
-export async function trashImage(id) {
-  await request({ url: `/pools/images/${id}/trash`, method: 'post' })
+// 图库单图操作的 opts.silent：批量循环调用方传 true（批量面板自行汇总失败），
+// 单图操作不传（失败由 request.js 全局 toast 兜底）
+export async function trashImage(id, opts = {}) {
+  await request({ url: `/pools/images/${id}/trash`, method: 'post', silent: !!opts.silent })
   return (await refreshPools()).imageLibrary
 }
-export async function restoreImage(id) {
-  await request({ url: `/pools/images/${id}/restore`, method: 'post' })
+export async function restoreImage(id, opts = {}) {
+  await request({ url: `/pools/images/${id}/restore`, method: 'post', silent: !!opts.silent })
   return (await refreshPools()).imageLibrary
 }
-export async function deleteImage(id) {
-  await request({ url: `/pools/images/${id}`, method: 'delete' })
+export async function deleteImage(id, opts = {}) {
+  await request({ url: `/pools/images/${id}`, method: 'delete', silent: !!opts.silent })
   return (await refreshPools()).imageLibrary
 }
 // 手动标记为已使用（图库页「标记已用」按钮；真实消费由调度器按 config.image.strategy 调后端 consume_image）
-export async function markImageUsed(id) {
-  await request({ url: `/pools/images/${id}/used`, method: 'post' })
+export async function markImageUsed(id, opts = {}) {
+  await request({ url: `/pools/images/${id}/used`, method: 'post', silent: !!opts.silent })
   return (await refreshPools()).imageLibrary
 }
 
@@ -226,26 +231,47 @@ export async function deleteImageGroup(id) {
   const p = await refreshPools()
   return { imageGroups: p.imageGroups, imageLibrary: p.imageLibrary }
 }
-export async function moveImageToGroup(id, groupId = null) {
+export async function moveImageToGroup(id, groupId = null, opts = {}) {
   await request({
     url: `/pools/images/${id}/group`, method: 'put',
-    data: { groupId: groupId == null ? null : Number(groupId) }
+    data: { groupId: groupId == null ? null : Number(groupId) },
+    silent: !!opts.silent
   })
   return (await refreshPools()).imageLibrary
 }
 
-// 缩略图 blob 拉取（<img> 无法带 Authorization 头；会话级缓存 objectURL）
+// 缩略图 blob 拉取（<img> 无法带 Authorization 头；会话级缓存 objectURL）。
+// 缓存生命周期：图片物理删除时释放对应 URL；登出时整体释放，杜绝 objectURL 只增不减的泄漏。
 const blobCache = new Map()
 export async function fetchImageBlobUrl(id) {
   if (blobCache.has(id)) return blobCache.get(id)
   const blob = await request({
     url: `/pools/images/${id}/file`, method: 'get',
-    responseType: 'blob', timeout: 15000
+    responseType: 'blob', timeout: 15000,
+    // 文件丢失/网络失败时组件留占位图标即可，不逐图全局 toast
+    silent: true
   })
   const url = URL.createObjectURL(blob)
   blobCache.set(id, url)
   return url
 }
 
+// 释放单张图片的 objectURL（图片记录已物理删除后调用；仍存在的图片不得调用，
+// 否则其他组件的 <img> 会拿到已失效的 URL）
+export function releaseImageBlob(id) {
+  const url = blobCache.get(id)
+  if (url) {
+    URL.revokeObjectURL(url)
+    blobCache.delete(id)
+  }
+}
+
+// 释放全部 objectURL（登出时调用；与 request.js 的 AUTH_LOGOUT 订阅同一事件总线模式）
+export function releaseAllImageBlobs() {
+  for (const url of blobCache.values()) URL.revokeObjectURL(url)
+  blobCache.clear()
+}
+bus.on(EVENTS.AUTH_LOGOUT, releaseAllImageBlobs)
+
 // 任务实例与配置套的绑定（config_set_id）由 /api/schedules 提供；此处再导出供 signConfig store 复用
-export { fetchScheduleBindings, bindScheduleConfigSet, createSchedule, deleteSchedule, updateSchedule } from './schedules'
+export { fetchScheduleBindings, createSchedule, deleteSchedule, updateSchedule } from './schedules'

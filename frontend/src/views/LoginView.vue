@@ -206,13 +206,12 @@ async function handleLogin() {
   }
   loading.value = true
   try {
-    // 调用后端 /api/auth/login，store 内写入 token 与用户信息
-    const res = await authStore.login({
+    // 调用后端 /api/auth/login，store 内写入 token 与用户信息；
+    // 目的地由路由守卫按登录角色解析（redirect 优先），无需在此读取响应
+    await authStore.login({
       account: form.account.trim(),
       password: form.password
     })
-    // 登录成功：按后端返回的角色跳转对应仪表盘
-    // DashboardView 内部也已按角色分发管理员 / 普通用户两套页面
     const redirect = route.query.redirect
     router.replace(typeof redirect === 'string' ? redirect : '/')
   } catch (e) {

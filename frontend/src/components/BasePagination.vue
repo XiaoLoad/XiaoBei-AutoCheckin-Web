@@ -31,7 +31,7 @@
           type="button"
           class="grid h-8 w-8 place-items-center rounded-lg text-sm font-medium transition"
           :class="page <= 1 ? 'text-ink/30 cursor-not-allowed' : 'text-ink-muted hover:bg-white hover:text-ink'"
-          :disabled="page <= 1"
+          :disabled="disabled || page <= 1"
           aria-label="上一页"
           @click="go(page - 1)"
         >
@@ -55,27 +55,57 @@
           type="button"
           class="grid h-8 w-8 place-items-center rounded-lg text-sm font-medium transition"
           :class="page >= totalPages ? 'text-ink/30 cursor-not-allowed' : 'text-ink-muted hover:bg-white hover:text-ink'"
-          :disabled="page >= totalPages"
+          :disabled="disabled || page >= totalPages"
           aria-label="下一页"
           @click="go(page + 1)"
         >
           <Icon name="chevron-right" :size="16" />
         </button>
+
+        <!-- 跳转指定页（可选，show-jump 开启；用户管理/账号管理等大数据量页面使用） -->
+        <div v-if="showJump" class="flex items-center gap-1.5 pl-2 text-sm text-ink-muted">
+          <span class="whitespace-nowrap">前往</span>
+          <input
+            v-model.number="jumpPage"
+            type="number"
+            min="1"
+            :max="totalPages"
+            :disabled="disabled"
+            class="h-8 w-14 rounded-lg border border-ink/10 bg-white px-2 text-center text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10 disabled:opacity-50"
+            @keyup.enter="onJump"
+          />
+          <span class="whitespace-nowrap">页</span>
+          <button
+            type="button"
+            :disabled="disabled"
+            class="h-8 rounded-lg px-2 text-sm font-medium text-ink-soft transition hover:bg-white hover:text-ink disabled:opacity-50"
+            @click="onJump"
+          >
+            确定
+          </button>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import Icon from '@/components/Icon.vue'
 
+// 全站唯一分页组件（原 Pagination.vue 已收编删除；跳页框经 show-jump 按需开启）。
+// 仅负责展示与翻页事件，不耦合任何业务数据；
+// 父级通过 :page / :page-size 传入状态，并监听 update:page / update:page-size 重新拉取数据。
+// [约定] 改变每页条数后回到第一页由调用方 handler 负责：本组件不代发 update:page(1)，
+// 否则服务端分页的调用方（page/pageSize 各触发一次请求）一次改页码会拉两次数据。
 const props = defineProps({
   page: { type: Number, required: true },
   pageSize: { type: Number, required: true },
   total: { type: Number, required: true },
-  pageSizeOptions: { type: Array, default: () => [10, 20, 50] }
+  pageSizeOptions: { type: Array, default: () => [10, 20, 50] },
+  disabled: { type: Boolean, default: false },
+  showJump: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['update:page', 'update:pageSize'])
@@ -101,11 +131,24 @@ const pages = computed(() => {
   return arr
 })
 
+const jumpPage = ref(props.page)
+watch(
+  () => props.page,
+  (p) => {
+    jumpPage.value = p
+  }
+)
+
 function go(p) {
   if (p < 1 || p > totalPages.value || p === props.page) return
   emit('update:page', p)
 }
 function onSize(s) {
   emit('update:pageSize', Number(s))
+}
+function onJump() {
+  const p = Number(jumpPage.value)
+  if (!Number.isFinite(p)) return
+  go(p)
 }
 </script>

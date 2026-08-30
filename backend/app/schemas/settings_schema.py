@@ -44,6 +44,13 @@ def load_update(payload):
             data[key] = raw
             continue
 
+        # str 类型：文本配置（如高德地图 Key），去首尾空白
+        if spec['type'] == 'str':
+            if not isinstance(raw, str):
+                return False, None, f'{spec["label"]} 必须为文本', 4003
+            data[key] = raw.strip()
+            continue
+
         # int 类型：兼容前端把数字输入框值传成字符串的情况
         if isinstance(raw, bool) or not isinstance(raw, (int, str)):
             return False, None, f'{spec["label"]} 必须为数字', 4003

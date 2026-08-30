@@ -77,16 +77,30 @@ DEFAULTS = {
         'label': '额度预警阈值（%）',
         'desc': '管理员仪表盘额度预警：账号数达到总额度的该比例的用户进入预警列表',
     },
+    'amap_web_key': {
+        'value': '',
+        'type': 'str',
+        'label': '高德地图 Key',
+        'desc': '位置池「地图拾取」使用的 Web 端(JS API) Key，在高德开放平台创建；留空时地图拾取不可用（手动输入不受影响）',
+    },
+    'amap_security_code': {
+        'value': '',
+        'type': 'str',
+        'label': '高德地图安全密钥',
+        'desc': '与上方 Key 配套的安全密钥（jscode），2021-12 之后申请的 Key 必须配置',
+    },
 }
 
 
 def _coerce(key, raw):
-    """按注册表的类型把字符串还原为 bool/int；解析失败回退默认值"""
+    """按注册表的类型把字符串还原为 bool/int/str；解析失败回退默认值"""
     spec = DEFAULTS.get(key)
     if not spec:
         return raw
     if spec['type'] == 'bool':
         return str(raw).strip().lower() in ('1', 'true', 'yes', 'on')
+    if spec['type'] == 'str':
+        return str(raw if raw is not None else '')
     try:
         return int(raw)
     except (TypeError, ValueError):

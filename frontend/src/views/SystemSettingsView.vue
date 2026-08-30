@@ -108,6 +108,14 @@
                 <!-- 控件右对齐：开关即拨即存语义（仍由保存按钮统一提交），数字输入窄栏定宽 -->
                 <ConfigToggle v-if="item.type === 'bool'" v-model="form[item.key]" class="shrink-0" />
                 <input
+                  v-else-if="item.type === 'str'"
+                  v-model.trim="form[item.key]"
+                  type="text"
+                  autocomplete="off"
+                  class="login-input w-full max-w-[220px] shrink-0 px-3 py-2 text-sm"
+                  :placeholder="item.type === 'str' ? '未配置' : ''"
+                />
+                <input
                   v-else
                   v-model.number="form[item.key]"
                   type="number"

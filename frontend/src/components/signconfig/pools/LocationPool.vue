@@ -1,6 +1,7 @@
 <template>
-  <div class="space-y-3">
-    <div v-if="showSwitcher" class="inline-flex rounded-xl bg-cloud p-1 text-sm">
+  <!-- 弹性列撑满宿主卡片：网格区吸收剩余高度，分页固定在卡片底部（避免大面积留白） -->
+  <div class="flex min-h-0 flex-1 flex-col gap-3">
+    <div v-if="showSwitcher" class="inline-flex shrink-0 self-start rounded-xl bg-cloud p-1 text-sm">
       <button
         v-for="s in scopes"
         :key="s.value"
@@ -35,12 +36,12 @@
       </button>
     </div>
 
-    <!-- 列表：卡片网格（悬停浮起 + 操作浮现，GSAP 错峰入场） -->
-    <div v-if="filtered.length === 0" class="flex flex-col items-center gap-2 py-10 text-ink-muted">
+    <!-- 列表：网格区吸收剩余高度（内容顶部对齐），分页固定卡片底部 -->
+    <div v-if="filtered.length === 0" class="flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-ink/10 text-ink-muted">
       <Icon name="map-pin" :size="30" class="opacity-40" />
       <p class="text-sm">{{ query ? '未找到匹配的位置' : '暂无位置' }}</p>
     </div>
-    <TransitionGroup v-else tag="div" class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3" name="loc-list">
+    <TransitionGroup v-else tag="div" class="grid flex-1 grid-cols-1 content-start gap-2.5 sm:grid-cols-2 xl:grid-cols-3" name="loc-list">
       <article
         v-for="loc in paged"
         :key="loc.id"
@@ -107,9 +108,10 @@
       </article>
     </TransitionGroup>
 
-    <!-- 分页（复用 BasePagination） -->
+    <!-- 分页（复用 BasePagination，固定卡片底部） -->
     <BasePagination
       v-if="filtered.length"
+      class="shrink-0"
       :page="page"
       :page-size="pageSize"
       :total="filtered.length"
@@ -117,16 +119,49 @@
       @update:page-size="onSize"
     />
 
-    <!-- 添加 / 编辑 模态框 -->
-    <BaseModal v-model="showModal" :title="editingId ? '编辑位置' : '添加位置'">
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+    <!-- 添加 / 编辑 模态框：地图拾取（高德） / 手动输入 双模式 -->
+    <BaseModal v-model="showModal" :title="editingId ? '编辑位置' : '添加位置'" :size="pickerMode === 'map' ? '2xl' : 'md'">
+      <!-- 名称（两模式共用）：地图拾取会把识别到的地址回填到这里，用户可编辑 -->
+      <div class="mb-3">
+        <label class="mb-1.5 block text-sm font-medium text-ink-soft">名称</label>
+        <input v-model="form.name" class="login-input" placeholder="对此位置的描述，如：3栋502寝室" @input="nameTouched = true" />
+      </div>
+
+      <!-- 模式切换 -->
+      <div class="mb-3 grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          class="rounded-xl border px-3 py-2 text-sm font-medium transition"
+          :class="pickerMode === 'map' ? 'border-brand bg-brand/5 text-brand shadow-sm' : 'border-ink/10 text-ink-soft hover:bg-cloud'"
+          @click="pickerMode = 'map'"
+        >
+          地图拾取
+        </button>
+        <button
+          type="button"
+          class="rounded-xl border px-3 py-2 text-sm font-medium transition"
+          :class="pickerMode === 'manual' ? 'border-brand bg-brand/5 text-brand shadow-sm' : 'border-ink/10 text-ink-soft hover:bg-cloud'"
+          @click="pickerMode = 'manual'"
+        >
+          手动输入
+        </button>
+      </div>
+
+      <!-- 地图拾取：搜索/点击落点 + 逆地理编码识别地址（回填到名称）；地址号由用户手动填写 -->
+      <div v-if="pickerMode === 'map'" class="mb-3">
+        <AmapPicker
+          :model-value="pickedPoint"
+          height="320px"
+          @update:model-value="onPointPicked"
+          @unavailable="pickerMode = 'manual'"
+        />
+      </div>
+
+      <!-- 手动输入：地址号 + 经纬度 -->
+      <div v-else class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div class="sm:col-span-2">
-          <label class="mb-1.5 block text-sm font-medium text-ink-soft">名称</label>
-          <input v-model="form.name" class="login-input" placeholder="对此位置的描述，如：3栋502寝室" />
-        </div>
-        <div class="sm:col-span-2">
-          <label class="mb-1.5 block text-sm font-medium text-ink-soft">地址</label>
-          <input v-model="form.address" class="login-input" placeholder="第三方接口定位所需的地址参数（必填）" />
+          <label class="mb-1.5 block text-sm font-medium text-ink-soft">地址号</label>
+          <input v-model="form.address" class="login-input" placeholder="如：1388号（B 平台提交所需，选填）" />
         </div>
         <div>
           <label class="mb-1.5 block text-sm font-medium text-ink-soft">纬度</label>
@@ -136,12 +171,15 @@
           <label class="mb-1.5 block text-sm font-medium text-ink-soft">经度</label>
           <input v-model="form.lng" class="login-input" placeholder="经度（必填）" />
         </div>
-        <div class="sm:col-span-2">
-          <label class="mb-1.5 block text-sm font-medium text-ink-soft">坐标偏移（米）</label>
-          <input v-model="form.offset" type="number" class="login-input" placeholder="默认 10" />
-          <p class="mt-1.5 text-xs text-ink-muted">提交签到时在配置坐标周围随机偏移该距离，模拟真实 GPS 抖动。</p>
-        </div>
       </div>
+
+      <!-- 坐标偏移（两模式共用） -->
+      <div class="mt-3">
+        <label class="mb-1.5 block text-sm font-medium text-ink-soft">坐标偏移（米）</label>
+        <input v-model="form.offset" type="number" class="login-input" placeholder="默认 10" />
+        <p class="mt-1.5 text-xs text-ink-muted">提交签到时在配置坐标周围随机偏移该距离，模拟真实 GPS 抖动。</p>
+      </div>
+
       <template #footer>
         <button
           type="button"
@@ -153,7 +191,7 @@
         <button
           type="button"
           class="flex-1 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand/25 transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
-          :disabled="!form.name || !form.address || !form.lat || !form.lng || saving"
+          :disabled="!canSave || saving"
           @click="save"
         >
           {{ saving ? '保存中…' : '保存' }}
@@ -169,6 +207,7 @@ import { gsap } from 'gsap'
 import Icon from '@/components/Icon.vue'
 import BasePagination from '@/components/BasePagination.vue'
 import BaseModal from '@/components/BaseModal.vue'
+import AmapPicker from '@/components/common/AmapPicker.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
 import { useAuthStore } from '@/stores/auth'
 
@@ -239,9 +278,35 @@ const showModal = ref(false)
 const editingId = ref('')
 const saving = ref(false)
 const form = reactive({ name: '', address: '', lat: '', lng: '', offset: '' })
+// 添加方式：map=高德地图拾取（默认，未配置 Key 时选择器内提示并可一键切手动）/ manual=手动输入
+const pickerMode = ref('map')
+// 名称回填规则：拾取地址仅回填到「名称」且不覆盖用户手改过的名称
+// （nameTouched：编辑已有位置=true；名称被手改=true）
+const nameTouched = ref(false)
+const lastAutoName = ref('')
+// 当前表单坐标映射为拾取器点位（编辑已有位置时自动定位）
+const pickedPoint = computed(() =>
+  form.lat !== '' && form.lng !== '' && !Number.isNaN(Number(form.lat))
+    ? { lat: Number(form.lat), lng: Number(form.lng), address: form.address }
+    : null
+)
+function onPointPicked(p) {
+  if (!p || p.lat == null || p.lng == null) return
+  form.lat = String(p.lat)
+  form.lng = String(p.lng)
+  if (p.address && !nameTouched.value) {
+    form.name = p.address
+    lastAutoName.value = p.address
+  }
+}
+// 保存校验：名称 + 经纬度必填；地址号按接口文档为选填
+const canSave = computed(() => Boolean(form.name && form.lat !== '' && form.lng !== ''))
 
 function openAdd() {
   editingId.value = ''
+  pickerMode.value = 'map'
+  nameTouched.value = false
+  lastAutoName.value = ''
   form.name = ''
   form.address = ''
   form.lat = ''
@@ -251,6 +316,9 @@ function openAdd() {
 }
 function openEdit(loc) {
   editingId.value = loc.id
+  pickerMode.value = 'map'
+  nameTouched.value = true // 已有名称是用户起的，拾取不覆盖
+  lastAutoName.value = ''
   form.name = loc.name
   form.address = loc.address
   form.lat = loc.lat

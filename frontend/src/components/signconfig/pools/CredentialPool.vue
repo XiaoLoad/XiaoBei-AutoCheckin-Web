@@ -1,6 +1,7 @@
 <template>
-  <div class="space-y-3">
-    <div class="flex flex-wrap items-center justify-between gap-2">
+  <!-- 弹性列撑满宿主卡片：网格区吸收剩余高度（与位置池同款布局） -->
+  <div class="flex min-h-0 flex-1 flex-col gap-3">
+    <div class="flex shrink-0 flex-wrap items-center justify-between gap-2">
       <p class="text-xs text-ink-muted">各推送通道的密钥集中保管（Fernet 加密落库），配置推送时直接回填，无需重复填写。</p>
       <button
         type="button"
@@ -11,13 +12,13 @@
       </button>
     </div>
 
-    <div v-if="store.credentials.length === 0" class="flex flex-col items-center gap-2 py-10 text-ink-muted">
+    <div v-if="store.credentials.length === 0" class="flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-ink/10 text-ink-muted">
       <Icon name="send" :size="30" class="opacity-40" />
       <p class="text-sm">暂无凭证</p>
       <p class="text-xs">添加 Server酱 / PushPlus / 邮箱凭证后，可在配置套中开启签到结果推送</p>
     </div>
 
-    <TransitionGroup v-else tag="div" class="grid grid-cols-1 gap-2.5 sm:grid-cols-2" name="cred-list">
+    <TransitionGroup v-else tag="div" class="grid flex-1 grid-cols-1 content-start gap-2.5 sm:grid-cols-2" name="cred-list">
       <article
         v-for="c in store.credentials"
         :key="c.id"

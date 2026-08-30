@@ -63,7 +63,7 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'close', 'cancel'])
 
 const sizeClass = computed(
-  () => ({ sm: 'max-w-sm', md: 'max-w-md', xl: 'max-w-xl' }[props.size] || 'max-w-xl')
+  () => ({ sm: 'max-w-sm', md: 'max-w-md', xl: 'max-w-xl', '2xl': 'max-w-2xl' }[props.size] || 'max-w-xl')
 )
 
 function close() {

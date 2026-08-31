@@ -15,6 +15,8 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.jobstores.base import JobLookupError
 # 注意是 APScheduler 自带的线程池执行器（默认 max_workers=10），非标准库同名类
 from apscheduler.executors.pool import ThreadPoolExecutor
+# 标准库线程池：仅用于推送通道并发扇出（与 APScheduler 执行线程池互不干扰）
+from concurrent.futures import ThreadPoolExecutor as FuturesThreadPool, as_completed
 
 from app.extensions import db
 from app.models import BAccount, ConfigSet, Schedule, SignRecord
@@ -653,6 +655,15 @@ def _commit_result(schedule, acc, status, fail_reason='', resolved=None):
     db.session.commit()
 
 
+def _send_one(ch, key, ctx, template):
+    """单通道发送（供线程池扇出）。返回 (ch, ok, err)，单通道内部异常隔离为失败，不波及其它通道。"""
+    try:
+        ok, err = send_channel(ch, key, ctx, template)
+    except Exception as e:
+        ok, err = False, f'内部异常：{e}'
+    return ch, ok, err
+
+
 def dispatch_push(resolved, schedule, acc, status='success', reason='', image_url='', submitted_remark=''):
     """按配置套 push 分发执行结果（ServerChan / PushPlus / Email）。
     读取配置套的 push 结构：channels 决定通道、useOwnCredential 决定密钥来源
@@ -684,20 +695,31 @@ def dispatch_push(resolved, schedule, acc, status='success', reason='', image_ur
         return
 
     template = push.get('template') or 'html'
+    # build_ctx 含 DB 读取（位置池/图库），须在调用线程（已持 app context）完成；
+    # 仅把无状态、纯网络 I/O 的 send_channel 扇出到线程池并发执行：
+    # 墙钟时间由「各通道之和」降为「最慢单通道」，单通道异常仍隔离互不干扰。
     ctx = build_ctx(acc, schedule, resolved, status, reason=reason,
                     image_url=image_url, remark=submitted_remark or None)
-    results = []
-    for ch, key in creds.items():
-        try:
-            ok, err = send_channel(ch, key, ctx, template)
-        except Exception as e:  # 单通道内部异常不阻断其它通道
-            ok, err = False, f'内部异常：{e}'
-        results.append(f'{ch}={"成功" if ok else f"失败（{err}）"}')
+
+    if len(creds) == 1:
+        ch, key = next(iter(creds.items()))
+        ch, ok, err = _send_one(ch, key, ctx, template)
+        results = [(ch, ok, err)]
+    else:
+        results = []
+        with FuturesThreadPool(max_workers=min(len(creds), 4)) as ex:
+            futures = {ex.submit(_send_one, ch, key, ctx, template): ch
+                       for ch, key in creds.items()}
+            for fut in as_completed(futures):
+                results.append(fut.result())
+
+    for ch, ok, err in results:
         if ok:
             log.info('任务 %s %s 推送成功', schedule.id, ch)
         else:
             log.warning('任务 %s %s 推送失败：%s', schedule.id, ch, err)
-    log.info('任务 %s 推送汇总：%s', schedule.id, '；'.join(results))
+    summary = '；'.join(f'{ch}={"成功" if ok else f"失败（{err}）"}' for ch, ok, err in results)
+    log.info('任务 %s 推送汇总：%s', schedule.id, summary)
 
 
 def _resolve_push_creds(push, user_id):

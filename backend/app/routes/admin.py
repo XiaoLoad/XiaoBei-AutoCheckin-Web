@@ -1,6 +1,8 @@
 # 管理员仪表盘聚合：单端点返回全站汇总/趋势/失败归类/额度分桶与预警/高频失败/账号健康/调度器/全局日志。
 # 原则：聚合全部 SQL 下推（GROUP BY + 子查询 + LIMIT，命中既有索引），响应体恒定几 KB，
 # 用户量增长不影响仪表盘；列表类只出 Top-N，全量明细归属用户管理页。
+import os
+import time
 from datetime import timedelta
 
 from flask import Blueprint, request
@@ -14,6 +16,36 @@ from app.utils.auth import admin_required
 from app.utils.response import success
 
 bp = Blueprint('admin', __name__, url_prefix='/api/admin')
+
+# 重聚合接口结果缓存（近实时监控，接受秒级陈旧）：历史趋势/失败归类/额度/风险用户/账号健康
+# 均为只读聚合且返回纯 dict/list（无 ORM 对象，可安全跨请求复用）。单进程内生效，超过 TTL
+# 或条目超上限即失效/淘汰，避免重复聚合拖慢仪表盘、也避免内存无限增长。
+_ADMIN_AGG_TTL = int(os.getenv('ADMIN_OVERVIEW_CACHE_TTL', '60'))
+
+
+def _ttl_cache(ttl):
+    """有界 TTL 内存缓存装饰器：缓存纯聚合结果，单进程内生效。"""
+
+    def deco(fn):
+        store = {}
+
+        def wrapper(*args, **kwargs):
+            key = (args, tuple(sorted(kwargs.items())))
+            now = time.time()
+            hit = store.get(key)
+            if hit is not None and now - hit[0] < ttl:
+                return hit[1]
+            val = fn(*args, **kwargs)
+            store[key] = (now, val)
+            if len(store) > 16:  # 有界：仅保留最近 16 条，防止随查询组合膨胀
+                oldest = min(store, key=lambda k: store[k][0])
+                store.pop(oldest, None)
+            return val
+
+        wrapper.__name__ = fn.__name__
+        return wrapper
+
+    return deco
 
 # 失败原因归类：fail_reason 含动态信息（任务 id/距离等），直接 GROUP BY 会碎片化；
 # 先按原文聚合 Top 200，再按已知前缀归类合并（顺序即优先级，越具体的越靠前）
@@ -48,6 +80,7 @@ def _status_counts(base_q):
             'skip': counts.get('skip', 0), 'total': total}
 
 
+@_ttl_cache(_ADMIN_AGG_TTL)
 def _trend_series(days):
     """近 N 天逐日 success/fail/skip 序列（含今日，缺数据日补零）"""
     today = now_cst().date()
@@ -74,6 +107,7 @@ def _trend_series(days):
     return out
 
 
+@_ttl_cache(_ADMIN_AGG_TTL)
 def _fail_categories():
     """近 30 天失败原因归类分布（原文聚合 Top 200 → 前缀归类合并 → 降序）"""
     start = now_cst().date() - timedelta(days=29)
@@ -91,6 +125,7 @@ def _fail_categories():
     return [{'category': k, 'count': v} for k, v in items]
 
 
+@_ttl_cache(_ADMIN_AGG_TTL)
 def _quota_overview():
     """额度健康：全站分桶直方图 + 预警用户 Top 20（使用率≥阈值，阈值可在系统设置调整）。
     used 按产品定义恒等于账号数（现算），quota 上限来自 users.quota。"""
@@ -125,6 +160,7 @@ def _quota_overview():
             'warnTotal': len(warn), 'warnUsers': warn[:20]}
 
 
+@_ttl_cache(_ADMIN_AGG_TTL)
 def _risk_users(days=7):
     """近 7 天高频失败用户：失败 ≥3 次，或失败率 ≥50% 且总次数 ≥5；按失败次数降序 Top 10"""
     today = now_cst().date()
@@ -160,6 +196,7 @@ def _risk_users(days=7):
     return out
 
 
+@_ttl_cache(_ADMIN_AGG_TTL)
 def _account_health():
     """账号健康：① 凭证异常（verify_status≠ok，自动签必失败的前兆）；
     ② 疑似漏签（启用中的任务其账号 >3 天无签到记录或从未签到）"""

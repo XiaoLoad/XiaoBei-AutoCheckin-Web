@@ -295,6 +295,7 @@
               v-if="urls[img.id]"
               :src="urls[img.id]"
               class="h-full w-full cursor-zoom-in object-contain transition duration-200 group-hover:scale-105"
+              loading="lazy"
               alt=""
               @click="openPreview(img)"
             />

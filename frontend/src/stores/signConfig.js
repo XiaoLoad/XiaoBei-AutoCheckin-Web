@@ -43,8 +43,11 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     const errs = {}
     const loc = config.locationId
     if (loc) {
-      const exists = systemLocations.value.some((l) => l.id === loc) ||
-        userLocations.value.some((l) => l.id === loc)
+      // locationId 统一按字符串比对：配置快照里可能是数字（历史保存），资源池选项恒为字符串，
+      // 严格 === 会把同值误判为「不存在」并清空位置、阻断保存（定时任务抽屉保存失败的根因）。
+      const locKey = String(loc)
+      const exists = systemLocations.value.some((l) => String(l.id) === locKey) ||
+        userLocations.value.some((l) => String(l.id) === locKey)
       if (!exists) {
         config.locationId = '' // 旧引用已失效，置空等待用户重新选择
         errs.location = '原选位置已不存在（位置池可能已清空），请重新选择'
@@ -160,6 +163,21 @@ export const useSignConfigStore = defineStore('signConfig', () => {
       canonicalize({ ...api.makeConfig(), ...(c || {}), locationId: c?.locationId == null ? null : String(c.locationId) })
     )
     return norm(a) === norm(b)
+  }
+  // 找出与给定配置实质一致的配置套 id（用于定时任务页抽屉自定义修改后自动关联）。
+  // 优先返回任务当前来源套（若仍匹配），否则第一个匹配套；都不匹配返回 null。
+  function findMatchingConfigSetId(config) {
+    if (!config) return null
+    const b = scheduleBindings.value[taskConfigKey.value]
+    const ownSetId = b ? b.configSetId : null
+    if (ownSetId) {
+      const ownSet = userConfigSets.value.find((s) => s.id === ownSetId)
+      if (ownSet && configsEqual(config, ownSet.config)) return ownSetId
+    }
+    for (const s of userConfigSets.value) {
+      if (s.id !== ownSetId && configsEqual(config, s.config)) return s.id
+    }
+    return null
   }
   function initTaskDraft() {
     const key = taskConfigKey.value
@@ -472,6 +490,61 @@ export const useSignConfigStore = defineStore('signConfig', () => {
       snapshotSets()
       initTaskDraft()
       formErrors.value = {}
+    } finally {
+      saving.value = false
+    }
+  }
+
+  // 保存任务配置（带自动关联）：编辑的是「本任务配置」草稿；保存写回任务实例（config_json），
+  // 若草稿与某配置套实质一致则保留该套为来源标签（关联），否则与配置套解绑。
+  // 与 saveTaskConfig 的「一律解绑」语义不同——用于定时任务页抽屉，贴合需求 G 的关联要求。
+  // scheduleId 优先用调用方传入的权威任务 id（抽屉从卡片拿到），避免依赖 scheduleBindings 键匹配。
+  async function saveTaskConfigLinked(scheduleId) {
+    const draft = taskConfigDraft.value
+    if (!draft) {
+      toast('暂无可保存的配置', 'error')
+      return false
+    }
+    const errs = validateConfig(draft)
+    if (Object.keys(errs).length) {
+      formErrors.value = errs
+      toast(`保存失败：${Object.values(errs).join('；')}`, 'error')
+      return false
+    }
+    const resErrs = validateResources(draft)
+    if (Object.keys(resErrs).length) {
+      formErrors.value = { ...formErrors.value, ...resErrs }
+      toast(`保存失败：${Object.values(resErrs).join('；')}`, 'error')
+      return false
+    }
+    formErrors.value = {}
+    saving.value = true
+    try {
+      const id = scheduleId != null
+        ? scheduleId
+        : (() => { const b = scheduleBindings.value[taskConfigKey.value]; return b && b.scheduleId })()
+      if (!id) {
+        toast('任务实例不存在', 'error')
+        return false
+      }
+      const matchId = findMatchingConfigSetId(draft)
+      await api.updateSchedule({
+        id,
+        config: JSON.parse(JSON.stringify(draft)),
+        configSetId: matchId == null ? null : Number(matchId)
+      })
+      await refreshBindings()
+      userConfigSets.value = (await api.fetchConfigSets()).userConfigSets
+      snapshotSets()
+      initTaskDraft()
+      const setName = matchId != null
+        ? (userConfigSets.value.find((s) => s.id === matchId)?.name || '')
+        : ''
+      toast(matchId != null ? `已保存并关联「${setName}」` : '已保存（自定义配置，已与配置套解绑）', 'success')
+      return true
+    } catch (e) {
+      toast(e.message || '保存失败', 'error')
+      return false
     } finally {
       saving.value = false
     }
@@ -889,8 +962,10 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     applyBind,
     applyConfigSetToAll,
     saveTaskConfig,
+    saveTaskConfigLinked,
     resetActiveSetConfig,
     resetTaskConfig,
+    findMatchingConfigSetId,
     saveLocation,
     deleteLocation,
     trashImage,

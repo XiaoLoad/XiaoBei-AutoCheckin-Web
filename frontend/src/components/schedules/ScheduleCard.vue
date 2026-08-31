@@ -1,5 +1,5 @@
 <template>
-  <article ref="root" class="sched-card dash-card relative flex flex-col overflow-hidden p-4 transition duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-ink/5">
+  <article ref="root" class="sched-card dash-card relative flex flex-col overflow-hidden p-4 transition duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-ink/5" @click="$emit('open-config', schedule)">
     <!-- 左侧状态色条：开启时品牌蓝竖向铺满，GSAP 缩放呈现 -->
     <span
       ref="accent"
@@ -34,7 +34,7 @@
         :disabled="!schedule.accountEnabled || noConfigSet || switching"
         class="relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed"
         :class="schedule.enabled ? 'bg-brand' : 'bg-ink/15'"
-        @click="$emit('toggle', schedule.id, !schedule.enabled)"
+        @click.stop="$emit('toggle', schedule.id, !schedule.enabled)"
       >
         <span ref="knob" class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow" />
       </button>
@@ -81,7 +81,7 @@
       未绑定配置套，无法开启（请先在「签到配置」绑定）
     </p>
 
-    <!-- 操作：删除（带二次确认）+ 定时设置 -->
+    <!-- 操作：删除（带二次确认）；点击卡片其余区域即打开任务配置抽屉 -->
     <div class="mt-auto flex items-center justify-between gap-2 pt-2.5">
       <!-- 删除：常态显示入口，点击后切换为二次确认，避免误删 -->
       <div class="flex items-center gap-1">
@@ -89,7 +89,7 @@
           v-if="!confirming"
           type="button"
           class="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-sm font-medium text-danger/80 transition hover:bg-danger/10"
-          @click="confirming = true"
+          @click.stop="confirming = true"
         >
           <Icon name="trash" :size="14" />删除
         </button>
@@ -97,14 +97,14 @@
           <button
             type="button"
             class="inline-flex h-8 items-center rounded-lg bg-danger px-2.5 text-sm font-medium text-white transition hover:bg-danger/90"
-            @click="confirmDelete"
+            @click.stop="confirmDelete"
           >
             确认删除
           </button>
           <button
             type="button"
             class="inline-flex h-8 items-center rounded-lg px-2 text-sm font-medium text-ink-muted transition hover:bg-cloud"
-            @click="confirming = false"
+            @click.stop="confirming = false"
           >
             取消
           </button>
@@ -113,10 +113,10 @@
 
       <button
         type="button"
-        class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ink/10 px-3 text-sm font-medium text-ink-soft transition hover:bg-cloud"
-        @click="$emit('open-settings', schedule)"
+        class="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-ink-muted transition hover:bg-brand/10 hover:text-brand"
+        @click.stop="$emit('open-config', schedule)"
       >
-        <Icon name="sliders" :size="14" />定时设置
+        <Icon name="sliders" :size="14" />点击查看配置
       </button>
     </div>
   </article>
@@ -131,7 +131,7 @@ const props = defineProps({
   schedule: { type: Object, required: true },
   configMeta: { type: Object, required: true }
 })
-const emit = defineEmits(['toggle', 'open-settings', 'delete'])
+const emit = defineEmits(['toggle', 'open-config', 'delete'])
 
 const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 const root = ref(null)

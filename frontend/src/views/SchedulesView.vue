@@ -113,7 +113,7 @@
             :schedule="s"
             :config-meta="store.configMetaOf(s.accountId, s.taskType)"
             @toggle="store.toggle"
-            @open-settings="openDrawer"
+            @open-config="openDrawer"
             @delete="store.removeTask"
           />
         </div>
@@ -134,12 +134,10 @@
     <!-- 底部间距占位 -->
     <div class="h-6 shrink-0 -mt-6" aria-hidden="true" />
 
-    <!-- 定时设置抽屉 -->
-    <ScheduleSettingsDrawer
+    <!-- 任务配置抽屉（点击卡片打开，可套用配置套 / 自定义修改） -->
+    <ScheduleConfigDrawer
       v-if="drawerSchedule"
       :schedule="drawerSchedule"
-      :saving="store.saving"
-      @save="onSave"
       @close="drawerSchedule = null"
     />
   </div>
@@ -153,7 +151,7 @@ import { useSchedulesStore } from '@/stores/schedules'
 import RefreshStrip from '@/components/RefreshStrip.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
 import ScheduleCard from '@/components/schedules/ScheduleCard.vue'
-import ScheduleSettingsDrawer from '@/components/schedules/ScheduleSettingsDrawer.vue'
+import ScheduleConfigDrawer from '@/components/schedules/ScheduleConfigDrawer.vue'
 import BasePagination from '@/components/BasePagination.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import Icon from '@/components/Icon.vue'
@@ -231,9 +229,6 @@ function onPageSizeChange(size) {
 
 function openDrawer(schedule) {
   drawerSchedule.value = schedule
-}
-function onSave(id, patch) {
-  store.saveSettings(id, patch)
 }
 
 // GSAP 错峰入场：卡片依次淡入上移

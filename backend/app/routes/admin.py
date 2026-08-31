@@ -256,10 +256,15 @@ def _recent_logs():
     total = q.count()
     rows = (q.order_by(SignRecord.created_at.desc(), SignRecord.id.desc())
             .offset((page - 1) * 10).limit(10).all())
+    # 批量预取 user/account，避免逐行 db.session.get 的 N+1
+    user_ids = {r.user_id for r in rows}
+    acc_ids = {r.account_id for r in rows}
+    users = {u.id: u for u in User.query.filter(User.id.in_(user_ids)).all()} if user_ids else {}
+    accs = {a.id: a for a in BAccount.query.filter(BAccount.id.in_(acc_ids)).all()} if acc_ids else {}
     items = []
     for r in rows:
-        u = db.session.get(User, r.user_id)
-        acc = db.session.get(BAccount, r.account_id)
+        u = users.get(r.user_id)
+        acc = accs.get(r.account_id)
         name = ''
         if acc:
             name = (acc.profile or {}).get('name') or ''

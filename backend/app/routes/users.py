@@ -1,8 +1,10 @@
 # 用户管理蓝图：列表（分页/过滤）、新增、编辑、禁用启用、删除（桩）
 # 前缀 /api/users；全部操作均限管理员——列表含全员用户名/角色/额度，不向普通用户开放
 from flask import Blueprint, request
+from sqlalchemy import func
 
 from app.extensions import db
+from app.models.b_account import BAccount
 from app.models.user import User
 from app.utils.auth import admin_required
 from app.utils.response import error, success
@@ -42,7 +44,15 @@ def list_users():
 
     total = query.count()
     pagination = query.order_by(User.id).paginate(page=page, per_page=page_size, error_out=False)
-    items = [u.to_dict() for u in pagination.items]
+    # 一次性聚合已用额度（账号数按 user_id 分组），避免逐用户 COUNT 的 N+1
+    user_ids = [u.id for u in pagination.items]
+    if user_ids:
+        used_rows = (db.session.query(BAccount.user_id, func.count(BAccount.id))
+                     .filter(BAccount.user_id.in_(user_ids)).group_by(BAccount.user_id).all())
+        used_map = {int(uid): int(cnt) for uid, cnt in used_rows}
+    else:
+        used_map = {}
+    items = [u.to_dict(used=used_map.get(u.id, 0)) for u in pagination.items]
 
     return success(
         {

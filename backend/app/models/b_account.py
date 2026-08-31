@@ -38,6 +38,9 @@ class BAccount(db.Model):
         db.UniqueConstraint('user_id', 'account', name='uq_baccounts_user_account'),
     )
 
+    # 列表查询经 joinedload 预载，避免 to_dict/sign_tasks 内逐行查 schedules（N+1）
+    schedules = db.relationship('Schedule', back_populates='account', lazy='select')
+
     EMPTY_PROFILE = {'name': '', 'college': '', 'major': '', 'className': '', 'studentNo': ''}
 
     # ---- 凭据加解密 ----
@@ -71,10 +74,9 @@ class BAccount(db.Model):
 
     def sign_tasks(self):
         """该账号已添加至定时任务的签到类型及启用态（按 dorm/activity 固定顺序）。
-        用于账号列表「类型」列与配置页账号树徽标动态派生，不依赖账号自身的 type 字段。"""
-        from app.models.schedule import Schedule
-
-        rows = Schedule.query.filter_by(account_id=self.id).all()
+        用于账号列表「类型」列与配置页账号树徽标动态派生，不依赖账号自身的 type 字段。
+        schedules 由列表查询 joinedload 预载；单对象上下文按 FK 惰性加载一次，无 N+1。"""
+        rows = self.schedules
         out = []
         for t in ('dorm', 'activity'):
             s = next((x for x in rows if x.task_type == t), None)

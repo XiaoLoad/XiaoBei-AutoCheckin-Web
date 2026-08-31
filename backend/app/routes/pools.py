@@ -129,14 +129,21 @@ def delete_location(loc_id):
 
 # ---------------- UA 模板池（平台级资源，仅管理员维护） ----------------
 
-def _ua_ref_count(ua_id):
-    """扫描配置体 advanced.uaTemplateId 引用计数（数据量小，Python 扫描足够）"""
-    cnt = 0
-    for cs in ConfigSet.query.all():
-        adv = (cs.config or {}).get('advanced') or {}
-        if adv.get('uaTemplateId') == ua_id:
-            cnt += 1
-    return cnt
+def _ref_index():
+    """一次性加载全部配置套（数量有界），供引用计数复用，避免重复全表扫描"""
+    return ConfigSet.query.all()
+
+
+def _ua_ref_count(config_sets, ua_id):
+    """扫描配置体 advanced.uaTemplateId 引用计数（配置套已一次性载入，复用即可）"""
+    return sum(1 for cs in config_sets
+               if ((cs.config or {}).get('advanced') or {}).get('uaTemplateId') == ua_id)
+
+
+def _cred_ref_count(config_sets, cred_id):
+    """扫描配置体 push.credIds 引用计数（配置套已一次性载入，复用即可）"""
+    return sum(1 for cs in config_sets
+               if cred_id in (((cs.config or {}).get('push') or {}).get('credIds') or {}).values())
 
 
 @bp.route('/uas', methods=['POST'])
@@ -178,7 +185,8 @@ def delete_ua(ua_id):
     ua = db.session.get(PoolUa, ua_id)
     if not ua:
         return error(message='UA 模板不存在', code=4040, status=404)
-    refs = _ua_ref_count(ua.id)
+    config_sets = _ref_index()
+    refs = _ua_ref_count(config_sets, ua.id)
     if refs:
         return error(message=f'该 UA 模板被 {refs} 个配置套引用，无法删除',
                      code=4311, data={'refs': refs}, status=409)
@@ -192,8 +200,9 @@ def delete_ua(ua_id):
 def bulk_delete_uas():
     ids = (request.get_json(silent=True) or {}).get('ids') or []
     rows = PoolUa.query.filter(PoolUa.id.in_(ids)).all() if ids else []
+    config_sets = _ref_index()
     for ua in rows:
-        refs = _ua_ref_count(ua.id)
+        refs = _ua_ref_count(config_sets, ua.id)
         if refs:
             return error(message=f'「{ua.remark or ua.id}」被 {refs} 个配置套引用，整批未删除',
                          code=4311, data={'refs': refs}, status=409)
@@ -204,16 +213,6 @@ def bulk_delete_uas():
 
 
 # ---------------- 推送凭证池（Fernet 加密落库 / 脱敏回显 / 占位更新） ----------------
-
-def _cred_ref_count(cred_id):
-    """扫描配置体 push.credIds 引用计数"""
-    cnt = 0
-    for cs in ConfigSet.query.all():
-        ids = ((cs.config or {}).get('push') or {}).get('credIds') or {}
-        if cred_id in ids.values():
-            cnt += 1
-    return cnt
-
 
 @bp.route('/credentials', methods=['POST'])
 @token_required
@@ -270,7 +269,8 @@ def delete_credential(cred_id):
     c = PoolCredential.query.filter_by(id=cred_id, user_id=request.current_user.id).first()
     if not c:
         return error(message='凭证不存在', code=4040, status=404)
-    refs = _cred_ref_count(c.id)
+    config_sets = _ref_index()
+    refs = _cred_ref_count(config_sets, c.id)
     if refs:
         return error(message=f'该凭证被 {refs} 个配置套引用，无法删除',
                      code=4323, data={'refs': refs}, status=409)

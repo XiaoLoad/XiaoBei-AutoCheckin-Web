@@ -44,13 +44,14 @@ class User(db.Model):
             password.encode('utf-8'), self.password_hash.encode('utf-8')
         )
 
-    def to_dict(self):
+    def to_dict(self, used=None):
         """对外安全的用户基本信息（绝不返回密码哈希）。
         已用额度按产品定义恒等于平台账号数（现算）——存储 used_quota 计数器
-        已被历史操作污染出漂移，不再对外展示。"""
-        from app.models.b_account import BAccount
-
-        used = BAccount.query.filter_by(user_id=self.id).count()
+        已被历史操作污染出漂移，不再对外展示。
+        used 由列表查询一次性聚合后传入，避免逐用户 COUNT 的 N+1；单对象上下文省略时现算。"""
+        if used is None:
+            from app.models.b_account import BAccount
+            used = BAccount.query.filter_by(user_id=self.id).count()
         return {
             'user_id': self.id,
             'username': self.username,

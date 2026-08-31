@@ -4,6 +4,7 @@ import re
 import time
 
 from flask import Blueprint, request
+from sqlalchemy.orm import joinedload
 
 from app.extensions import db
 from app.models import BAccount, Schedule, SignRecord
@@ -52,6 +53,7 @@ def _run_verify(account, password):
 def list_accounts():
     """当前用户的 B 平台账号列表（含平台回填档案与最近签到聚合）"""
     items = (BAccount.query.filter_by(user_id=request.current_user.id)
+             .options(joinedload(BAccount.schedules))
              .order_by(BAccount.id.desc()).all())
     return success({'items': [a.to_dict() for a in items], 'total': len(items)})
 

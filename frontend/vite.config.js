@@ -24,6 +24,18 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: false
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        // 将体积大且变动少的依赖拆为独立 chunk，提升浏览器缓存命中、避免图表代码随业务改动重复下载
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('echarts') || id.includes('zrender')) return 'echarts'
+            if (id.includes('vue') || id.includes('@vue') || id.includes('pinia')) return 'vue-vendor'
+            return 'vendor'
+          }
+        }
+      }
+    }
   }
 })

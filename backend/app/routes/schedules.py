@@ -3,6 +3,7 @@
 import json
 
 from flask import Blueprint, request
+from sqlalchemy.orm import joinedload
 
 from app.extensions import db
 from app.models import BAccount, ConfigSet, PoolLocation, Schedule, SignRecord
@@ -19,7 +20,9 @@ bp = Blueprint('schedules', __name__, url_prefix='/api/schedules')
 @token_required
 def list_schedules():
     """当前用户全部任务实例（账号 × 任务类型），含账号信息与下次执行时间"""
-    items = (Schedule.query.filter_by(user_id=request.current_user.id)
+    items = (Schedule.query
+             .filter_by(user_id=request.current_user.id)
+             .options(joinedload(Schedule.account))
              .order_by(Schedule.account_id, Schedule.task_type).all())
     return success({'items': [s.to_dict() for s in items]})
 

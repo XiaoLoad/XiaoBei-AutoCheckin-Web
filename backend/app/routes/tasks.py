@@ -1,6 +1,7 @@
 # 任务日志蓝图：全局跨账号执行日志（sign_records 本地流水）
 # 前缀 /api/tasks；严格按当前登录用户隔离（user_id 过滤，杜绝越权）
 from flask import Blueprint, request
+from sqlalchemy import func
 
 from app.extensions import db
 from app.models import BAccount, SignRecord
@@ -82,11 +83,14 @@ def task_logs():
             ov = ov.filter(SignRecord.account_id.in_([]))
     if type_filter and type_filter != 'all':
         ov = ov.filter(SignRecord.task_type == type_filter)
+    # 单次 GROUP BY 聚合，替代 4 次独立 .count()（status 维度口径与“统计卡基于口径”一致）
+    rows = ov.with_entities(SignRecord.status, func.count(SignRecord.id)).group_by(SignRecord.status).all()
+    counts = {s: int(n) for s, n in rows}
     overview = {
-        'total': ov.count(),
-        'success': ov.filter(SignRecord.status == 'success').count(),
-        'fail': ov.filter(SignRecord.status == 'fail').count(),
-        'skip': ov.filter(SignRecord.status == 'skip').count(),
+        'total': sum(counts.values()),
+        'success': counts.get('success', 0),
+        'fail': counts.get('fail', 0),
+        'skip': counts.get('skip', 0),
     }
 
     pagination = base.order_by(SignRecord.created_at.desc(), SignRecord.id.desc()).paginate(

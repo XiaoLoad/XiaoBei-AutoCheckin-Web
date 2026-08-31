@@ -35,6 +35,9 @@ class Schedule(db.Model):
         db.UniqueConstraint('account_id', 'task_type', name='uq_schedules_account_task'),
     )
 
+    # 列表查询经 joinedload 预载，避免 to_dict 内逐行查 account（N+1）
+    account = db.relationship('BAccount', back_populates='schedules', lazy='select')
+
     @property
     def custom(self) -> dict:
         return json.loads(self.custom_json) if self.custom_json else {}
@@ -57,9 +60,9 @@ class Schedule(db.Model):
         return bool(self.config_json)
 
     def to_dict(self):
-        from app.models.b_account import BAccount
         from app.utils.schedule_utils import extract_jitter_minutes
-        acc = db.session.get(BAccount, self.account_id)
+        # account 由列表查询 joinedload 预载；单对象上下文按 FK 惰性加载一次，无 N+1
+        acc = self.account
         profile = acc.profile if acc else {}
         task_label = '寝室签到' if self.task_type == 'dorm' else '活动签到'
         return {

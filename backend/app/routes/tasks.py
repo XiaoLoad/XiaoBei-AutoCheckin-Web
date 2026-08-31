@@ -125,6 +125,21 @@ def _owned_record(rid):
     return rec
 
 
+@bp.route('/logs/<int:rid>/detail', methods=['GET'])
+@token_required
+def task_log_detail(rid):
+    """单条执行日志的「执行配置」详情：优先返回执行时落库的配置快照（历史切片），
+    忠实还原该条任务当时实际使用的配置。存量记录（升级前）无快照时返回
+    hasSnapshot=false，前端据此显示「无配置快照」。"""
+    rec = _owned_record(rid)
+    if not rec:
+        return error(message='日志不存在或无权查看', code=4406, status=404)
+    snap = rec.get_config_snapshot()
+    if not snap:
+        return success({'hasSnapshot': False, 'logId': rec.id})
+    return success({'hasSnapshot': True, 'logId': rec.id, **snap})
+
+
 @bp.route('/logs/<int:rid>', methods=['DELETE'])
 @token_required
 def delete_task_log(rid):

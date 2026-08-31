@@ -3,7 +3,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { fetchAccounts } from '@/api/accounts'
-import { fetchTaskLogs, deleteTaskLog, purgeTaskLogs } from '@/api/taskLogs'
+import { fetchTaskLogs, fetchTaskLogDetail, deleteTaskLog, purgeTaskLogs } from '@/api/taskLogs'
 
 function toNum(v) {
   const n = Number(v)
@@ -29,6 +29,11 @@ export const useTaskLogsStore = defineStore('taskLogs', () => {
   const refreshingLogs = ref(false)
   const logsLoaded = ref(false)
   let logsSeq = 0
+
+  // 展开详情（手风琴）：details 按日志 id 缓存 { loading, error, data }，
+  // expandedId 是当前唯一展开项，展开新的会先收起旧的，故同一时刻至多一项展开。
+  const details = ref({})
+  const expandedId = ref(null)
 
   const accountOptions = computed(() =>
     accounts.value.map((a) => ({
@@ -63,6 +68,8 @@ export const useTaskLogsStore = defineStore('taskLogs', () => {
       })
       if (seq !== logsSeq) return // 竞态守卫：仅采纳最新请求
       logs.value = res.items || []
+      // 列表整体换新：旧的展开态与详情缓存一并作废，避免留着不属于当前页的展开项
+      resetDetails()
       total.value = res.total || 0
       overview.value = res.overview || { total: 0, success: 0, fail: 0, skip: 0 }
       logsLoaded.value = true
@@ -76,6 +83,56 @@ export const useTaskLogsStore = defineStore('taskLogs', () => {
         loadingLogs.value = false
         refreshingLogs.value = false
       }
+    }
+  }
+
+  // ---- 展开详情：手风琴（同一时刻至多一项展开）----
+  function detailOf(id) {
+    return details.value[id] || null
+  }
+
+  function isOpen(id) {
+    return expandedId.value === id
+  }
+
+  function resetDetails() {
+    details.value = {}
+    expandedId.value = null
+  }
+
+  // 展开态的唯一真相是 expandedId，条目上不再另存 open 标记，杜绝两处状态不同步
+  function closeDetail() {
+    expandedId.value = null
+  }
+
+  // 点已展开项即收起；点另一项先收起旧项再展开新项，保证「展开一个自动收回其它」
+  async function toggleDetail(row) {
+    const id = row && row.id != null ? row.id : null
+    if (id == null) return
+    if (expandedId.value === id) {
+      closeDetail()
+      return
+    }
+    closeDetail()
+    if (!details.value[id]) {
+      details.value[id] = { loading: false, error: '', data: null }
+    }
+    expandedId.value = id
+    await ensureDetail(id)
+  }
+
+  // 按需拉取并缓存：已拿到数据或正在拉取时不再重复请求
+  async function ensureDetail(id) {
+    const d = details.value[id]
+    if (!d || d.data || d.loading) return
+    d.loading = true
+    d.error = ''
+    try {
+      d.data = await fetchTaskLogDetail(id)
+    } catch (e) {
+      d.error = e.message || '加载配置详情失败'
+    } finally {
+      d.loading = false
     }
   }
 
@@ -142,6 +199,12 @@ export const useTaskLogsStore = defineStore('taskLogs', () => {
     loadingLogs,
     refreshingLogs,
     accountOptions,
+    details,
+    expandedId,
+    detailOf,
+    isOpen,
+    toggleDetail,
+    closeDetail,
     init,
     loadAccounts,
     loadLogs,

@@ -39,6 +39,12 @@ export async function fetchTaskLogs(params = {}) {
   }
 }
 
+// 单条日志的执行配置详情：后端已把 locationId / groupId / credIds 等 id 解析为可读名称，
+// 前端直接渲染即可。注意返回的是关联任务「当前生效」的配置，非该条日志执行时的历史快照。
+export async function fetchTaskLogDetail(id) {
+  return request({ url: `/tasks/logs/${id}/detail`, method: 'get' })
+}
+
 // 删除单条执行日志（仅本人归属，后端校验）
 export async function deleteTaskLog(id) {
   return request({ url: `/tasks/logs/${id}`, method: 'delete' })

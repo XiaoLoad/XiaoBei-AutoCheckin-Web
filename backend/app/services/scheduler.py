@@ -18,7 +18,7 @@ from apscheduler.executors.pool import ThreadPoolExecutor
 
 from app.extensions import db
 from app.models import BAccount, ConfigSet, Schedule, SignRecord
-from app.models.pools import PoolCredential, PoolLocation, PoolUa
+from app.models.pools import ImageGroup, PoolCredential, PoolLocation, PoolUa
 from app.models.system_config import get_setting
 from app.models.user import now_cst
 from app.services import geo
@@ -31,6 +31,139 @@ from app.services.push_render import build_ctx, send_channel
 from app.utils.schedule_utils import compute_next_run, extract_jitter_minutes, extract_schedule_time
 
 log = logging.getLogger('scheduler')
+
+# ===== 执行时配置快照（详情回显用）=====
+# 把 resolved 配置渲染成带有可读名称的展示快照，在落库瞬间抓取，作为该条日志的
+# 历史切片 —— 之后即使位置池/配置套改名或删除，历史记录亦不受影响。
+_CHANNEL_LABELS = {'serverchan': 'Server酱', 'pushplus': 'PushPlus', 'email': '邮箱'}
+_IMAGE_STRATEGY_LABELS = {'recycle': '循环复用', 'trash': '用后入回收站', 'delete': '用后删除'}
+_WEEKDAY_NAMES = {1: '一', 2: '二', 3: '三', 4: '四', 5: '五', 6: '六', 7: '日'}
+_MODE_LABELS = {'follow': '跟随配置套', 'custom': '自定义', 'standalone': '独立配置'}
+
+
+def _snap_to_int(v):
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _snap_fmt_hm(hour, minute):
+    try:
+        return f'{int(hour):02d}:{int(minute):02d}'
+    except (TypeError, ValueError):
+        return ''
+
+
+def _snap_weekday_label(weekdays):
+    ws = sorted({int(w) for w in (weekdays or []) if _snap_to_int(w) and 1 <= int(w) <= 7})
+    if not ws:
+        return '未设置'
+    if ws == [1, 2, 3, 4, 5, 6, 7]:
+        return '每天'
+    if ws == [1, 2, 3, 4, 5]:
+        return '工作日'
+    if ws == [6, 7]:
+        return '周末'
+    return '、'.join(f'周{_WEEKDAY_NAMES[w]}' for w in ws)
+
+
+def build_config_view(schedule, resolved, uid):
+    """将 resolved 配置渲染为执行时配置快照（含可读名称）。无 resolved 返回 None。"""
+    if not resolved:
+        return None
+    cfg = resolved
+
+    time_cfg = cfg.get('time') or {}
+    sign_time = time_cfg.get('signTime') or {}
+    sh, eh = time_cfg.get('startHour'), time_cfg.get('endHour')
+    time_view = {
+        'mode': time_cfg.get('mode') or 'normal',
+        'signTime': _snap_fmt_hm(sign_time.get('hour'), sign_time.get('minute')),
+        'weekdayLabel': _snap_weekday_label(time_cfg.get('weekdays')),
+        'window': (f'{int(sh):02d}:00 - {int(eh):02d}:00'
+                   if _snap_to_int(sh) is not None and _snap_to_int(eh) is not None else '—'),
+        'randomDelayMax': _snap_to_int(time_cfg.get('randomDelayMax')) or 0,
+    }
+
+    loc_view = None
+    loc_id = _snap_to_int(cfg.get('locationId'))
+    if loc_id:
+        loc = db.session.get(PoolLocation, loc_id)
+        if loc is not None:
+            loc_view = {'id': loc.id, 'name': loc.name, 'address': loc.address or '',
+                        'lat': loc.lat, 'lng': loc.lng, 'offsetM': loc.offset_m}
+
+    image_cfg = cfg.get('image') or {}
+    group_name = ''
+    gid = _snap_to_int(image_cfg.get('groupId'))
+    if gid:
+        g = db.session.get(ImageGroup, gid)
+        group_name = g.name if g else ''
+    image_view = {
+        'enabled': bool(image_cfg.get('enabled')),
+        'strategy': image_cfg.get('strategy') or '',
+        'strategyLabel': _IMAGE_STRATEGY_LABELS.get(image_cfg.get('strategy'), '—'),
+        'groupId': gid,
+        'groupName': group_name,
+    }
+
+    push_cfg = cfg.get('push') or {}
+    channels = push_cfg.get('channels') or []
+    use_own = bool(push_cfg.get('useOwnCredential'))
+    cred_ids = push_cfg.get('credIds') or {} if use_own else {}
+    cred_names = {}
+    for ch in channels:
+        cid = _snap_to_int(cred_ids.get(ch))
+        if not cid:
+            continue
+        c = db.session.get(PoolCredential, cid)
+        # 仅认本人凭证：他人凭证即便 id 命中也不展示名称（与 _resolve_push_creds 口径一致）
+        if c is not None and c.user_id == uid:
+            cred_names[ch] = c.name
+    notify = push_cfg.get('notify')
+    if not isinstance(notify, dict) or not notify:
+        notify = {'success': True, 'skip': True, 'fail': True}
+    push_view = {
+        'channels': [{'key': ch, 'label': _CHANNEL_LABELS.get(ch, ch),
+                      'credentialName': cred_names.get(ch, '')} for ch in channels],
+        'template': push_cfg.get('template') or 'html',
+        'useOwnCredential': use_own,
+        'notify': notify,
+    }
+
+    adv_cfg = cfg.get('advanced') or {}
+    ua_name = ''
+    ua_id = _snap_to_int(adv_cfg.get('uaTemplateId'))
+    if ua_id:
+        ua = db.session.get(PoolUa, ua_id)
+        if ua is not None:
+            ua_name = (ua.remark or '').strip() or (ua.content or '').strip()[:24]
+    advanced_view = {
+        'uaTemplateId': ua_id,
+        'uaTemplateName': ua_name,
+        'customUa': adv_cfg.get('customUa') or '',
+    }
+
+    cs_name = None
+    if schedule.mode == 'follow' and schedule.config_set_id:
+        cs = db.session.get(ConfigSet, schedule.config_set_id)
+        cs_name = cs.name if cs else None
+
+    return {
+        'mode': schedule.mode,
+        'modeLabel': _MODE_LABELS.get(schedule.mode, schedule.mode),
+        'configSetId': schedule.config_set_id,
+        'configSetName': cs_name,
+        'time': time_view,
+        'location': loc_view,
+        'fence': cfg.get('fence') or {},
+        'remarks': cfg.get('remarks') or [],
+        'image': image_view,
+        'push': push_view,
+        'advanced': advanced_view,
+    }
+
 
 # 进程级单例
 _app = None
@@ -401,13 +534,14 @@ def _execute(schedule):
     outcome = None
     reason = ''
     extra = {}
+    resolved = None
     try:
         if acc.verify_status != 'ok':
             try:
                 res = get_adapter().verify_and_fetch(acc.account, acc.get_password())
             except BPlatformError as e:
                 log.warning('任务 %s 账号校验失败：%s', schedule.id, e.message)
-                _commit_result(schedule, acc, 'fail', f'账号校验失败：{e.message}')
+                _commit_result(schedule, acc, 'fail', f'账号校验失败：{e.message}', resolved=resolved)
                 return
             acc.set_token(res.token)
             acc.set_profile(res.profile)
@@ -418,7 +552,7 @@ def _execute(schedule):
 
         resolved = _resolve(schedule)
         if resolved is None:
-            _commit_result(schedule, acc, 'skip', '配置缺失（配置套未绑定或已删除）')
+            _commit_result(schedule, acc, 'skip', '配置缺失（配置套未绑定或已删除）', resolved=resolved)
             return
         # 本次实际提交的单条备注：多条随机选一、单条即用该条、无则占位；
         # 同时交给提交与推送展示，保证「提交什么就推送什么」。
@@ -446,17 +580,17 @@ def _execute(schedule):
             session['token'] = res.token
             outcome, reason, extra = _checkin_flow(schedule, acc, session, resolved, submitted_remark)
         # 统一在此回写：成功/失败/跳过都落 SignRecord 并回写任务与账号状态
-        _commit_result(schedule, acc, outcome, reason)
+        _commit_result(schedule, acc, outcome, reason, resolved=resolved)
     except BPlatformError as e:
         # acc 仍在作用域内，账号聚合与任务状态一同更新，杜绝两者不一致
         if e.kind == 'credential':
             acc.verify_status = 'fail'  # 凭证失效，下次执行触发 reverify
         log.warning('任务 %s 执行异常（B 平台）：%s', schedule.id, e.message)
-        _commit_result(schedule, acc, 'fail', f'B 平台错误：{e.message}')
+        _commit_result(schedule, acc, 'fail', f'B 平台错误：{e.message}', resolved=resolved)
         return
     except Exception as e:
         log.exception('任务 %s 执行异常', schedule.id)
-        _commit_result(schedule, acc, 'fail', f'执行异常：{e}')
+        _commit_result(schedule, acc, 'fail', f'执行异常：{e}', resolved=resolved)
         return
 
     # 后置动作（推送）与「执行结果落库」解耦：失败仅记日志，
@@ -489,8 +623,9 @@ def _select_remark(resolved):
     return random.choice(remarks)
 
 
-def _commit_result(schedule, acc, status, fail_reason=''):
-    """写签到记录 + 回写任务状态 + 刷新账号最近签到聚合；统一提交。"""
+def _commit_result(schedule, acc, status, fail_reason='', resolved=None):
+    """写签到记录 + 回写任务状态 + 刷新账号最近签到聚合；统一提交。
+    resolved 非 None 时把执行时配置快照写入记录，供详情回显历史切片。"""
     rec = SignRecord(
         user_id=schedule.user_id,
         account_id=schedule.account_id,
@@ -503,6 +638,10 @@ def _commit_result(schedule, acc, status, fail_reason=''):
         fail_reason=fail_reason,
         initiator='system',
     )
+    # 执行时配置快照：忠实还原该条日志当时实际使用的配置（resolved 为 None 表示
+    # 执行前配置缺失/校验失败，无快照可抓，落 NULL，详情端显示「无配置快照」）
+    if resolved is not None:
+        rec.set_config_snapshot(build_config_view(schedule, resolved, schedule.user_id))
     db.session.add(rec)
     schedule.last_run_at = now_cst()
     schedule.last_status = status

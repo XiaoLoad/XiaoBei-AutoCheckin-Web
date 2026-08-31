@@ -191,81 +191,220 @@
         <li
           v-for="row in logs"
           :key="row.id"
-          class="flex items-stretch gap-3 px-3 py-3 transition hover:bg-cloud/40 sm:px-4"
+          class="transition hover:bg-cloud/40"
         >
-          <span
-            class="w-1 shrink-0 rounded-full"
-            :class="logRail(row.status)"
-          />
-
-          <div class="min-w-0 flex-1">
-            <div class="flex flex-wrap items-center gap-2">
-              <span class="truncate text-[15px] font-semibold text-ink">{{
-                row.studentName || row.accountName
-              }}</span>
-              <span v-if="row.college" class="truncate text-xs text-ink-muted">
-                · {{ row.college
-                }}<template v-if="row.major"> · {{ row.major }}</template>
-              </span>
+          <div class="flex items-stretch gap-3 px-3 py-3 sm:px-4">
+            <!-- 行主体点击展开；删除键与其同级，故不会误触发展开 -->
+            <button
+              type="button"
+              class="flex min-w-0 flex-1 items-stretch gap-3 text-left"
+              :aria-expanded="store.isOpen(row.id)"
+              @click="store.toggleDetail(row)"
+            >
               <span
-                class="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap"
-                :class="typeBadge(row.taskType).cls"
-              >
-                {{ typeBadge(row.taskType).label }}
-              </span>
-            </div>
-            <div class="mt-1 truncate text-sm text-ink-soft">
-              {{ row.taskName }}
-            </div>
-            <div
-              class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted"
-            >
-              <span class="tabular-nums">{{
-                row.createdAt || row.signDate
-              }}</span>
-              <span>{{
-                row.initiator === "manual" ? "手动触发" : "系统触发"
-              }}</span>
-            </div>
-            <div
-              v-if="
-                (row.status === 'fail' || row.status === 'skip') &&
-                row.failReason
-              "
-              class="mt-1.5 flex items-start gap-1.5 rounded-lg px-2.5 py-1.5 text-xs"
-              :class="
-                row.status === 'fail'
-                  ? 'bg-danger/[0.04] text-danger'
-                  : 'bg-amber/[0.06] text-amber'
-              "
-            >
-              <Icon
-                :name="row.status === 'fail' ? 'x-circle' : 'alert'"
-                :size="13"
-                class="mt-0.5 shrink-0"
+                class="w-1 shrink-0 rounded-full"
+                :class="logRail(row.status)"
               />
-              <span>{{ row.failReason }}</span>
-            </div>
+
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="truncate text-[15px] font-semibold text-ink">{{
+                    row.studentName || row.accountName
+                  }}</span>
+                  <span v-if="row.college" class="truncate text-xs text-ink-muted">
+                    · {{ row.college
+                    }}<template v-if="row.major"> · {{ row.major }}</template>
+                  </span>
+                  <span
+                    class="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap"
+                    :class="typeBadge(row.taskType).cls"
+                  >
+                    {{ typeBadge(row.taskType).label }}
+                  </span>
+                </div>
+                <div class="mt-1 truncate text-sm text-ink-soft">
+                  {{ row.taskName }}
+                </div>
+                <div
+                  class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted"
+                >
+                  <span class="tabular-nums">{{
+                    row.createdAt || row.signDate
+                  }}</span>
+                  <span>{{
+                    row.initiator === "manual" ? "手动触发" : "系统触发"
+                  }}</span>
+                  <span class="text-ink-muted/80">{{
+                    store.isOpen(row.id) ? "收起配置" : "查看配置"
+                  }}</span>
+                </div>
+                <div
+                  v-if="
+                    (row.status === 'fail' || row.status === 'skip') &&
+                    row.failReason
+                  "
+                  class="mt-1.5 flex items-start gap-1.5 rounded-lg px-2.5 py-1.5 text-xs"
+                  :class="
+                    row.status === 'fail'
+                      ? 'bg-danger/[0.04] text-danger'
+                      : 'bg-amber/[0.06] text-amber'
+                  "
+                >
+                  <Icon
+                    :name="row.status === 'fail' ? 'x-circle' : 'alert'"
+                    :size="13"
+                    class="mt-0.5 shrink-0"
+                  />
+                  <span>{{ row.failReason }}</span>
+                </div>
+              </div>
+
+              <span
+                class="inline-flex shrink-0 items-center gap-1.5 self-center rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap"
+                :class="logPill(row.status).cls"
+              >
+                <span
+                  class="h-1.5 w-1.5 rounded-full"
+                  :class="logPill(row.status).dot"
+                />
+                {{ logPill(row.status).label }}
+              </span>
+
+              <Icon
+                name="chevron-right"
+                :size="18"
+                class="shrink-0 self-center text-ink-muted transition-[transform,color] duration-300"
+                :class="store.isOpen(row.id) ? 'rotate-90 text-brand' : ''"
+              />
+            </button>
+
+            <button
+              type="button"
+              class="shrink-0 self-center rounded-lg p-1.5 text-ink-muted transition hover:bg-danger/[0.06] hover:text-danger"
+              title="删除该条日志"
+              @click="onDelete(row)"
+            >
+              <Icon name="trash" :size="14" />
+            </button>
           </div>
 
-          <span
-            class="inline-flex shrink-0 items-center gap-1.5 self-center rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap"
-            :class="logPill(row.status).cls"
-          >
-            <span
-              class="h-1.5 w-1.5 rounded-full"
-              :class="logPill(row.status).dot"
-            />
-            {{ logPill(row.status).label }}
-          </span>
-          <button
-            type="button"
-            class="shrink-0 self-center rounded-lg p-1.5 text-ink-muted transition hover:bg-danger/[0.06] hover:text-danger"
-            title="删除该条日志"
-            @click="onDelete(row)"
-          >
-            <Icon name="trash" :size="14" />
-          </button>
+          <!-- 展开详情：该日志所属任务执行时采用的完整配置（手风琴：展开另一条会自动收起本条） -->
+          <Transition :css="false" @enter="onDetailEnter" @leave="onDetailLeave">
+            <div
+              v-if="store.isOpen(row.id)"
+              class="overflow-hidden border-t border-ink/5 bg-cloud/30 px-3 py-4 sm:px-5"
+            >
+              <template v-if="detailOf(row) && detailOf(row).loading">
+                <div class="flex items-center justify-center py-8 text-sm text-ink-muted">
+                  加载配置详情中…
+                </div>
+              </template>
+
+              <div
+                v-else-if="detailOf(row) && detailOf(row).error"
+                class="py-2 text-sm text-danger"
+              >
+                {{ detailOf(row).error }}
+              </div>
+
+              <div v-else-if="configOf(row) && configOf(row).hasSnapshot" class="space-y-3">
+                <!-- 配置来源：模式 + 配置套名称 + 口径提示 -->
+                <div
+                  data-detail-item
+                  class="flex flex-wrap items-center gap-2 rounded-xl bg-white/70 px-3 py-2.5"
+                >
+                  <span
+                    class="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
+                    :class="modeBadge(configOf(row).mode).cls"
+                  >
+                    <Icon :name="modeBadge(configOf(row).mode).icon" :size="12" />
+                    {{ configOf(row).modeLabel }}
+                  </span>
+                  <span v-if="configOf(row).configSetName" class="truncate text-xs text-ink-soft">
+                    来自配置套
+                    <b class="font-medium text-ink">{{ configOf(row).configSetName }}</b>
+                  </span>
+                  <span v-else class="truncate text-xs text-ink-soft">
+                    任务自持配置，不随配置套变动
+                  </span>
+                  <span
+                    class="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald/10 px-2 py-0.5 text-[11px] text-emerald"
+                  >
+                    <Icon name="clock" :size="11" />执行时配置快照
+                  </span>
+                </div>
+
+                <!-- 配置分区：时间 / 位置 / 图库 / 推送 / 备注 / 其它 -->
+                <div class="grid gap-3 lg:grid-cols-2">
+                  <section
+                    v-for="s in detailSections(configOf(row))"
+                    :key="s.key"
+                    data-detail-item
+                    class="rounded-xl border border-ink/5 bg-white p-3"
+                  >
+                    <h4
+                      class="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-ink-muted"
+                    >
+                      <Icon :name="s.icon" :size="12" />{{ s.title }}
+                    </h4>
+
+                    <!-- 名称类长文本：整行展示，避免挤进两列被截断 -->
+                    <p
+                      v-if="s.note"
+                      class="mt-2 truncate text-xs font-medium text-ink"
+                      :title="s.note"
+                    >
+                      {{ s.note }}
+                    </p>
+
+                    <!-- 标签组：推送通道 / 签到备注 -->
+                    <div v-if="s.chips && s.chips.length" class="mt-2 flex flex-wrap gap-1.5">
+                      <span
+                        v-for="(c, ci) in s.chips"
+                        :key="ci"
+                        class="inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium"
+                        :class="c.tone"
+                      >
+                        <span class="truncate">{{ c.label }}</span>
+                        <span v-if="c.hint" class="truncate opacity-70">· {{ c.hint }}</span>
+                      </span>
+                    </div>
+                    <p
+                      v-else-if="s.chips"
+                      class="mt-2 rounded-lg bg-cloud/60 px-2.5 py-2 text-xs text-ink-muted"
+                    >
+                      {{ s.emptyText }}
+                    </p>
+
+                    <!-- 键值网格 -->
+                    <div v-if="s.fields" class="mt-2 grid grid-cols-2 gap-2">
+                      <div
+                        v-for="f in s.fields"
+                        :key="f.label"
+                        class="rounded-lg bg-cloud/50 px-2.5 py-1.5"
+                        :class="f.span === 2 ? 'col-span-2' : ''"
+                      >
+                        <p class="text-[11px] text-ink-muted">{{ f.label }}</p>
+                        <p
+                          class="mt-0.5 truncate text-xs font-medium text-ink"
+                          :class="f.mono ? 'tabular-nums' : ''"
+                          :title="f.value"
+                        >
+                          {{ f.value }}
+                        </p>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </div>
+              <div v-else-if="configOf(row)" class="py-7 text-center">
+                <p class="text-sm text-ink-muted">无配置快照</p>
+                <p class="mt-1 text-xs text-ink-muted/80">
+                  该记录执行时未保存配置快照（升级前的历史日志）。
+                </p>
+              </div>
+            </div>
+          </Transition>
         </li>
       </ul>
       </div>
@@ -290,9 +429,10 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { storeToRefs } from "pinia";
+import { gsap } from "gsap";
 import { useTaskLogsStore } from "@/stores/taskLogs";
 import { toast } from "@/utils/toast";
 import Icon from "@/components/Icon.vue";
@@ -399,12 +539,257 @@ function logPill(status) {
   return { label: "跳过", cls: "bg-amber/10 text-amber", dot: "bg-amber" };
 }
 
+// ===== 展开详情：配置分区渲染 =====
+// 后端已把 locationId / groupId / credIds 等 id 解析为可读名称，此处只做展示层排版
+const NOTIFY_LABELS = { success: "成功", skip: "跳过", fail: "失败" };
+const TEMPLATE_LABELS = {
+  html: "HTML 卡片",
+  txt: "纯文本",
+  markdown: "Markdown",
+};
+// 与凭证池一致的通道配色，避免同一通道在两处颜色打架
+const CHANNEL_TONE = {
+  serverchan: "bg-brand/10 text-brand",
+  pushplus: "bg-success/10 text-success",
+  email: "bg-info/10 text-info",
+};
+
+function modeBadge(mode) {
+  if (mode === "follow")
+    return { icon: "layers", cls: "bg-brand/10 text-brand" };
+  if (mode === "custom")
+    return { icon: "sliders", cls: "bg-ink/10 text-ink-soft" };
+  return { icon: "box", cls: "bg-success/10 text-success" }; // standalone
+}
+
+// 逐行读取：手风琴收起动画期间旧节点仍在 DOM，按行取自己那份缓存可避免串到新展开项的数据
+function detailOf(row) {
+  return store.detailOf(row.id);
+}
+
+function configOf(row) {
+  const d = store.detailOf(row.id);
+  return d && d.data ? d.data : null;
+}
+
+function detailSections(d) {
+  if (!d) return [];
+  const t = d.time || {};
+  const loc = d.location;
+  const img = d.image || {};
+  const push = d.push || {};
+  const adv = d.advanced || {};
+  const notify = push.notify || {};
+  const notifyOn = ["success", "skip", "fail"]
+    .filter((k) => notify[k])
+    .map((k) => NOTIFY_LABELS[k]);
+  const channels = push.channels || [];
+
+  return [
+    {
+      key: "time",
+      title: "执行时间",
+      icon: "clock",
+      fields: [
+        { label: "签到时刻", value: t.signTime || "—", mono: true },
+        { label: "重复", value: t.weekdayLabel || "—" },
+        { label: "允许时段", value: t.window || "—", mono: true },
+        {
+          label: "随机延迟",
+          value: t.randomDelayMax ? `≤ ${t.randomDelayMax} 分钟` : "关闭",
+        },
+      ],
+    },
+    {
+      key: "location",
+      title: "签到位置",
+      icon: "map-pin",
+      note: loc ? loc.name : "",
+      fields: loc
+        ? [
+            { label: "经纬度", value: `${loc.lng}, ${loc.lat}`, mono: true },
+            { label: "抖动半径", value: `${loc.offsetM} 米` },
+            { label: "地址", value: loc.address || "—", span: 2 },
+          ]
+        : [{ label: "状态", value: "未配置，回退任务围栏中心", span: 2 }],
+    },
+    {
+      key: "image",
+      title: "图库",
+      icon: "image",
+      fields: [
+        { label: "状态", value: img.enabled ? "已启用" : "未启用" },
+        { label: "用后策略", value: img.strategyLabel || "—" },
+        { label: "取图范围", value: img.groupName || "全部图片", span: 2 },
+      ],
+    },
+    {
+      key: "push",
+      title: "结果推送",
+      icon: "bell",
+      chips: channels.map((c) => ({
+        label: c.label,
+        hint: c.credentialName,
+        tone: CHANNEL_TONE[c.key] || "bg-ink/10 text-ink-soft",
+      })),
+      emptyText: "未配置推送通道",
+      fields: channels.length
+        ? [
+            {
+              label: "内容模板",
+              value: TEMPLATE_LABELS[push.template] || push.template || "—",
+            },
+            {
+              label: "凭证来源",
+              value: push.useOwnCredential ? "资源池凭证" : "直接填写",
+            },
+            {
+              label: "通知时机",
+              value: notifyOn.length ? notifyOn.join(" / ") : "全部关闭",
+              span: 2,
+            },
+          ]
+        : null,
+    },
+    {
+      key: "remarks",
+      title: "签到备注",
+      icon: "file",
+      chips: (d.remarks || []).map((r) => ({
+        label: r,
+        tone: "bg-cloud text-ink-soft",
+      })),
+      emptyText: "未配置备注",
+    },
+    {
+      key: "other",
+      title: "其它",
+      icon: "settings",
+      fields: [
+        {
+          label: "围栏拦截",
+          value: (d.fence || {}).intercept === false ? "已关闭" : "开启",
+        },
+        {
+          label: "请求 UA",
+          value: adv.uaTemplateName || (adv.customUa ? "自定义" : "平台默认"),
+        },
+      ],
+    },
+  ];
+}
+
+// ===== 展开/收起动画（GSAP）=====
+// 高度与纵向 padding 必须同步补间，且收起时显式量出「去 padding 的纯内容高度」再归零，
+// 否则 height:auto 末态量算不稳、padding 残留会导致收起后留白或跳动。
+const reduceMotion = ref(false);
+let mm = null;
+
+// 量出纯内容高度：border-box 下 offsetHeight 含 padding，故临时把纵向 padding 归零再量
+function measureContent(el) {
+  const cs = getComputedStyle(el);
+  const pt = parseFloat(cs.paddingTop) || 0;
+  const pb = parseFloat(cs.paddingBottom) || 0;
+  const prevT = el.style.paddingTop;
+  const prevB = el.style.paddingBottom;
+  el.style.paddingTop = "0px";
+  el.style.paddingBottom = "0px";
+  const h = el.offsetHeight;
+  el.style.paddingTop = prevT;
+  el.style.paddingBottom = prevB;
+  return { h, pt, pb };
+}
+
+function onDetailEnter(el, done) {
+  if (reduceMotion.value) {
+    done();
+    return;
+  }
+  // 锁定裁剪 + 合成层，避免展开过程中内容溢出/重排抖动
+  gsap.set(el, { overflow: "hidden", willChange: "height, padding" });
+  const { h, pt, pb } = measureContent(el);
+  gsap.fromTo(
+    el,
+    { height: 0, paddingTop: 0, paddingBottom: 0, autoAlpha: 0 },
+    {
+      height: h,
+      paddingTop: pt,
+      paddingBottom: pb,
+      autoAlpha: 1,
+      duration: 0.34,
+      ease: "power2.out",
+      onComplete: () => {
+        // 展开结束清掉内联 height/padding，让内容后续变化（如窗口缩放）能自然撑开
+        gsap.set(el, { clearProps: "height, paddingTop, paddingBottom, overflow, willChange" });
+        done();
+      },
+    }
+  );
+  // 分区错峰落位：容器展开之后再逐块淡入，避免整块内容一次性闪现
+  const items = el.querySelectorAll("[data-detail-item]");
+  if (items.length) {
+    gsap.fromTo(
+      items,
+      { autoAlpha: 0, y: 8 },
+      {
+        autoAlpha: 1,
+        y: 0,
+        duration: 0.3,
+        stagger: 0.05,
+        delay: 0.12,
+        ease: "power2.out",
+        overwrite: true,
+        clearProps: "opacity,transform",
+      }
+    );
+  }
+}
+
+function onDetailLeave(el, done) {
+  if (reduceMotion.value) {
+    done();
+    return;
+  }
+  gsap.set(el, { overflow: "hidden", willChange: "height, padding" });
+  const { h, pt, pb } = measureContent(el);
+  // 高度与 padding 一起从当前值平滑归零；power2.inOut 让收起缓入缓出，比单边 in 更顺
+  gsap.fromTo(
+    el,
+    { height: h, paddingTop: pt, paddingBottom: pb, autoAlpha: 1 },
+    {
+      height: 0,
+      paddingTop: 0,
+      paddingBottom: 0,
+      autoAlpha: 0,
+      duration: 0.32,
+      ease: "power2.inOut",
+      onComplete: () => {
+        gsap.set(el, { clearProps: "height, paddingTop, paddingBottom, overflow, willChange" });
+        done();
+      },
+    }
+  );
+}
+
 onMounted(() => {
+  // 统一尊重系统「减少动态效果」偏好：命中时展开/收起直接落到终态，不做补间
+  mm = gsap.matchMedia();
+  mm.add("(prefers-reduced-motion: reduce)", () => {
+    reduceMotion.value = true;
+    return () => {
+      reduceMotion.value = false;
+    };
+  });
+
   // 支持从仪表盘「签到失败 · 查看详情」等入口带筛选条件跳入（?accountId=&type=&status=）
   const q = route.query || {}
   if (/^\d+$/.test(String(q.accountId || ""))) store.selectedAccountId = Number(q.accountId);
   if (["all", "dorm", "activity"].includes(q.type)) store.typeFilter = q.type;
   if (["all", "success", "fail", "skip"].includes(q.status)) store.statusFilter = q.status;
   store.init();
+});
+
+onUnmounted(() => {
+  mm?.revert();
 });
 </script>

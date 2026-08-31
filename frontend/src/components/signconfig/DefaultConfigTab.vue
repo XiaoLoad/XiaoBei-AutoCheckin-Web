@@ -28,17 +28,19 @@
               @click="store.setActiveSet(s.id)"
             >
               <span class="min-w-0 flex-1 truncate">{{ s.name }}</span>
-              <!-- 套用数量：引用此套的账号数（去重 dorm/activity 同账号实例），便于管理前先看清影响面 -->
-              <span
-                v-if="setUsage[s.id]"
-                class="shrink-0 rounded-full bg-brand/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-brand"
-                :title="`${setUsage[s.id]} 个账号套用此配置套`"
-              >
-                {{ setUsage[s.id] }} 账号
-              </span>
+            </button>
+            <!-- 套用明细入口：点击查看哪些账号的哪些任务套用了此套（纯数字徽标，与名称垂直居中） -->
+            <button
+              v-if="renamingId !== s.id && setUsage[s.id]"
+              type="button"
+              class="inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-brand/10 px-1.5 text-[10px] font-semibold leading-none text-brand transition hover:bg-brand/20 active:scale-95"
+              :title="`${setUsage[s.id]} 个账号套用此配置套，点击查看明细`"
+              @click.stop="openUsage(s.id)"
+            >
+              {{ setUsage[s.id] }}
             </button>
             <input
-              v-else
+              v-if="renamingId === s.id"
               :ref="(el) => setRenameInput(el, s.id)"
               v-model="renameText"
               type="text"
@@ -100,13 +102,14 @@
           <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
               <h3 class="text-sm font-semibold text-ink">正在编辑：{{ store.activeSet.name }}</h3>
-              <span
-                v-if="activeSetUsage"
-                class="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-medium leading-none text-brand"
-                :title="`${activeSetUsage} 个账号套用此配置套`"
+              <button
+                type="button"
+                class="inline-flex shrink-0 items-center gap-1 rounded-full border border-brand/20 bg-brand/10 px-2.5 py-1 text-[11px] font-medium leading-none text-brand transition hover:border-brand/30 hover:bg-brand/20 active:scale-95"
+                :title="`当前配置套有 ${activeSetSummary.accountsCount} 个账号使用、${activeSetSummary.instancesCount} 个任务实例，点击查看明细`"
+                @click="openUsage(store.activeSet.id)"
               >
-                {{ activeSetUsage }} 个账号套用
-              </span>
+                {{ activeSetSummary.accountsCount }} 个账号使用 · {{ activeSetSummary.instancesCount }} 个任务实例
+              </button>
             </div>
             <p class="text-xs text-ink-muted">配置套是一份完整模板；在「账号任务配置」里可指定某任务回填此套。</p>
           </div>
@@ -166,6 +169,9 @@
       <p>将把当前配置套「<strong>{{ store.activeSet?.name }}</strong>」的完整配置<strong>覆盖写入</strong>所有已套用该套的账号任务配置（直接替换其现有配置，不可撤销）。</p>
       <p class="mt-2">仅影响「已套用」状态的任务；跟随配置套的任务会实时生效，无需此操作。</p>
     </ConfirmModal>
+
+    <!-- 套用明细：哪些账号的哪些任务套用了当前配置套 -->
+    <ConfigSetUsageDrawer v-if="usageSetId" :set-id="usageSetId" @close="usageSetId = null" />
   </div>
 </template>
 
@@ -184,11 +190,18 @@ import ImageSection from '@/components/signconfig/sections/ImageSection.vue'
 import PushSection from '@/components/signconfig/sections/PushSection.vue'
 import AdvancedSection from '@/components/signconfig/sections/AdvancedSection.vue'
 import MasonryGrid from '@/components/signconfig/MasonryGrid.vue'
+import ConfigSetUsageDrawer from '@/components/signconfig/ConfigSetUsageDrawer.vue'
 
 const store = useSignConfigStore()
 
 // 移动端配置套切换器选项
 const setOptions = computed(() => store.userConfigSets.map((s) => ({ label: s.name, value: s.id })))
+
+// 套用明细抽屉：点击徽标查看哪些账号的哪些任务套用了某配置套
+const usageSetId = ref('')
+function openUsage(setId) {
+  usageSetId.value = setId
+}
 
 // —— 套用数量：引用各配置套的账号数（scheduleBindings key 为 `${accountId}:${taskType}`，
 //     同账号寝/活两实例按账号去重），供列表徽标与编辑头部展示，方便改套前评估影响面 ——
@@ -205,6 +218,9 @@ const setUsage = computed(() => {
   return out
 })
 const activeSetUsage = computed(() => (store.activeSet ? setUsage.value[store.activeSet.id] || 0 : 0))
+const activeSetSummary = computed(() =>
+  store.activeSet ? store.usageSummaryOf(store.activeSet.id) : { accountsCount: 0, instancesCount: 0 }
+)
 
 // —— 应用全部：二次确认 ——
 const showApplyAll = ref(false)

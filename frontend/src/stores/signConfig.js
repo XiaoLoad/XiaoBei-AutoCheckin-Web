@@ -179,6 +179,43 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     }
     return null
   }
+  // 某配置套被哪些账号的哪些任务使用：纯前端从 scheduleBindings + accounts + taskTypes 推导。
+  // 按账号分组，便于抽屉以「账号 → 任务」层级呈现；无需改后端。
+  function usageDetailOf(setId) {
+    if (setId == null) return []
+    const taskLabel = (t) => taskTypes.value.find((x) => x.value === t)?.label || t
+    const groups = {}
+    for (const [key, b] of Object.entries(scheduleBindings.value || {})) {
+      if (!b || b.configSetId == null || String(b.configSetId) !== String(setId)) continue
+      const accId = String(key).split(':')[0]
+      const tType = String(key).split(':')[1] || ''
+      if (!groups[accId]) {
+        const acc = accounts.value.find((a) => String(a.id) === accId)
+        groups[accId] = {
+          accountId: accId,
+          accountName: acc?.name || '未知账号',
+          studentNo: acc?.studentNo || '',
+          tasks: []
+        }
+      }
+      groups[accId].tasks.push({
+        taskType: tType,
+        taskLabel: taskLabel(tType),
+        enabled: !!b.enabled,
+        scheduleId: b.scheduleId
+      })
+    }
+    return Object.values(groups).sort((a, b) => a.accountName.localeCompare(b.accountName, 'zh'))
+  }
+  // 套用规模汇总：账号数 + 任务实例数，供抽屉顶部统计展示。
+  function usageSummaryOf(setId) {
+    const detail = usageDetailOf(setId)
+    return {
+      accountsCount: detail.length,
+      instancesCount: detail.reduce((n, g) => n + g.tasks.length, 0)
+    }
+  }
+
   function initTaskDraft() {
     const key = taskConfigKey.value
     const b = scheduleBindings.value[key]
@@ -966,6 +1003,8 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     resetActiveSetConfig,
     resetTaskConfig,
     findMatchingConfigSetId,
+    usageDetailOf,
+    usageSummaryOf,
     saveLocation,
     deleteLocation,
     trashImage,

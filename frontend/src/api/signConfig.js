@@ -97,10 +97,10 @@ export async function deleteConfigSet(id) {
   return refreshSets()
 }
 
-// 应用全部：把当前配置套配置覆盖写入所有「已套用」该套的账号任务配置（需二次确认，后端执行）
+// 批量应用：把配置套配置快照套用到指定账号任务（targets: [{accountId, taskType}]）。
 // silent：store 层 catch 后用更贴身的文案提示，不走全局 toast
-export async function applyConfigSetToAll(id) {
-  const data = await request({ url: `/config-sets/${id}/apply-all`, method: 'post', silent: true })
+export async function applyConfigSetBatch(id, targets) {
+  const data = await request({ url: `/config-sets/${id}/apply-batch`, method: 'post', data: { targets }, silent: true })
   return data || {}
 }
 

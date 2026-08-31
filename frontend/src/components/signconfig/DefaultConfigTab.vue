@@ -118,9 +118,9 @@
               type="button"
               class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-brand/30 px-4 text-sm font-medium text-brand transition hover:bg-brand/10 disabled:opacity-50"
               :disabled="store.saving"
-              @click="showApplyAll = true"
+              @click="showApplyDrawer = true"
             >
-              <Icon name="send" :size="14" />应用全部
+              <Icon name="send" :size="14" />批量应用
             </button>
             <button
               type="button"
@@ -157,18 +157,8 @@
       </template>
     </div>
 
-    <!-- 应用全部：二次确认弹窗 -->
-    <ConfirmModal
-      v-model="showApplyAll"
-      icon="send"
-      title="应用配置套到全部关联任务"
-      :confirm-text="store.saving ? '处理中…' : '确认应用全部'"
-      :confirming="store.saving"
-      @confirm="onApplyAllConfirm"
-    >
-      <p>将把当前配置套「<strong>{{ store.activeSet?.name }}</strong>」的完整配置<strong>覆盖写入</strong>所有已套用该套的账号任务配置（直接替换其现有配置，不可撤销）。</p>
-      <p class="mt-2">仅影响「已套用」状态的任务；跟随配置套的任务会实时生效，无需此操作。</p>
-    </ConfirmModal>
+    <!-- 批量应用：右滑抽屉，勾选账号任务批量套用 / 全部应用 -->
+    <ConfigSetApplyDrawer v-if="showApplyDrawer && store.activeSet" :set-id="store.activeSet.id" @close="showApplyDrawer = false" />
 
     <!-- 套用明细：哪些账号的哪些任务套用了当前配置套 -->
     <ConfigSetUsageDrawer v-if="usageSetId" :set-id="usageSetId" @close="usageSetId = null" />
@@ -180,7 +170,6 @@ import { computed, ref, onActivated, onUnmounted, watch, nextTick } from 'vue'
 import { gsap } from 'gsap'
 import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
-import ConfirmModal from '@/components/ConfirmModal.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
 import { toast } from '@/utils/toast'
 import TimeSection from '@/components/signconfig/sections/TimeSection.vue'
@@ -191,6 +180,7 @@ import PushSection from '@/components/signconfig/sections/PushSection.vue'
 import AdvancedSection from '@/components/signconfig/sections/AdvancedSection.vue'
 import MasonryGrid from '@/components/signconfig/MasonryGrid.vue'
 import ConfigSetUsageDrawer from '@/components/signconfig/ConfigSetUsageDrawer.vue'
+import ConfigSetApplyDrawer from '@/components/signconfig/ConfigSetApplyDrawer.vue'
 
 const store = useSignConfigStore()
 
@@ -222,14 +212,8 @@ const activeSetSummary = computed(() =>
   store.activeSet ? store.usageSummaryOf(store.activeSet.id) : { accountsCount: 0, instancesCount: 0 }
 )
 
-// —— 应用全部：二次确认 ——
-const showApplyAll = ref(false)
-function onApplyAllConfirm() {
-  if (!store.activeSet) return
-  store.applyConfigSetToAll(store.activeSet.id).finally(() => {
-    showApplyAll.value = false
-  })
-}
+// —— 批量应用：右滑抽屉替代原「应用全部」弹窗 ——
+const showApplyDrawer = ref(false)
 
 // —— 重命名：原地行内编辑，不再在下方弹出独立输入框 ——
 const renamingId = ref('')

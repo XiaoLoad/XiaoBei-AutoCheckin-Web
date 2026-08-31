@@ -716,22 +716,27 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     }
   }
 
-  // 应用全部：把当前配置套配置覆盖写入所有「已套用」该套的账号任务配置（后端批量执行）。
-  // 覆盖后重拉绑定与配置套，使任务状态即时反映「已套用」对齐态。
-  async function applyConfigSetToAll(setId) {
-    if (!setId) return
+  // 批量应用：把配置套套用到指定账号任务（targets: [{accountId, taskType}]，后端批量快照复制）。
+  // 完成后重拉绑定与配置套，使任务状态即时反映「已套用」对齐态；返回后端统计供调用方判断是否关闭抽屉。
+  async function applyConfigSetBatch(setId, targets) {
+    if (!setId || !Array.isArray(targets) || targets.length === 0) {
+      toast('请先选择要应用的任务', 'warning')
+      return null
+    }
     saving.value = true
     try {
-      const data = await api.applyConfigSetToAll(setId)
-      const n = (data && data.updated) || 0
+      const data = await api.applyConfigSetBatch(setId, targets)
       await refreshBindings()
       userConfigSets.value = (await api.fetchConfigSets()).userConfigSets
       snapshotSets()
       initTaskDraft()
-      if (n) toast(`已应用配置套到 ${n} 个关联账号任务`, 'success')
-      else toast('没有套用该配置套的账号任务配置', 'warning')
+      const n = (data && data.updated) || 0
+      if (n) toast(`已套用配置套到 ${n} 个账号任务`, 'success')
+      else toast('没有可应用的目标任务', 'warning')
+      return data
     } catch (e) {
       toast(e.message || '应用失败', 'error')
+      return null
     } finally {
       saving.value = false
     }
@@ -997,7 +1002,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     pauseTask,
     bindSet,
     applyBind,
-    applyConfigSetToAll,
+    applyConfigSetBatch,
     saveTaskConfig,
     saveTaskConfigLinked,
     resetActiveSetConfig,

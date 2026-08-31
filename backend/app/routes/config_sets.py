@@ -2,7 +2,7 @@
 from flask import Blueprint, request
 
 from app.extensions import db
-from app.models import ConfigSet, PoolLocation, Schedule
+from app.models import BAccount, ConfigSet, PoolLocation, Schedule
 from app.schemas.config_schema import load_create, load_update
 from app.utils.auth import token_required
 from app.utils.response import error, success
@@ -91,31 +91,70 @@ def delete_set(set_id):
     return success(message='删除成功')
 
 
-@bp.route('/<int:set_id>/apply-all', methods=['POST'])
+@bp.route('/<int:set_id>/apply-batch', methods=['POST'])
 @token_required
-def apply_set_to_all(set_id):
-    """应用全部：把当前配置套配置覆盖写入所有「已套用」本套的任务实例。
+def apply_set_batch(set_id):
+    """批量套用：把配置套配置覆盖写入指定账号的任务实例（body: {targets:[{accountId,taskType}]}）。
 
-    仅处理 config_set_id 仍指向本套且持有自持配置快照（standalone）的任务——
-    这些是被「套用配置套」回填过的账号任务配置；follow 任务实时跟随配置套，无需覆盖。
-    覆盖后若任务已启用则重算下次执行时间并对齐调度器 job。
+    语义与单任务「套用配置套」一致：任务转为独立持有快照（standalone），
+    config_set_id 退化为来源标签；实例不存在的账号任务现场补建（默认停用，不自动开启）。
+    账号不存在或未启用则跳过；已启用的任务覆盖后重算下次执行时间并对齐调度器 job。
     """
     s = ConfigSet.query.filter_by(id=set_id, user_id=request.current_user.id).first()
     if not s:
         return error(message='配置套不存在', code=4040, status=404)
-    targets = (Schedule.query
-               .filter_by(user_id=request.current_user.id, config_set_id=set_id)
-               .all())
-    updated = 0
+
+    payload = request.get_json(silent=True) or {}
+    raw = payload.get('targets')
+    if not isinstance(raw, list):
+        return error(message='缺少应用目标', code=4401, status=400)
+
+    # 去重 + 过滤非法项（taskType 仅接受两种签到类型）
+    seen = set()
+    targets = []
+    for t in raw:
+        if not isinstance(t, dict):
+            continue
+        acc_id, task_type = t.get('accountId'), t.get('taskType')
+        if acc_id is None or task_type not in ('dorm', 'activity'):
+            continue
+        key = (int(acc_id), task_type)
+        if key not in seen:
+            seen.add(key)
+            targets.append(key)
+    if not targets:
+        return error(message='缺少有效的应用目标', code=4401, status=400)
+
     from app.services.scheduler import sync_schedule
     from app.utils.schedule_utils import compute_next_run
-    for sc in targets:
-        if not sc.has_own_config:
+
+    user = request.current_user
+    updated = created = skipped = 0
+    for acc_id, task_type in targets:
+        acc = BAccount.query.filter_by(id=acc_id, user_id=user.id).first()
+        if not acc or not acc.enabled:
+            skipped += 1
             continue
-        sc.set_config(s.config)
+        sc = Schedule.query.filter_by(user_id=user.id, account_id=acc.id, task_type=task_type).first()
+        if sc:
+            sc.set_config(s.config)
+            sc.mode = 'standalone'
+            sc.config_set_id = s.id
+        else:
+            sc = Schedule(user_id=user.id, account_id=acc.id, task_type=task_type,
+                          mode='standalone', enabled=False, config_set_id=s.id)
+            sc.set_config(s.config)
+            db.session.add(sc)
+            created += 1
         if sc.enabled:
             sc.next_run_at = compute_next_run(sc)
             sync_schedule(sc)
         updated += 1
     db.session.commit()
-    return success({'updated': updated}, message=f'已覆盖更新 {updated} 个账号任务配置')
+
+    msg = f'已套用到 {updated} 个账号任务'
+    if created:
+        msg += f'（新建 {created}）'
+    if skipped:
+        msg += f'，跳过 {skipped} 个（账号不存在或未启用）'
+    return success({'updated': updated, 'created': created, 'skipped': skipped}, message=msg)

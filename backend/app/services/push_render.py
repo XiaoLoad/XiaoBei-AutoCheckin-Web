@@ -1,6 +1,10 @@
 # 推送内容渲染 + 单通道发送（供调度器分发与凭证测试推送共用）。
 # 模板格式：html（默认，微信/UI 友好）/ txt（纯文本）/ markdown。
-# 标题含签到账号姓名 + 状态（成功/失败/跳过）；内容含账号信息、任务、时间、位置、备注、图片。
+# 标题含签到账号姓名 + 状态（成功/失败/跳过）；内容按四分区组织：
+# 签到状态（类型/状态/时间）、个人信息（姓名/学号/专业/班级）、
+# 签到任务（任务名/时间段/发起人/是否需要图片）、签到参数（地址/经纬度/备注/图组/配置套）。
+# 通道差异：pushplus 按 template 渲染；serverchan 仅纯文本；email 支持 HTML——
+# template=html 时以 text/html 邮件发送，txt/markdown 回落纯文本。
 # PushPlus 长度守卫：标题≤100 字、内容≤20000 字（取实名用户下限，会员更高，保守值避免被截断）。
 import logging
 import os
@@ -8,6 +12,7 @@ import warnings
 
 import requests
 from app.extensions import db
+from app.models import ConfigSet
 from app.models.pools import ImageGroup, PoolLocation
 from app.models.user import now_cst
 from urllib3.exceptions import InsecureRequestWarning
@@ -54,10 +59,14 @@ def _lookup_location(location_id):
     return {'name': loc.name or '', 'lat': loc.lat, 'lng': loc.lng, 'address': loc.address or ''}
 
 
-def build_ctx(acc, schedule, resolved, status, reason='', signed_at=None, image_url='', remark=None):
+def build_ctx(acc, schedule, resolved, status, reason='', signed_at=None, image_url='', remark=None,
+              task_name='', task_window='', need_photo=None):
     """组装推送上下文：账号信息来自 acc.profile，任务/时间/位置来自 schedule 与 resolved。
     remark 显式传入时（调度器按本次实际提交选取的单条）优先使用；为 None 时回退到
-    合并全部备注（凭证测试推送预览用，便于一眼看全已配置备注）。"""
+    合并全部备注（凭证测试推送预览用，便于一眼看全已配置备注）。
+    task_name/task_window/need_photo 来自 B 平台进行中任务（调度器执行时经 extra 传入；
+    任务未找到或测试推送等场景留空，卡片显示「—」）。
+    config_source 按 schedule.mode 推导：follow→配置套名，custom→自定义，standalone→独立配置。"""
     profile = getattr(acc, 'profile', None) or {}
     name = (profile.get('name') or '').strip() or (getattr(acc, 'account', '') or '未知账号')
     task_label = '寝室签到' if schedule.task_type == 'dorm' else '活动签到'
@@ -83,6 +92,24 @@ def build_ctx(acc, schedule, resolved, status, reason='', signed_at=None, image_
     if remark is None:
         remarks = (resolved or {}).get('remarks') or []
         remark = ' / '.join(str(r) for r in remarks if str(r).strip()) if remarks else '—'
+    # 配置套来源：follow 查套名（仅当 schedule 真有 mode/config_set_id 时）；
+    # 测试推送等场景 schedule 为简单占位对象，getattr 兜底为「—」
+    config_source = '—'
+    mode = getattr(schedule, 'mode', None)
+    if mode == 'follow':
+        cs_name = ''
+        cs_id = getattr(schedule, 'config_set_id', None)
+        if cs_id:
+            try:
+                cs = db.session.get(ConfigSet, int(cs_id))
+                cs_name = cs.name if cs else ''
+            except (TypeError, ValueError):
+                cs_name = ''
+        config_source = cs_name or '来源套已删除'
+    elif mode == 'custom':
+        config_source = '自定义'
+    elif mode == 'standalone':
+        config_source = '独立配置'
     return {
         'name': name,
         'student_no': profile.get('studentNo') or '—',
@@ -91,6 +118,10 @@ def build_ctx(acc, schedule, resolved, status, reason='', signed_at=None, image_
         'className': profile.get('className') or '—',
         'task_label': task_label,
         'task_type': schedule.task_type,
+        'task_name': task_name or '',
+        'task_window': task_window or '',
+        'need_photo': need_photo,
+        'config_source': config_source,
         'status': status,
         'status_label': STATUS_LABEL.get(status, status),
         'initiator': '系统自动',
@@ -111,70 +142,82 @@ def _title(ctx):
     return f"小北{ctx['task_label']} {ctx['name']} {ctx['status_label']}"
 
 
-# ── 渲染：HTML（默认，移动端卡片，内联样式兼容微信/pushplus） ──
+# ── 渲染：HTML（默认，移动端卡片，内联样式兼容微信/pushplus/email） ──
+# 四分区：签到状态（hero：类型/状态/时间）、个人信息、签到任务、签到参数。
+# 视觉基调：浅灰底 + 白卡 + 状态色点缀，无重渐变，行式标签-值排版，邮件客户端友好。
 def render_html(ctx):
     color = STATUS_COLOR.get(ctx['status'], '#2563eb')
     color_soft = STATUS_COLOR_SOFT.get(ctx['status'], '#eef2ff')
-    loc_name = ctx['location_name'] or ''
-    loc_text = f"{ctx['lng']}, {ctx['lat']}" if ctx['lng'] is not None else '—'
-    addr = ctx['address'] or '（未配置位置）'
-    group_name = ctx['image_group_name'] or '（未配置）'
+    loc_name = ctx['location_name'] or '—'
+    addr_no = ctx['address'] or '—'
+    loc_text = f"{ctx['lng']}, {ctx['lat']}" if ctx['lng'] is not None and ctx['lat'] is not None else '—'
+    group_name = ctx['image_group_name'] or '—'
+    if ctx.get('need_photo') is None:
+        need_photo = '—'
+    else:
+        need_photo = '需要' if ctx['need_photo'] else '不需要'
 
-    def section(title):
-        return (f'<div style="display:flex;align-items:center;gap:7px;margin:22px 0 4px;">'
-                f'<span style="width:7px;height:7px;border-radius:50%;background:{color};display:inline-block;"></span>'
-                f'<span style="font-size:12px;font-weight:700;color:#6b7280;letter-spacing:1px;">{_esc(title)}</span></div>')
+    def head(title):
+        return (f'<div style="display:flex;align-items:center;gap:7px;margin:20px 0 2px;">'
+                f'<span style="width:6px;height:6px;border-radius:50%;background:{color};display:inline-block;"></span>'
+                f'<span style="font-size:11px;font-weight:700;color:#9aa1ab;letter-spacing:2px;">{_esc(title)}</span></div>')
 
-    def row(label, value):
-        return (f'<div style="display:flex;align-items:baseline;gap:14px;padding:10px 0;border-bottom:1px solid #f0f1f3;">'
-                f'<div style="width:60px;flex:none;font-size:12px;color:#9aa1ab;letter-spacing:.5px;">{_esc(label)}</div>'
-                f'<div style="flex:1;font-size:14px;color:#1f2733;line-height:1.55;word-break:break-all;">{_esc(value)}</div></div>')
+    def row(label, value, last=False):
+        border = 'none' if last else '1px solid #f2f3f5'
+        return (f'<div style="display:flex;align-items:baseline;gap:12px;padding:9px 0;border-bottom:{border};">'
+                f'<div style="width:76px;flex:none;font-size:12px;color:#9aa1ab;letter-spacing:.5px;">{_esc(label)}</div>'
+                f'<div style="flex:1;font-size:14px;color:#1f2733;line-height:1.6;word-break:break-all;">{_esc(value)}</div></div>')
 
-    remark_html = (f'<div style="background:#f7f8fa;border-radius:10px;padding:12px 14px;'
-                   f'font-size:14px;color:#1f2733;line-height:1.6;word-break:break-all;">{_esc(ctx["remark"])}</div>')
+    remark_html = (f'<div style="margin-top:12px;padding:11px 13px;border-radius:10px;'
+                   f'background:#f7f8fa;font-size:13px;color:#1f2733;line-height:1.6;word-break:break-all;">'
+                   f'<span style="font-size:11px;font-weight:700;color:#9aa1ab;letter-spacing:1px;">签到备注</span>'
+                   f'<span style="opacity:.5;margin:0 6px;">·</span>{_esc(ctx["remark"] or "—")}</div>')
 
     reason_html = ''
-    if ctx['status'] == 'fail' and ctx['reason']:
-        reason_html = (f'<div style="margin-top:16px;padding:11px 13px;border-radius:10px;'
+    if ctx['status'] in ('fail', 'skip') and ctx['reason']:
+        label = '失败原因' if ctx['status'] == 'fail' else '跳过原因'
+        reason_html = (f'<div style="margin:14px 0 4px;padding:11px 13px;border-radius:10px;'
                        f'background:{color_soft};color:{color};font-size:13px;line-height:1.55;">'
-                       f'<span style="font-weight:700;">失败原因</span>'
+                       f'<span style="font-weight:700;">{label}</span>'
                        f'<span style="opacity:.55;margin:0 6px;">·</span>{_esc(ctx["reason"])}</div>')
 
-    html = f"""  <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',sans-serif;max-width:540px;margin:0 auto;background:#eef0f3;padding:14px;border-radius:18px;">
-  <div style="background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 1px 2px rgba(16,24,40,.05),0 10px 30px rgba(16,24,40,.06);">
-    <div style="background:linear-gradient(135deg,{color} 0%,{color}cc 100%);padding:22px 22px 20px;color:#ffffff;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-        <div style="font-size:12px;opacity:.9;letter-spacing:1px;">小北自动打卡</div>
-        <div style="font-size:12px;font-weight:600;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.28);border-radius:999px;padding:3px 10px;">{_esc(ctx['task_label'])}</div>
-      </div>
-      <div style="font-size:32px;font-weight:800;line-height:1.05;margin-top:12px;letter-spacing:3px;">{_esc(ctx['status_label'])}</div>
-      <div style="font-size:15px;font-weight:600;margin-top:8px;opacity:.96;">{_esc(ctx['name'])}</div>
-    </div>
-    <div style="padding:8px 22px 22px;font-size:14px;">
-      {section('位置')}
-      {row('名称', loc_name or '（未命名位置）')}
-      {row('经纬度', loc_text)}
-      {row('地址', addr)}
+    hero = (f'<div style="padding:22px 22px 18px;border-bottom:1px solid #f2f3f5;">'
+            f'<div style="display:flex;justify-content:space-between;align-items:center;">'
+            f'<div style="font-size:11px;font-weight:600;color:#9aa1ab;letter-spacing:2px;">小北自动打卡</div>'
+            f'<div style="font-size:12px;font-weight:600;color:{color};background:{color_soft};border-radius:999px;padding:4px 12px;">{_esc(ctx["task_label"])}</div>'
+            f'</div>'
+            f'<div style="font-size:30px;font-weight:800;line-height:1.15;margin-top:14px;letter-spacing:2px;color:{color};">{_esc(ctx["status_label"])}</div>'
+            f'<div style="font-size:13px;color:#6b7280;margin-top:8px;">签到时间 {_esc(ctx["sign_time"])}</div>'
+            f'</div>')
 
-      {section('备注')}
-      {remark_html}
-
-      {section('图片分组')}
-      <div style="display:inline-flex;align-items:center;gap:7px;font-size:13px;color:#1f2733;background:#f3f4f6;border-radius:9px;padding:7px 11px;">
-        <span style="width:7px;height:7px;border-radius:50%;background:{color};display:inline-block;"></span>{_esc(group_name)}
-      </div>
-
-      {section('执行信息')}
-      {row('学号', ctx['student_no'])}
-      {row('时间段', ctx['time_window'])}
-      {row('签到时间', ctx['sign_time'])}
-      {row('发起人', ctx['initiator'])}
-
-      {reason_html}
-    </div>
-  </div>
-  <div style="text-align:center;color:#aab0b8;font-size:11px;margin-top:12px;letter-spacing:.5px;">小北寝室自动打卡 · {_esc(ctx['sign_time'])}</div>
-</div>"""
+    html = (f'<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,\'PingFang SC\',\'Microsoft YaHei\',sans-serif;'
+            f'max-width:560px;margin:0 auto;background:#eef0f3;padding:16px;border-radius:18px;">'
+            f'<div style="background:#ffffff;border-radius:16px;overflow:hidden;'
+            f'box-shadow:0 1px 2px rgba(16,24,40,.05),0 8px 24px rgba(16,24,40,.06);">'
+            f'{hero}'
+            f'<div style="padding:2px 22px 20px;">'
+            f'{reason_html}'
+            f'{head("个人信息")}'
+            f'{row("姓名", ctx["name"])}'
+            f'{row("学号", ctx["student_no"])}'
+            f'{row("专业", ctx["major"])}'
+            f'{row("班级", ctx["className"], last=True)}'
+            f'{head("签到任务")}'
+            f'{row("任务名称", ctx["task_name"] or "—")}'
+            f'{row("任务时间段", ctx["task_window"] or "—")}'
+            f'{row("发起人", ctx["initiator"])}'
+            f'{row("是否需要图片", need_photo, last=True)}'
+            f'{head("签到参数")}'
+            f'{row("地址名称", loc_name)}'
+            f'{row("地址号", addr_no)}'
+            f'{row("经纬度", loc_text)}'
+            f'{row("图片分组", group_name)}'
+            f'{row("配置套", ctx["config_source"] or "—", last=True)}'
+            f'{remark_html}'
+            f'</div>'
+            f'</div>'
+            f'<div style="text-align:center;color:#aab0b8;font-size:11px;margin-top:12px;letter-spacing:.5px;">小北寝室自动打卡 · {_esc(ctx["sign_time"])}</div>'
+            f'</div>')
     return _truncate(html, PUSHPLUS_CONTENT_MAX)
 
 
@@ -244,12 +287,13 @@ def render(ctx, fmt):
     return fn(ctx)
 
 
-def send_email(fields, subject, body):
-    """通过 SMTP（STARTTLS，端口 587）发送纯文本邮件。失败抛异常由调用方记录。"""
+def send_email(fields, subject, body, subtype='plain'):
+    """通过 SMTP（STARTTLS，端口 587）发送邮件；subtype='html' 时按 text/html 发送。
+    失败抛异常由调用方记录。"""
     import smtplib
     from email.mime.text import MIMEText
 
-    msg = MIMEText(body, 'plain', 'utf-8')
+    msg = MIMEText(body, subtype, 'utf-8')
     msg['Subject'] = subject
     msg['From'] = fields['emailFrom']
     msg['To'] = fields['emailTo']
@@ -301,7 +345,11 @@ def send_channel(channel, key_or_fields, ctx, template='html'):
         return True, ''
     if channel == 'email':
         try:
-            send_email(key_or_fields, title, render_txt(ctx))
+            if template == 'html':
+                send_email(key_or_fields, title, render_html(ctx), subtype='html')
+            else:
+                # txt 原样发送；markdown 邮件客户端不渲染，回落纯文本
+                send_email(key_or_fields, title, render_txt(ctx))
             return True, ''
         except Exception as e:
             return False, str(e)

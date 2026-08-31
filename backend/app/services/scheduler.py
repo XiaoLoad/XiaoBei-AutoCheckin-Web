@@ -513,6 +513,8 @@ def _checkin_flow(schedule, acc, session, resolved, remark):
             raise
 
         extra = {'warning': warning, 'task_name': task.get('taskName') or '',
+                 'task_start': task.get('startTime') or '', 'task_end': task.get('endTime') or '',
+                 'need_photo': bool(task.get('needPhoto')),
                  'image_id': claimed['id'] if claimed else None, 'strategy': strategy}
         if result.status == 'success':
             return 'success', '', extra
@@ -606,7 +608,7 @@ def _execute(schedule):
                 if base:
                     image_url = f"{base}/api/pools/images/{extra['image_id']}/file"
             dispatch_push(resolved, schedule, acc, outcome, reason,
-                          image_url=image_url, submitted_remark=submitted_remark)
+                          image_url=image_url, submitted_remark=submitted_remark, extra=extra)
     except Exception as e:
         log.warning('任务 %s 后置动作失败（已落库的执行记录不受影响）：%s', schedule.id, e)
 
@@ -664,13 +666,15 @@ def _send_one(ch, key, ctx, template):
     return ch, ok, err
 
 
-def dispatch_push(resolved, schedule, acc, status='success', reason='', image_url='', submitted_remark=''):
+def dispatch_push(resolved, schedule, acc, status='success', reason='', image_url='', submitted_remark='',
+                  extra=None):
     """按配置套 push 分发执行结果（ServerChan / PushPlus / Email）。
     读取配置套的 push 结构：channels 决定通道、useOwnCredential 决定密钥来源
     （直接填写用 push.cred 内联字段；回填凭证用 push.credIds 引用资源池并解密）；
     notify 开关控制各状态是否推送。无可用密钥则不发，发送失败仅记录，不影响主链路。
-    标题含签到账号姓名 + 状态；内容按 push.template(html/txt/markdown) 渲染，含账号/任务/
-    时间/位置/备注/图片；长度受 pushplus 限制守护。"""
+    标题含签到账号姓名 + 状态；内容按 push.template(html/txt/markdown) 渲染；
+    extra 携带 B 平台任务信息（任务名/时间段/是否需要图片）供卡片「签到任务」分区展示；
+    长度受 pushplus 限制守护。"""
     push = (resolved or {}).get('push')
     if not isinstance(push, dict) or not push:
         log.info('任务 %s 未配置推送，跳过分发', schedule.id)
@@ -695,11 +699,16 @@ def dispatch_push(resolved, schedule, acc, status='success', reason='', image_ur
         return
 
     template = push.get('template') or 'html'
-    # build_ctx 含 DB 读取（位置池/图库），须在调用线程（已持 app context）完成；
+    # build_ctx 含 DB 读取（位置池/图库/配置套名），须在调用线程（已持 app context）完成；
     # 仅把无状态、纯网络 I/O 的 send_channel 扇出到线程池并发执行：
     # 墙钟时间由「各通道之和」降为「最慢单通道」，单通道异常仍隔离互不干扰。
+    extra = extra or {}
+    start, end = extra.get('task_start') or '', extra.get('task_end') or ''
     ctx = build_ctx(acc, schedule, resolved, status, reason=reason,
-                    image_url=image_url, remark=submitted_remark or None)
+                    image_url=image_url, remark=submitted_remark or None,
+                    task_name=extra.get('task_name') or '',
+                    task_window=f'{start}~{end}' if (start or end) else '',
+                    need_photo=extra.get('need_photo'))
 
     if len(creds) == 1:
         ch, key = next(iter(creds.items()))

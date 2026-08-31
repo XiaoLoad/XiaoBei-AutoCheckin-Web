@@ -8,7 +8,7 @@ import warnings
 
 import requests
 from app.extensions import db
-from app.models.pools import PoolLocation
+from app.models.pools import ImageGroup, PoolLocation
 from app.models.user import now_cst
 from urllib3.exceptions import InsecureRequestWarning
 
@@ -23,7 +23,9 @@ if not PUSH_VERIFY_SSL:
 PUSHPLUS_TITLE_MAX = 100
 PUSHPLUS_CONTENT_MAX = 20000
 STATUS_LABEL = {'success': '成功', 'skip': '跳过', 'fail': '失败'}
-STATUS_COLOR = {'success': '#16a34a', 'skip': '#d97706', 'fail': '#dc2626'}
+STATUS_COLOR = {'success': '#15a05a', 'skip': '#d97706', 'fail': '#e23b3b'}
+# 状态色浅底（用于 chip / 分组强调），与主色同源，保证配色统一
+STATUS_COLOR_SOFT = {'success': '#e7f6ee', 'skip': '#fdf2e3', 'fail': '#fdecec'}
 
 TEMPLATES = ('html', 'txt', 'markdown')
 
@@ -40,7 +42,7 @@ def _esc(s):
 
 
 def _lookup_location(location_id):
-    """按位置池 id 取经纬度与地址备注；缺失返回 None（推送里展示为未配置）。"""
+    """按位置池 id 取名称/经纬度/地址；缺失返回 None（推送里展示为未配置）。"""
     if not location_id:
         return None
     try:
@@ -49,7 +51,7 @@ def _lookup_location(location_id):
         return None
     if loc is None:
         return None
-    return {'lat': loc.lat, 'lng': loc.lng, 'address': loc.address or ''}
+    return {'name': loc.name or '', 'lat': loc.lat, 'lng': loc.lng, 'address': loc.address or ''}
 
 
 def build_ctx(acc, schedule, resolved, status, reason='', signed_at=None, image_url='', remark=None):
@@ -68,6 +70,16 @@ def build_ctx(acc, schedule, resolved, status, reason='', signed_at=None, image_
     sign_at = signed_at or now_cst()
     sign_time = sign_at.strftime('%Y-%m-%d %H:%M')
     loc = _lookup_location((resolved or {}).get('locationId'))
+    # 图片分组名：从 resolved 配置的 image.groupId 解析（不展示图片本身，仅展示所用分组）
+    image_cfg = (resolved or {}).get('image') or {}
+    image_group_name = ''
+    gid = image_cfg.get('groupId')
+    if gid:
+        try:
+            g = db.session.get(ImageGroup, int(gid))
+            image_group_name = g.name if g else ''
+        except (TypeError, ValueError):
+            image_group_name = ''
     if remark is None:
         remarks = (resolved or {}).get('remarks') or []
         remark = ' / '.join(str(r) for r in remarks if str(r).strip()) if remarks else '—'
@@ -84,72 +96,84 @@ def build_ctx(acc, schedule, resolved, status, reason='', signed_at=None, image_
         'initiator': '系统自动',
         'time_window': time_window,
         'sign_time': sign_time,
+        'location_name': loc['name'] if loc else '',
         'lat': loc['lat'] if loc else None,
         'lng': loc['lng'] if loc else None,
         'address': loc['address'] if loc else '',
         'remark': remark,
+        'image_group_name': image_group_name,
         'image_url': image_url or '',
         'reason': reason or '',
     }
 
 
 def _title(ctx):
-    return f"小北签到 {ctx['name']} {ctx['status_label']}"
+    return f"小北{ctx['task_label']} {ctx['name']} {ctx['status_label']}"
 
 
 # ── 渲染：HTML（默认，移动端卡片，内联样式兼容微信/pushplus） ──
 def render_html(ctx):
     color = STATUS_COLOR.get(ctx['status'], '#2563eb')
+    color_soft = STATUS_COLOR_SOFT.get(ctx['status'], '#eef2ff')
+    loc_name = ctx['location_name'] or ''
     loc_text = f"{ctx['lng']}, {ctx['lat']}" if ctx['lng'] is not None else '—'
     addr = ctx['address'] or '（未配置位置）'
+    group_name = ctx['image_group_name'] or '（未配置）'
+
+    def section(title):
+        return (f'<div style="display:flex;align-items:center;gap:7px;margin:22px 0 4px;">'
+                f'<span style="width:7px;height:7px;border-radius:50%;background:{color};display:inline-block;"></span>'
+                f'<span style="font-size:12px;font-weight:700;color:#6b7280;letter-spacing:1px;">{_esc(title)}</span></div>')
 
     def row(label, value):
-        return (f'<div style="display:flex;padding:7px 0;border-bottom:1px solid #f1f2f4;">'
-                f'<div style="width:80px;flex:none;color:#8a9099;">{_esc(label)}</div>'
-                f'<div style="flex:1;color:#1f2329;word-break:break-all;">{_esc(value)}</div></div>')
+        return (f'<div style="display:flex;align-items:baseline;gap:14px;padding:10px 0;border-bottom:1px solid #f0f1f3;">'
+                f'<div style="width:60px;flex:none;font-size:12px;color:#9aa1ab;letter-spacing:.5px;">{_esc(label)}</div>'
+                f'<div style="flex:1;font-size:14px;color:#1f2733;line-height:1.55;word-break:break-all;">{_esc(value)}</div></div>')
 
-    if ctx['image_url']:
-        img_html = (f'<div style="margin-top:14px;"><img src="{_esc(ctx["image_url"])}" '
-                    f'alt="签到图片" style="max-width:100%;border-radius:10px;display:block;" /></div>')
-    else:
-        img_html = ('<div style="margin-top:14px;color:#9aa0a6;font-size:12px;'
-                    'background:#f6f7f9;border-radius:8px;padding:8px 10px;">'
-                    '图片已随签到提交（服务器公网可达时方可预览）</div>')
+    remark_html = (f'<div style="background:#f7f8fa;border-radius:10px;padding:12px 14px;'
+                   f'font-size:14px;color:#1f2733;line-height:1.6;word-break:break-all;">{_esc(ctx["remark"])}</div>')
 
     reason_html = ''
     if ctx['status'] == 'fail' and ctx['reason']:
-        reason_html = (f'<div style="margin-top:12px;color:#b42318;font-size:13px;'
-                       f'background:#fef3f2;border-radius:8px;padding:8px 10px;">'
-                       f'失败原因：{_esc(ctx["reason"])}</div>')
+        reason_html = (f'<div style="margin-top:16px;padding:11px 13px;border-radius:10px;'
+                       f'background:{color_soft};color:{color};font-size:13px;line-height:1.55;">'
+                       f'<span style="font-weight:700;">失败原因</span>'
+                       f'<span style="opacity:.55;margin:0 6px;">·</span>{_esc(ctx["reason"])}</div>')
 
-    html = f"""<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',sans-serif;max-width:560px;margin:0 auto;background:#f5f6f8;padding:16px;border-radius:14px;">
-  <div style="background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 1px 8px rgba(0,0,0,.06);">
-    <div style="padding:18px 20px;color:#ffffff;background:{color};">
-      <div style="font-size:13px;opacity:.92;">小北签到 · {_esc(ctx['task_label'])}</div>
-      <div style="font-size:19px;font-weight:700;margin-top:4px;">{_esc(ctx['name'])} · 签到{_esc(ctx['status_label'])}</div>
+    html = f"""  <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',sans-serif;max-width:540px;margin:0 auto;background:#eef0f3;padding:14px;border-radius:18px;">
+  <div style="background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 1px 2px rgba(16,24,40,.05),0 10px 30px rgba(16,24,40,.06);">
+    <div style="background:linear-gradient(135deg,{color} 0%,{color}cc 100%);padding:22px 22px 20px;color:#ffffff;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div style="font-size:12px;opacity:.9;letter-spacing:1px;">小北自动打卡</div>
+        <div style="font-size:12px;font-weight:600;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.28);border-radius:999px;padding:3px 10px;">{_esc(ctx['task_label'])}</div>
+      </div>
+      <div style="font-size:32px;font-weight:800;line-height:1.05;margin-top:12px;letter-spacing:3px;">{_esc(ctx['status_label'])}</div>
+      <div style="font-size:15px;font-weight:600;margin-top:8px;opacity:.96;">{_esc(ctx['name'])}</div>
     </div>
-    <div style="padding:16px 20px;font-size:14px;line-height:1.6;">
-      <div style="font-size:12px;font-weight:600;color:#6b7280;margin-bottom:2px;">账号信息</div>
-      {row('姓名', ctx['name'])}
-      {row('学号', ctx['student_no'])}
-      {row('学院', ctx['college'])}
-      {row('专业', ctx['major'])}
-      {row('班级', ctx['className'])}
-      <div style="font-size:12px;font-weight:600;color:#6b7280;margin:16px 0 2px;">签到详情</div>
-      {row('任务名称', ctx['task_label'])}
-      {row('发起人', ctx['initiator'])}
-      {row('签到时间段', ctx['time_window'])}
-      {row('签到时间', ctx['sign_time'])}
-      <div style="font-size:12px;font-weight:600;color:#6b7280;margin:16px 0 2px;">位置</div>
+    <div style="padding:8px 22px 22px;font-size:14px;">
+      {section('位置')}
+      {row('名称', loc_name or '（未命名位置）')}
       {row('经纬度', loc_text)}
       {row('地址', addr)}
-      <div style="font-size:12px;font-weight:600;color:#6b7280;margin:16px 0 2px;">备注</div>
-      <div style="color:#1f2329;word-break:break-all;">{_esc(ctx['remark'])}</div>
-      {img_html}
+
+      {section('备注')}
+      {remark_html}
+
+      {section('图片分组')}
+      <div style="display:inline-flex;align-items:center;gap:7px;font-size:13px;color:#1f2733;background:#f3f4f6;border-radius:9px;padding:7px 11px;">
+        <span style="width:7px;height:7px;border-radius:50%;background:{color};display:inline-block;"></span>{_esc(group_name)}
+      </div>
+
+      {section('执行信息')}
+      {row('学号', ctx['student_no'])}
+      {row('时间段', ctx['time_window'])}
+      {row('签到时间', ctx['sign_time'])}
+      {row('发起人', ctx['initiator'])}
+
       {reason_html}
     </div>
   </div>
-  <div style="text-align:center;color:#9aa0a6;font-size:12px;margin-top:12px;">小北寝室自动打卡 · {_esc(ctx['sign_time'])}</div>
+  <div style="text-align:center;color:#aab0b8;font-size:11px;margin-top:12px;letter-spacing:.5px;">小北寝室自动打卡 · {_esc(ctx['sign_time'])}</div>
 </div>"""
     return _truncate(html, PUSHPLUS_CONTENT_MAX)
 
@@ -157,33 +181,25 @@ def render_html(ctx):
 # ── 渲染：TXT（纯文本，Server酱/邮件/QQ 通用） ──
 def render_txt(ctx):
     lines = [
-        f"小北签到 · {ctx['task_label']}",
-        f"{ctx['name']} · 签到{ctx['status_label']}",
-        '',
-        '【账号信息】',
-        f"姓名：{ctx['name']}",
-        f"学号：{ctx['student_no']}",
-        f"学院：{ctx['college']}",
-        f"专业：{ctx['major']}",
-        f"班级：{ctx['className']}",
-        '',
-        '【签到详情】',
-        f"任务名称：{ctx['task_label']}",
-        f"发起人：{ctx['initiator']}",
-        f"签到时间段：{ctx['time_window']}",
-        f"签到时间：{ctx['sign_time']}",
+        f"小北{ctx['task_label']} · {ctx['name']} · 签到{ctx['status_label']}",
         '',
         '【位置】',
+        f"名称：{ctx['location_name'] or '（未命名位置）'}",
         f"经纬度：{ctx['lng']}, {ctx['lat']}" if ctx['lng'] is not None else '经纬度：—',
         f"地址：{ctx['address'] or '（未配置）'}",
         '',
         '【备注】',
         ctx['remark'],
+        '',
+        '【图片分组】',
+        ctx['image_group_name'] or '（未配置）',
+        '',
+        '【执行信息】',
+        f"学号：{ctx['student_no']}",
+        f"签到时间段：{ctx['time_window']}",
+        f"签到时间：{ctx['sign_time']}",
+        f"发起人：{ctx['initiator']}",
     ]
-    if ctx['image_url']:
-        lines += ['', f"图片：{ctx['image_url']}"]
-    else:
-        lines += ['', '（图片已随签到提交）']
     if ctx['status'] == 'fail' and ctx['reason']:
         lines += ['', f"失败原因：{ctx['reason']}"]
     return _truncate('\n'.join(lines), PUSHPLUS_CONTENT_MAX)
@@ -193,34 +209,27 @@ def render_txt(ctx):
 def render_markdown(ctx):
     loc = f"{ctx['lng']}, {ctx['lat']}" if ctx['lng'] is not None else '—'
     md = [
-        f"# 小北签到 · {ctx['name']} · 签到{ctx['status_label']}",
+        f"# 小北{ctx['task_label']} · {ctx['name']} · 签到{ctx['status_label']}",
         '',
         f"**{ctx['task_label']}**",
         '',
-        '## 账号信息',
-        f"- **姓名**：{ctx['name']}",
-        f"- **学号**：{ctx['student_no']}",
-        f"- **学院**：{ctx['college']}",
-        f"- **专业**：{ctx['major']}",
-        f"- **班级**：{ctx['className']}",
-        '',
-        '## 签到详情',
-        f"- **任务名称**：{ctx['task_label']}",
-        f"- **发起人**：{ctx['initiator']}",
-        f"- **签到时间段**：{ctx['time_window']}",
-        f"- **签到时间**：{ctx['sign_time']}",
-        '',
         '## 位置',
+        f"- **名称**：{ctx['location_name'] or '（未命名位置）'}",
         f"- **经纬度**：{loc}",
         f"- **地址**：{ctx['address'] or '（未配置）'}",
         '',
         '## 备注',
         ctx['remark'],
+        '',
+        '## 图片分组',
+        ctx['image_group_name'] or '（未配置）',
+        '',
+        '## 执行信息',
+        f"- **学号**：{ctx['student_no']}",
+        f"- **签到时间段**：{ctx['time_window']}",
+        f"- **签到时间**：{ctx['sign_time']}",
+        f"- **发起人**：{ctx['initiator']}",
     ]
-    if ctx['image_url']:
-        md += ['', f"![签到图片]({ctx['image_url']})"]
-    else:
-        md += ['', '> 图片已随签到提交']
     if ctx['status'] == 'fail' and ctx['reason']:
         md += ['', f"**失败原因**：{ctx['reason']}"]
     return _truncate('\n'.join(md), PUSHPLUS_CONTENT_MAX)

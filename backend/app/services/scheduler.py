@@ -148,14 +148,23 @@ def build_config_view(schedule, resolved, uid):
         'customUa': adv_cfg.get('customUa') or '',
     }
 
+    # 配置套来源：follow 实时跟随、套用配置套后 mode=standalone 但 config_set_id 仍保留为来源标签；
+    # 两者都要解析套名（用于「来自配置套 X」与快照来源展示），而非仅 follow 才解析。
     cs_name = None
-    if schedule.mode == 'follow' and schedule.config_set_id:
+    if schedule.config_set_id:
         cs = db.session.get(ConfigSet, schedule.config_set_id)
         cs_name = cs.name if cs else None
 
+    mode = schedule.mode
+    if mode == 'standalone' and schedule.config_set_id:
+        # 套用配置套：自持快照但来源标签仍在，不应显示「独立配置」；来源套已删除时降级为「独立配置」
+        mode_label = '套用配置套' if cs_name else '独立配置'
+    else:
+        mode_label = _MODE_LABELS.get(mode, mode)
+
     return {
         'mode': schedule.mode,
-        'modeLabel': _MODE_LABELS.get(schedule.mode, schedule.mode),
+        'modeLabel': mode_label,
         'configSetId': schedule.config_set_id,
         'configSetName': cs_name,
         'time': time_view,

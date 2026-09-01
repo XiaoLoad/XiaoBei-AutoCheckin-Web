@@ -92,24 +92,25 @@ def build_ctx(acc, schedule, resolved, status, reason='', signed_at=None, image_
     if remark is None:
         remarks = (resolved or {}).get('remarks') or []
         remark = ' / '.join(str(r) for r in remarks if str(r).strip()) if remarks else '—'
-    # 配置套来源：follow 查套名（仅当 schedule 真有 mode/config_set_id 时）；
-    # 测试推送等场景 schedule 为简单占位对象，getattr 兜底为「—」
+    # 配置套来源：follow 实时跟随、套用配置套后 mode=standalone 但 config_set_id 仍保留为来源标签；
+    # 两者都应显示所套用的配置套名，而非「独立配置」。测试推送等无 mode/config_set_id 的占位对象兜底为「—」。
     config_source = '—'
     mode = getattr(schedule, 'mode', None)
+    cs_id = getattr(schedule, 'config_set_id', None)
+    cs_name = ''
+    if cs_id:
+        try:
+            cs = db.session.get(ConfigSet, int(cs_id))
+            cs_name = cs.name if cs else ''
+        except (TypeError, ValueError):
+            cs_name = ''
     if mode == 'follow':
-        cs_name = ''
-        cs_id = getattr(schedule, 'config_set_id', None)
-        if cs_id:
-            try:
-                cs = db.session.get(ConfigSet, int(cs_id))
-                cs_name = cs.name if cs else ''
-            except (TypeError, ValueError):
-                cs_name = ''
         config_source = cs_name or '来源套已删除'
     elif mode == 'custom':
         config_source = '自定义'
     elif mode == 'standalone':
-        config_source = '独立配置'
+        # 有来源标签即视为套用了配置套，显示套名；无来源才是真正独立的自持配置
+        config_source = cs_name or '独立配置'
     return {
         'name': name,
         'student_no': profile.get('studentNo') or '—',

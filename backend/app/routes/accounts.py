@@ -7,7 +7,7 @@ from flask import Blueprint, request
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
-from app.models import BAccount, Schedule, SignRecord
+from app.models import BAccount, Schedule, SignRecord, PushLog
 from app.models.user import now_cst
 from app.schemas.account_schema import load_create, load_update, load_preflight
 from app.services.b_platform import get_adapter
@@ -173,6 +173,8 @@ def delete_account(account_id):
     # 顺序敏感：sign_records.schedule_id 外键无级联规则，必须先删签到记录再删任务，
     # 否则任务被记录引用，DELETE schedules 触发 MySQL 1451（0.35.0 修过删单任务的同类问题，
     # 此处为删账号级联路径的同源缺陷）。确认弹窗已告知"配置与日志一并移除"，故物理删除。
+    # push_logs.sign_record_id 同样无级联规则，随签到记录先行清理，避免孤儿行。
+    PushLog.query.filter_by(account_id=acc.id).delete()
     SignRecord.query.filter_by(account_id=acc.id).delete()
     Schedule.query.filter_by(account_id=acc.id).delete()
     # 删除即释放额度：已用额度按账号数现算，无需维护计数器

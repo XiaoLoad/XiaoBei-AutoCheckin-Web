@@ -6,6 +6,7 @@
 import atexit
 import logging
 import os
+import time
 from datetime import timedelta
 
 import json
@@ -19,7 +20,7 @@ from apscheduler.executors.pool import ThreadPoolExecutor
 from concurrent.futures import ThreadPoolExecutor as FuturesThreadPool, as_completed
 
 from app.extensions import db
-from app.models import BAccount, ConfigSet, Schedule, SignRecord
+from app.models import BAccount, ConfigSet, Schedule, SignRecord, PushLog
 from app.models.pools import ImageGroup, PoolCredential, PoolLocation, PoolUa
 from app.models.system_config import get_setting
 from app.models.user import now_cst
@@ -303,9 +304,13 @@ def _prune_old_sign_records():
         days = get_setting('sign_log_retention_days') or 180
         cutoff = now_cst() - timedelta(days=int(days))
         deleted = SignRecord.query.filter(SignRecord.created_at < cutoff).delete()
+        # push_logs 随签到日志同周期清理（created_at 与执行记录同刻生成）
+        PushLog.query.filter(PushLog.created_at < cutoff).delete(synchronize_session=False)
         if deleted:
             db.session.commit()
             log.info('清理超期签到日志 %d 条（保留 %d 天）', deleted, int(days))
+        else:
+            db.session.commit()
     except Exception as e:
         db.session.rollback()
         log.warning('签到日志自动清理失败：%s', e)
@@ -584,7 +589,7 @@ def _execute(schedule):
             session['token'] = res.token
             outcome, reason, extra = _checkin_flow(schedule, acc, session, resolved, submitted_remark)
         # 统一在此回写：成功/失败/跳过都落 SignRecord 并回写任务与账号状态
-        _commit_result(schedule, acc, outcome, reason, resolved=resolved)
+        rec = _commit_result(schedule, acc, outcome, reason, resolved=resolved)
     except BPlatformError as e:
         # acc 仍在作用域内，账号聚合与任务状态一同更新，杜绝两者不一致
         if e.kind == 'credential':
@@ -608,7 +613,8 @@ def _execute(schedule):
                 if base:
                     image_url = f"{base}/api/pools/images/{extra['image_id']}/file"
             dispatch_push(resolved, schedule, acc, outcome, reason,
-                          image_url=image_url, submitted_remark=submitted_remark, extra=extra)
+                          image_url=image_url, submitted_remark=submitted_remark, extra=extra,
+                          sign_record_id=rec.id if rec else None)
     except Exception as e:
         log.warning('任务 %s 后置动作失败（已落库的执行记录不受影响）：%s', schedule.id, e)
 
@@ -655,26 +661,47 @@ def _commit_result(schedule, acc, status, fail_reason='', resolved=None):
         acc.last_sign_at = now_cst()
         acc.last_sign_status = status
     db.session.commit()
+    return rec
+
+
+# 推送发送重试：瞬时故障（网络抖动/超时/pushplus 5xx）自愈，失败原因仍完整落库。
+# 环境变量可调：PUSH_SEND_ATTEMPTS 总尝试次数（默认 3），PUSH_RETRY_BACKOFF 退避基数秒（默认 2，线性递增）。
+PUSH_SEND_ATTEMPTS = max(1, int(os.getenv('PUSH_SEND_ATTEMPTS', '3') or 3))
+PUSH_RETRY_BACKOFF = max(0.0, float(os.getenv('PUSH_RETRY_BACKOFF', '2') or 2))
 
 
 def _send_one(ch, key, ctx, template):
-    """单通道发送（供线程池扇出）。返回 (ch, ok, err)，单通道内部异常隔离为失败，不波及其它通道。"""
-    try:
-        ok, err = send_channel(ch, key, ctx, template)
-    except Exception as e:
-        ok, err = False, f'内部异常：{e}'
-    return ch, ok, err
+    """单通道发送（供线程池扇出）：失败按总尝试次数自动重试（线性退避），重试发生在
+    worker 线程内不阻塞其它通道。返回 (ch, ok, err, attempts)，单通道内部异常隔离为
+    失败，不波及其它通道。"""
+    attempts = 0
+    err = ''
+    ok = False
+    for attempt in range(1, PUSH_SEND_ATTEMPTS + 1):
+        attempts = attempt
+        try:
+            ok, err = send_channel(ch, key, ctx, template)
+        except Exception as e:
+            ok, err = False, f'内部异常：{e}'
+        if ok:
+            break
+        if attempt < PUSH_SEND_ATTEMPTS and PUSH_RETRY_BACKOFF > 0:
+            time.sleep(PUSH_RETRY_BACKOFF * attempt)
+    if not ok and attempts > 1:
+        err = f'{err}（已重试，共尝试 {attempts} 次）'
+    return ch, ok, err, attempts
 
 
 def dispatch_push(resolved, schedule, acc, status='success', reason='', image_url='', submitted_remark='',
-                  extra=None):
+                  extra=None, sign_record_id=None):
     """按配置套 push 分发执行结果（ServerChan / PushPlus / Email）。
     读取配置套的 push 结构：channels 决定通道、useOwnCredential 决定密钥来源
     （直接填写用 push.cred 内联字段；回填凭证用 push.credIds 引用资源池并解密）；
     notify 开关控制各状态是否推送。无可用密钥则不发，发送失败仅记录，不影响主链路。
     标题含签到账号姓名 + 状态；内容按 push.template(html/txt/markdown) 渲染；
     extra 携带 B 平台任务信息（任务名/时间段/是否需要图片）供卡片「签到任务」分区展示；
-    长度受 pushplus 限制守护。"""
+    长度受 pushplus 限制守护。sign_record_id 关联本次执行记录，逐通道结果落 push_logs
+    （成败/原因/尝试次数/时刻），任务日志详情直接可见——失败不再只进控制台日志。"""
     push = (resolved or {}).get('push')
     if not isinstance(push, dict) or not push:
         log.info('任务 %s 未配置推送，跳过分发', schedule.id)
@@ -712,8 +739,7 @@ def dispatch_push(resolved, schedule, acc, status='success', reason='', image_ur
 
     if len(creds) == 1:
         ch, key = next(iter(creds.items()))
-        ch, ok, err = _send_one(ch, key, ctx, template)
-        results = [(ch, ok, err)]
+        results = [_send_one(ch, key, ctx, template)]
     else:
         results = []
         with FuturesThreadPool(max_workers=min(len(creds), 4)) as ex:
@@ -722,13 +748,32 @@ def dispatch_push(resolved, schedule, acc, status='success', reason='', image_ur
             for fut in as_completed(futures):
                 results.append(fut.result())
 
-    for ch, ok, err in results:
+    # 结果落库：每通道一行 push_logs（含最终成败、原因原文、尝试次数、发送时刻）。
+    # 落库失败只回滚本批插入，不影响已发出的推送与主链路。
+    for ch, ok, err, attempts in results:
         if ok:
             log.info('任务 %s %s 推送成功', schedule.id, ch)
         else:
             log.warning('任务 %s %s 推送失败：%s', schedule.id, ch, err)
-    summary = '；'.join(f'{ch}={"成功" if ok else f"失败（{err}）"}' for ch, ok, err in results)
+    summary = '；'.join(f'{ch}={"成功" if ok else f"失败（{err}）"}' for ch, ok, err, _a in results)
     log.info('任务 %s 推送汇总：%s', schedule.id, summary)
+    try:
+        for ch, ok, err, attempts in results:
+            db.session.add(PushLog(
+                user_id=schedule.user_id,
+                account_id=getattr(acc, 'id', None),
+                schedule_id=getattr(schedule, 'id', None),
+                sign_record_id=sign_record_id,
+                channel=ch,
+                ok=ok,
+                error=(err or '')[:500],
+                attempts=attempts,
+                template=template,
+            ))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        log.exception('任务 %s 推送结果落库失败', schedule.id)
 
 
 def _resolve_push_creds(push, user_id):

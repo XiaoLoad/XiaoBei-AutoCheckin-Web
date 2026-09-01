@@ -4,7 +4,7 @@ from flask import Blueprint, request
 from sqlalchemy import func
 
 from app.extensions import db
-from app.models import BAccount, SignRecord
+from app.models import BAccount, SignRecord, PushLog
 from app.utils.auth import token_required
 from app.utils.response import error, success
 
@@ -134,14 +134,18 @@ def _owned_record(rid):
 def task_log_detail(rid):
     """单条执行日志的「执行配置」详情：优先返回执行时落库的配置快照（历史切片），
     忠实还原该条任务当时实际使用的配置。存量记录（升级前）无快照时返回
-    hasSnapshot=false，前端据此显示「无配置快照」。"""
+    hasSnapshot=false，前端据此显示「无配置快照」。
+    pushes 为该次执行各推送通道的落库结果（push_logs），无快照也独立返回。"""
     rec = _owned_record(rid)
     if not rec:
         return error(message='日志不存在或无权查看', code=4406, status=404)
+    pushes = (PushLog.query.filter_by(sign_record_id=rec.id)
+              .order_by(PushLog.id.asc()).all())
+    push_items = [p.to_dict() for p in pushes]
     snap = rec.get_config_snapshot()
     if not snap:
-        return success({'hasSnapshot': False, 'logId': rec.id})
-    return success({'hasSnapshot': True, 'logId': rec.id, **snap})
+        return success({'hasSnapshot': False, 'logId': rec.id, 'pushes': push_items})
+    return success({'hasSnapshot': True, 'logId': rec.id, 'pushes': push_items, **snap})
 
 
 @bp.route('/logs/<int:rid>', methods=['DELETE'])
@@ -151,6 +155,7 @@ def delete_task_log(rid):
     rec = _owned_record(rid)
     if not rec:
         return error(message='日志不存在或无权删除', code=4404, status=404)
+    PushLog.query.filter_by(sign_record_id=rec.id).delete(synchronize_session=False)
     db.session.delete(rec)
     db.session.commit()
     return success(message='已删除')
@@ -193,6 +198,10 @@ def purge_task_logs():
     if status_filter in ('success', 'fail', 'skip'):
         q = q.filter(SignRecord.status == status_filter)
 
-    deleted = q.delete()
+    # 先按同一过滤条件取出日志 id，联动清理其推送结果，再删日志本体
+    rec_ids = [row[0] for row in q.with_entities(SignRecord.id).all()]
+    if rec_ids:
+        PushLog.query.filter(PushLog.sign_record_id.in_(rec_ids)).delete(synchronize_session=False)
+    deleted = q.delete(synchronize_session=False)
     db.session.commit()
     return success({'deleted': deleted})

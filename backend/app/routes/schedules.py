@@ -6,7 +6,7 @@ from flask import Blueprint, request
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
-from app.models import BAccount, ConfigSet, PoolLocation, Schedule, SignRecord
+from app.models import BAccount, ConfigSet, PoolLocation, PushLog, Schedule, SignRecord
 from app.schemas.schedule_schema import load_create, load_update
 from app.utils.auth import token_required
 from app.utils.response import error, success
@@ -72,6 +72,8 @@ def delete_schedule(sched_id):
     if not s:
         return error(message='任务不存在', code=4040, status=404)
     SignRecord.query.filter_by(schedule_id=s.id).update({'schedule_id': None})
+    # push_logs.schedule_id 外键同样无级联规则：推送日志随签到记录保留历史，仅摘除任务引用
+    PushLog.query.filter_by(schedule_id=s.id).update({'schedule_id': None})
     db.session.delete(s)
     db.session.commit()
     # 事件钩子：移除调度器已注册 job（与账号级联删除共用兜底，此处即时清理）

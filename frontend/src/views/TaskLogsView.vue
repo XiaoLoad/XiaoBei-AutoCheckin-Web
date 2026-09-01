@@ -307,7 +307,9 @@
                 {{ detailOf(row).error }}
               </div>
 
-              <div v-else-if="configOf(row) && configOf(row).hasSnapshot" class="space-y-3">
+              <div v-else-if="configOf(row)" class="space-y-3">
+                <!-- 配置快照存在：来源 + 分区；无快照给出历史提示 -->
+                <template v-if="configOf(row).hasSnapshot">
                 <!-- 配置来源：模式 + 配置套名称 + 口径提示 -->
                 <div
                   data-detail-item
@@ -396,12 +398,79 @@
                     </div>
                   </section>
                 </div>
-              </div>
-              <div v-else-if="configOf(row)" class="py-7 text-center">
-                <p class="text-sm text-ink-muted">无配置快照</p>
-                <p class="mt-1 text-xs text-ink-muted/80">
-                  该记录执行时未保存配置快照（升级前的历史日志）。
-                </p>
+                </template>
+                <div v-else class="py-7 text-center">
+                  <p class="text-sm text-ink-muted">无配置快照</p>
+                  <p class="mt-1 text-xs text-ink-muted/80">
+                    该记录执行时未保存配置快照（升级前的历史日志）。
+                  </p>
+                </div>
+
+                <!-- 推送结果：各通道本次执行的真实成败（来自 push_logs 落库，与执行日志关联） -->
+                <div
+                  data-detail-item
+                  class="rounded-xl border border-ink/5 bg-white p-3"
+                >
+                  <h4
+                    class="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-ink-muted"
+                  >
+                    <Icon name="send" :size="12" />推送结果
+                  </h4>
+
+                  <ul v-if="pushResultsOf(row).length" class="mt-2.5 space-y-2">
+                    <li
+                      v-for="p in pushResultsOf(row)"
+                      :key="p.id"
+                      class="flex items-start gap-2.5 rounded-lg px-2.5 py-2"
+                      :class="p.ok ? 'bg-success/[0.04]' : 'bg-danger/[0.04]'"
+                    >
+                      <Icon
+                        :name="p.ok ? 'check-circle' : 'x-circle'"
+                        :size="15"
+                        class="mt-0.5 shrink-0"
+                        :class="p.ok ? 'text-success' : 'text-danger'"
+                      />
+                      <div class="min-w-0 flex-1">
+                        <div class="flex flex-wrap items-center gap-2">
+                          <span
+                            class="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium"
+                            :class="channelTone(p.channel)"
+                          >
+                            {{ channelLabel(p.channel) }}
+                          </span>
+                          <span
+                            class="text-xs font-medium"
+                            :class="p.ok ? 'text-success' : 'text-danger'"
+                          >
+                            {{ p.ok ? '推送成功' : '推送失败' }}
+                          </span>
+                          <span v-if="p.attempts > 1" class="text-[11px] text-ink-muted">
+                            尝试 {{ p.attempts }} 次
+                          </span>
+                          <span
+                            v-if="p.createdAt"
+                            class="ml-auto text-[11px] tabular-nums text-ink-muted"
+                          >
+                            {{ p.createdAt }}
+                          </span>
+                        </div>
+                        <p
+                          v-if="!p.ok && p.error"
+                          class="mt-1 break-words text-xs text-danger"
+                          :title="p.error"
+                        >
+                          {{ p.error }}
+                        </p>
+                      </div>
+                    </li>
+                  </ul>
+                  <p
+                    v-else
+                    class="mt-2 rounded-lg bg-cloud/60 px-2.5 py-2 text-xs text-ink-muted"
+                  >
+                    本次未触发推送（未配置推送通道或执行时跳过）
+                  </p>
+                </div>
               </div>
             </div>
           </Transition>
@@ -570,6 +639,24 @@ function detailOf(row) {
 function configOf(row) {
   const d = store.detailOf(row.id);
   return d && d.data ? d.data : null;
+}
+
+// 推送结果：后端按 sign_record_id 落库的各通道真实成败（推送配置无关，关联执行日志本身）
+function pushResultsOf(row) {
+  const d = configOf(row);
+  return (d && d.pushes) || [];
+}
+const CHANNEL_LABEL = {
+  serverchan: "Server 酱",
+  pushplus: "PushPlus",
+  email: "邮箱",
+};
+function channelLabel(ch) {
+  return CHANNEL_LABEL[ch] || ch || "未知通道";
+}
+// 复用与凭证池一致的通道配色，避免同一通道在两处颜色打架
+function channelTone(ch) {
+  return CHANNEL_TONE[ch] || "bg-ink/10 text-ink-soft";
 }
 
 function detailSections(d) {

@@ -453,6 +453,14 @@ def _checkin_flow(schedule, acc, session, resolved, remark):
     except (TypeError, ValueError):
         group = None
 
+    # 本次尝试提交的参数快照：跨分支累计，skip/fail/成功均带回，供落库回显「提交参数」。
+    # 仅「无进行中任务」这种尚未触及任何提交信息的场景才为空（无参数可记）。
+    attempt = {
+        'task_id': None, 'task_name': '', 'task_start': '', 'task_end': '',
+        'need_photo': False, 'lng': None, 'lat': None, 'address': '',
+        'location_str': '', 'submit_remark': None, 'image_id': None,
+        'strategy': strategy, 'warning': None,
+    }
     claimed = None
     try:
         # ① 进行中任务（提交只能用 /list 的任务 id）
@@ -460,13 +468,18 @@ def _checkin_flow(schedule, acc, session, resolved, remark):
         if ctx is None:
             return 'skip', '当前无进行中的签到任务', {}
         task = ctx['task']
+        attempt['task_id'] = task.get('id')
+        attempt['task_name'] = task.get('taskName') or ''
+        attempt['task_start'] = task.get('startTime') or ''
+        attempt['task_end'] = task.get('endTime') or ''
+        attempt['need_photo'] = bool(task.get('needPhoto'))
 
         # ② 平台任务时间窗（know 'HH:mm:ss' / sign 'HH:mm'）
         ts = _parse_platform_time(task.get('startTime'))
         te = _parse_platform_time(task.get('endTime'))
         now_t = now_cst().time()
         if ts and te and (now_t < ts or now_t > te):
-            return 'skip', f'当前时间不在平台任务时间窗（{task.get("startTime")}~{task.get("endTime")}）', {}
+            return 'skip', f'当前时间不在平台任务时间窗（{task.get("startTime")}~{task.get("endTime")}）', attempt
 
         # ③ 定位：位置池配置优先（按 offset_m 抖动）；未配置回退任务围栏中心（默认 10 米）；
         #    均无则提交空定位（与旧版行为一致），记 warning 供详情展示
@@ -485,6 +498,11 @@ def _checkin_flow(schedule, acc, session, resolved, remark):
             address = ''
             warning = '未配置签到位置，将提交空定位'
         location_str = f'{lng}:{lat}' if lat and lng else ''
+        attempt['lng'] = lng
+        attempt['lat'] = lat
+        attempt['address'] = address
+        attempt['location_str'] = location_str
+        attempt['warning'] = warning
 
         # ④ 围栏拦截（配置套 fence.intercept，默认开）：配置点超出围栏半径则本地拒绝，
         #    防止异常位置暴露风险；服务端已确认不做距离校验，拦截纯为客户端自保
@@ -498,22 +516,23 @@ def _checkin_flow(schedule, acc, session, resolved, remark):
             if dist is not None and radius > 0 and dist > radius:
                 return 'fail', (f'围栏拦截：配置位置距签到点 {int(dist)} 米，'
                                 f'超出围栏半径 {int(radius)} 米（请调整位置池坐标，'
-                                f'或在配置套中关闭围栏拦截）'), {}
+                                f'或在配置套中关闭围栏拦截）'), attempt
 
         # ⑤ 图片：任务需要图但未启用图库 → fail（宁可失败可感知，不静默交白卷）；
         #    启用则先认领（原子抢占防同组并发取同一张），失败提交后回滚
         need_photo = bool(task.get('needPhoto'))
         if need_photo and not image_cfg.get('enabled'):
-            return 'fail', '该任务需要上传签到图片，请在配置套中启用图库并确认有可用图片', {}
+            return 'fail', '该任务需要上传签到图片，请在配置套中启用图库并确认有可用图片', attempt
         if image_cfg.get('enabled'):
             claimed = claim_image_for_submit(uid, group, strategy)
             if not claimed:
-                return 'fail', '图库暂无可用图片，请先上传或调整取图范围', {}
+                return 'fail', '图库暂无可用图片，请先上传或调整取图范围', attempt
 
         # ⑥ 提交（know 实证契约 / sign 镜像契约）
         image = ({'bytes': claimed['bytes'], 'filename': generate_image_filename()}
                  if claimed else None)
         submit_remark = remark if remark and remark != '—' else None
+        attempt['submit_remark'] = submit_remark
         try:
             result = adapter.submit_checkin(session, schedule.task_type, task.get('id'),
                                             location_str, address, submit_remark, image)
@@ -523,16 +542,15 @@ def _checkin_flow(schedule, acc, session, resolved, remark):
         except Exception:
             if claimed:
                 rollback_claim(claimed['id'], uid, strategy)
-                claimed = None
+            claimed = None
             raise
 
-        extra = {'warning': warning, 'task_name': task.get('taskName') or '',
-                 'task_start': task.get('startTime') or '', 'task_end': task.get('endTime') or '',
-                 'need_photo': bool(task.get('needPhoto')),
-                 'image_id': claimed['id'] if claimed else None, 'strategy': strategy}
+        # 提交后重新同步图片 id（失败回滚后 claimed 已置空），连同前述坐标/备注/任务信息
+        # 一并作为本次「提交参数」快照落库，供详情回显——成功与平台返回失败都带完整参数。
+        attempt['image_id'] = claimed['id'] if claimed else None
         if result.status == 'success':
-            return 'success', '', extra
-        return result.status, result.fail_reason or '平台返回失败', {}
+            return 'success', '', attempt
+        return result.status, result.fail_reason or '平台返回失败', attempt
     except BPlatformError:
         if claimed:
             rollback_claim(claimed['id'], uid, strategy)
@@ -597,8 +615,9 @@ def _execute(schedule):
             db.session.flush()
             session['token'] = res.token
             outcome, reason, extra = _checkin_flow(schedule, acc, session, resolved, submitted_remark)
-        # 统一在此回写：成功/失败/跳过都落 SignRecord 并回写任务与账号状态
-        rec = _commit_result(schedule, acc, outcome, reason, resolved=resolved)
+        # 统一在此回写：成功/失败/跳过都落 SignRecord 并回写任务与账号状态；
+        # 把本次提交参数快照一并传入，详情回显「提交参数」
+        rec = _commit_result(schedule, acc, outcome, reason, resolved=resolved, extra=extra)
     except BPlatformError as e:
         # acc 仍在作用域内，账号聚合与任务状态一同更新，杜绝两者不一致
         if e.kind == 'credential':
@@ -642,9 +661,10 @@ def _select_remark(resolved):
     return random.choice(remarks)
 
 
-def _commit_result(schedule, acc, status, fail_reason='', resolved=None):
+def _commit_result(schedule, acc, status, fail_reason='', resolved=None, extra=None):
     """写签到记录 + 回写任务状态 + 刷新账号最近签到聚合；统一提交。
-    resolved 非 None 时把执行时配置快照写入记录，供详情回显历史切片。"""
+    resolved 非 None 时把执行时配置快照写入记录，供详情回显历史切片；
+    extra 非 None（调用方传回的提交参数快照）时一并写入 submit_params，供详情回显「提交参数」。"""
     rec = SignRecord(
         user_id=schedule.user_id,
         account_id=schedule.account_id,
@@ -661,6 +681,10 @@ def _commit_result(schedule, acc, status, fail_reason='', resolved=None):
     # 执行前配置缺失/校验失败，无快照可抓，落 NULL，详情端显示「无配置快照」）
     if resolved is not None:
         rec.set_config_snapshot(build_config_view(schedule, resolved, schedule.user_id))
+    # 提交参数快照：仅当确实构造了尝试提交参数（非空 dict）才落库；
+    # 纯早期跳过（如「无进行中任务」）传回 {} 表示无参数，落 NULL 保持详情简洁。
+    if extra:
+        rec.set_submit_params(extra)
     db.session.add(rec)
     schedule.last_run_at = now_cst()
     schedule.last_status = status

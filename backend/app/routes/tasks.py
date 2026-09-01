@@ -143,9 +143,12 @@ def task_log_detail(rid):
               .order_by(PushLog.id.asc()).all())
     push_items = [p.to_dict() for p in pushes]
     snap = rec.get_config_snapshot()
+    submit_params = rec.get_submit_params()
     if not snap:
-        return success({'hasSnapshot': False, 'logId': rec.id, 'pushes': push_items})
-    return success({'hasSnapshot': True, 'logId': rec.id, 'pushes': push_items, **snap})
+        return success({'hasSnapshot': False, 'logId': rec.id,
+                        'pushes': push_items, 'submitParams': submit_params})
+    return success({'hasSnapshot': True, 'logId': rec.id,
+                    'pushes': push_items, 'submitParams': submit_params, **snap})
 
 
 @bp.route('/logs/<int:rid>', methods=['DELETE'])

@@ -310,94 +310,134 @@
               <div v-else-if="configOf(row)" class="space-y-3">
                 <!-- 配置快照存在：来源 + 分区；无快照给出历史提示 -->
                 <template v-if="configOf(row).hasSnapshot">
-                <!-- 配置来源：模式 + 配置套名称 + 口径提示 -->
-                <div
-                  data-detail-item
-                  class="flex flex-wrap items-center gap-2 rounded-xl bg-white/70 px-3 py-2.5"
-                >
-                  <span
-                    class="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
-                    :class="modeBadge(configOf(row).mode).cls"
-                  >
-                    <Icon :name="modeBadge(configOf(row).mode).icon" :size="12" />
-                    {{ configOf(row).modeLabel }}
-                  </span>
-                  <span v-if="configOf(row).configSetName" class="truncate text-xs text-ink-soft">
-                    来自配置套
-                    <b class="font-medium text-ink">{{ configOf(row).configSetName }}</b>
-                  </span>
-                  <span v-else class="truncate text-xs text-ink-soft">
-                    任务自持配置，不随配置套变动
-                  </span>
-                  <span
-                    class="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald/10 px-2 py-0.5 text-[11px] text-emerald"
-                  >
-                    <Icon name="clock" :size="11" />执行时配置快照
-                  </span>
-                </div>
-
-                <!-- 配置分区：时间 / 位置 / 图库 / 推送 / 备注 / 其它 -->
-                <div class="grid gap-3 lg:grid-cols-2">
-                  <section
-                    v-for="s in detailSections(configOf(row))"
-                    :key="s.key"
+                  <!-- 配置套信息：折叠卡片，点击展开内部看完整配置快照 -->
+                  <div
                     data-detail-item
-                    class="rounded-xl border border-ink/5 bg-white p-3"
+                    class="overflow-hidden rounded-xl border border-ink/5 bg-white"
                   >
-                    <h4
-                      class="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-ink-muted"
+                    <button
+                      type="button"
+                      class="flex w-full items-center gap-2 px-3 py-2.5 text-left transition hover:bg-cloud/40"
+                      @click="toggleConfig(row)"
                     >
-                      <Icon :name="s.icon" :size="12" />{{ s.title }}
-                    </h4>
-
-                    <!-- 名称类长文本：整行展示，避免挤进两列被截断 -->
-                    <p
-                      v-if="s.note"
-                      class="mt-2 truncate text-xs font-medium text-ink"
-                      :title="s.note"
-                    >
-                      {{ s.note }}
-                    </p>
-
-                    <!-- 标签组：推送通道 / 签到备注 -->
-                    <div v-if="s.chips && s.chips.length" class="mt-2 flex flex-wrap gap-1.5">
+                      <Icon name="layers" :size="13" class="text-brand" />
+                      <span class="text-sm font-medium text-ink">配置套信息</span>
                       <span
-                        v-for="(c, ci) in s.chips"
-                        :key="ci"
-                        class="inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium"
-                        :class="c.tone"
+                        v-if="configOf(row).configSetName"
+                        class="truncate text-xs text-ink-soft"
                       >
-                        <span class="truncate">{{ c.label }}</span>
-                        <span v-if="c.hint" class="truncate opacity-70">· {{ c.hint }}</span>
+                        来自 {{ configOf(row).configSetName }}
                       </span>
-                    </div>
-                    <p
-                      v-else-if="s.chips"
-                      class="mt-2 rounded-lg bg-cloud/60 px-2.5 py-2 text-xs text-ink-muted"
-                    >
-                      {{ s.emptyText }}
-                    </p>
-
-                    <!-- 键值网格 -->
-                    <div v-if="s.fields" class="mt-2 grid grid-cols-2 gap-2">
-                      <div
-                        v-for="f in s.fields"
-                        :key="f.label"
-                        class="rounded-lg bg-cloud/50 px-2.5 py-1.5"
-                        :class="f.span === 2 ? 'col-span-2' : ''"
+                      <span
+                        class="ml-auto inline-flex shrink-0 items-center gap-1 text-xs text-ink-muted"
                       >
-                        <p class="text-[11px] text-ink-muted">{{ f.label }}</p>
-                        <p
-                          class="mt-0.5 truncate text-xs font-medium text-ink"
-                          :class="f.mono ? 'tabular-nums' : ''"
-                          :title="f.value"
+                        {{ configOpen(row.id) ? "收起" : "展开" }}
+                        <Icon
+                          name="chevron-right"
+                          :size="14"
+                          class="transition-[transform,color] duration-300"
+                          :class="configOpen(row.id) ? 'rotate-90 text-brand' : ''"
+                        />
+                      </span>
+                    </button>
+                    <Transition :css="false" @enter="onConfigEnter" @leave="onConfigLeave">
+                    <div
+                      v-if="configOpen(row.id)"
+                      class="border-t border-ink/5 px-3 py-3 sm:px-4"
+                    >
+                      <!-- 配置来源：模式 + 配置套名称 + 口径提示 -->
+                      <div
+                        class="flex flex-wrap items-center gap-2 rounded-xl bg-cloud/50 px-3 py-2.5"
+                      >
+                        <span
+                          class="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
+                          :class="modeBadge(configOf(row).mode).cls"
                         >
-                          {{ f.value }}
-                        </p>
+                          <Icon :name="modeBadge(configOf(row).mode).icon" :size="12" />
+                          {{ configOf(row).modeLabel }}
+                        </span>
+                        <span
+                          v-if="configOf(row).configSetName"
+                          class="truncate text-xs text-ink-soft"
+                        >
+                          来自配置套
+                          <b class="font-medium text-ink">{{ configOf(row).configSetName }}</b>
+                        </span>
+                        <span v-else class="truncate text-xs text-ink-soft">
+                          任务自持配置，不随配置套变动
+                        </span>
+                        <span
+                          class="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald/10 px-2 py-0.5 text-[11px] text-emerald"
+                        >
+                          <Icon name="clock" :size="11" />执行时配置快照
+                        </span>
+                      </div>
+
+                      <!-- 配置分区：时间 / 位置 / 图库 / 推送 / 备注 / 其它 -->
+                      <div class="mt-3 grid gap-3 lg:grid-cols-2">
+                        <section
+                          v-for="s in detailSections(configOf(row))"
+                          :key="s.key"
+                          data-detail-item
+                          class="rounded-xl border border-ink/5 bg-white p-3"
+                        >
+                          <h4
+                            class="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-ink-muted"
+                          >
+                            <Icon :name="s.icon" :size="12" />{{ s.title }}
+                          </h4>
+
+                          <!-- 名称类长文本：整行展示，避免挤进两列被截断 -->
+                          <p
+                            v-if="s.note"
+                            class="mt-2 truncate text-xs font-medium text-ink"
+                            :title="s.note"
+                          >
+                            {{ s.note }}
+                          </p>
+
+                          <!-- 标签组：推送通道 / 签到备注 -->
+                          <div v-if="s.chips && s.chips.length" class="mt-2 flex flex-wrap gap-1.5">
+                            <span
+                              v-for="(c, ci) in s.chips"
+                              :key="ci"
+                              class="inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium"
+                              :class="c.tone"
+                            >
+                              <span class="truncate">{{ c.label }}</span>
+                              <span v-if="c.hint" class="truncate opacity-70">· {{ c.hint }}</span>
+                            </span>
+                          </div>
+                          <p
+                            v-else-if="s.chips"
+                            class="mt-2 rounded-lg bg-cloud/60 px-2.5 py-2 text-xs text-ink-muted"
+                          >
+                            {{ s.emptyText }}
+                          </p>
+
+                          <!-- 键值网格 -->
+                          <div v-if="s.fields" class="mt-2 grid grid-cols-2 gap-2">
+                            <div
+                              v-for="f in s.fields"
+                              :key="f.label"
+                              class="rounded-lg bg-cloud/50 px-2.5 py-1.5"
+                              :class="f.span === 2 ? 'col-span-2' : ''"
+                            >
+                              <p class="text-[11px] text-ink-muted">{{ f.label }}</p>
+                              <p
+                                class="mt-0.5 truncate text-xs font-medium text-ink"
+                                :class="f.mono ? 'tabular-nums' : ''"
+                                :title="f.value"
+                              >
+                                {{ f.value }}
+                              </p>
+                            </div>
+                          </div>
+                        </section>
                       </div>
                     </div>
-                  </section>
-                </div>
+                    </Transition>
+                  </div>
                 </template>
                 <div v-else class="py-7 text-center">
                   <p class="text-sm text-ink-muted">无配置快照</p>
@@ -469,6 +509,82 @@
                     class="mt-2 rounded-lg bg-cloud/60 px-2.5 py-2 text-xs text-ink-muted"
                   >
                     本次未触发推送（未配置推送通道或执行时跳过）
+                  </p>
+                </div>
+
+                <!-- 提交参数：本次尝试提交的真实载荷（含 10m 抖动后坐标/实际备注/平台任务 ID 等） -->
+                <div
+                  data-detail-item
+                  class="rounded-xl border border-ink/5 bg-white p-3"
+                >
+                  <h4
+                    class="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-ink-muted"
+                  >
+                    <Icon name="file" :size="12" />提交参数
+                  </h4>
+
+                  <template v-if="submitParamsOf(row)">
+                    <dl class="mt-2 grid grid-cols-2 gap-2">
+                      <div class="rounded-lg bg-cloud/50 px-2.5 py-1.5">
+                        <dt class="text-[11px] text-ink-muted">平台任务 ID</dt>
+                        <dd class="mt-0.5 truncate text-xs font-medium text-ink tabular-nums">
+                          {{ submitParamsOf(row).task_id ?? "—" }}
+                        </dd>
+                      </div>
+                      <div class="rounded-lg bg-cloud/50 px-2.5 py-1.5">
+                        <dt class="text-[11px] text-ink-muted">需图</dt>
+                        <dd class="mt-0.5 truncate text-xs font-medium text-ink">
+                          {{ submitParamsOf(row).need_photo ? "是" : "否" }}
+                        </dd>
+                      </div>
+                      <div class="col-span-2 rounded-lg bg-cloud/50 px-2.5 py-1.5">
+                        <dt class="text-[11px] text-ink-muted">提交坐标（含 10m 抖动）</dt>
+                        <dd class="mt-0.5 truncate text-xs font-medium text-ink tabular-nums">
+                          <template
+                            v-if="submitParamsOf(row).lng && submitParamsOf(row).lat"
+                            >{{ submitParamsOf(row).lng }}, {{ submitParamsOf(row).lat }}</template
+                          >
+                          <span v-else>空定位</span>
+                        </dd>
+                      </div>
+                      <div class="col-span-2 rounded-lg bg-cloud/50 px-2.5 py-1.5">
+                        <dt class="text-[11px] text-ink-muted">提交地址</dt>
+                        <dd class="mt-0.5 truncate text-xs font-medium text-ink">
+                          {{ submitParamsOf(row).address || "—" }}
+                        </dd>
+                      </div>
+                      <div class="col-span-2 rounded-lg bg-cloud/50 px-2.5 py-1.5">
+                        <dt class="text-[11px] text-ink-muted">实际提交备注</dt>
+                        <dd class="mt-0.5 truncate text-xs font-medium text-ink">
+                          {{ submitParamsOf(row).submit_remark || "—" }}
+                        </dd>
+                      </div>
+                      <div class="col-span-2 rounded-lg bg-cloud/50 px-2.5 py-1.5">
+                        <dt class="text-[11px] text-ink-muted">图片 / 策略</dt>
+                        <dd class="mt-0.5 truncate text-xs font-medium text-ink">
+                          <template v-if="submitParamsOf(row).image_id"
+                            >图片 ID {{ submitParamsOf(row).image_id }} · 策略
+                            {{ strategyLabelOf(submitParamsOf(row).strategy) }}</template
+                          >
+                          <span v-else>无图（未启用图库或任务无需图）</span>
+                        </dd>
+                      </div>
+                      <div
+                        v-if="submitParamsOf(row).warning"
+                        class="col-span-2 rounded-lg bg-amber/[0.06] px-2.5 py-1.5"
+                      >
+                        <dt class="text-[11px] text-amber">提示</dt>
+                        <dd class="mt-0.5 text-xs font-medium text-amber">
+                          {{ submitParamsOf(row).warning }}
+                        </dd>
+                      </div>
+                    </dl>
+                  </template>
+                  <p
+                    v-else
+                    class="mt-2 rounded-lg bg-cloud/60 px-2.5 py-2 text-xs text-ink-muted"
+                  >
+                    本次未产生提交参数（执行未进入提交阶段，如被跳过或提交前已失败）
                   </p>
                 </div>
               </div>
@@ -657,6 +773,30 @@ function channelLabel(ch) {
 // 复用与凭证池一致的通道配色，避免同一通道在两处颜色打架
 function channelTone(ch) {
   return CHANNEL_TONE[ch] || "bg-ink/10 text-ink-soft";
+}
+
+// 配置套信息折叠状态：每条日志独立，默认收起（点开内部看完整配置快照）
+const configOpenMap = ref({});
+function configOpen(id) {
+  return !!configOpenMap.value[id];
+}
+function toggleConfig(row) {
+  configOpenMap.value[row.id] = !configOpen(row.id);
+  configOpenMap.value = { ...configOpenMap.value };
+}
+
+// 提交参数：后端落库的本次尝试提交真实载荷（坐标/备注/平台任务 ID/图片策略等）
+function submitParamsOf(row) {
+  const d = configOf(row);
+  return (d && d.submitParams) || null;
+}
+const STRATEGY_LABELS = {
+  recycle: "循环复用",
+  trash: "用后入回收站",
+  delete: "用后删除",
+};
+function strategyLabelOf(s) {
+  return STRATEGY_LABELS[s] || s || "—";
 }
 
 function detailSections(d) {
@@ -850,6 +990,89 @@ function onDetailLeave(el, done) {
       autoAlpha: 0,
       duration: 0.32,
       ease: "power2.inOut",
+      onComplete: () => {
+        gsap.set(el, { clearProps: "height, paddingTop, paddingBottom, overflow, willChange" });
+        done();
+      },
+    }
+  );
+}
+
+// 配置套信息内部展开/收起动画（GSAP）：高度 S 曲线平滑补间 + 内部分区轻柔错峰展开，优雅流畅
+function onConfigEnter(el, done) {
+  if (reduceMotion.value) {
+    done();
+    return;
+  }
+  // 锁定裁剪 + 合成层，避免展开过程中内容溢出/重排抖动
+  gsap.set(el, { overflow: "hidden", willChange: "height, padding" });
+  const { h, pt, pb } = measureContent(el);
+  const total = h + pt + pb;
+  // 高度与纵向 padding 同步从 0 补间到内容高度：power3.inOut 形成柔顺的 S 曲线收放，
+  // 比单边 out 更「流动」，面板像被轻轻拉开而非弹出。
+  gsap.fromTo(
+    el,
+    { height: 0, paddingTop: 0, paddingBottom: 0, autoAlpha: 0 },
+    {
+      height: total,
+      paddingTop: pt,
+      paddingBottom: pb,
+      autoAlpha: 1,
+      duration: 0.42,
+      ease: "power3.inOut",
+      overwrite: true,
+      onComplete: () => {
+        gsap.set(el, { clearProps: "height, paddingTop, paddingBottom, overflow, willChange" });
+        done();
+      },
+    }
+  );
+  // 内部分区（来源条 + 六分区）随面板展开轻柔错峰「浮起」：先落在面板下沿、再缓缓升入，
+  // 延迟略小于高度动画，使内容像随面板一同舒展开来，形成连贯的层次感。
+  const items = el.querySelectorAll("[data-detail-item]");
+  if (items.length) {
+    gsap.fromTo(
+      items,
+      { autoAlpha: 0, y: 16 },
+      {
+        autoAlpha: 1,
+        y: 0,
+        duration: 0.4,
+        stagger: 0.045,
+        delay: 0.1,
+        ease: "power3.out",
+        overwrite: true,
+        clearProps: "opacity,transform",
+      }
+    );
+  }
+}
+
+function onConfigLeave(el, done) {
+  if (reduceMotion.value) {
+    done();
+    return;
+  }
+  gsap.set(el, { overflow: "hidden", willChange: "height, padding" });
+  const { h, pt, pb } = measureContent(el);
+  const total = h + pt + pb;
+  // 内部分区先轻轻上提并淡出（像被吸回面板），高度随即以同一条 S 曲线平滑收起，
+  // 展开与收起共用 power3.inOut，动作对称、观感一致。
+  const items = el.querySelectorAll("[data-detail-item]");
+  if (items.length) {
+    gsap.to(items, { autoAlpha: 0, y: -8, duration: 0.22, ease: "power2.in", overwrite: true });
+  }
+  gsap.fromTo(
+    el,
+    { height: total, paddingTop: pt, paddingBottom: pb, autoAlpha: 1 },
+    {
+      height: 0,
+      paddingTop: 0,
+      paddingBottom: 0,
+      autoAlpha: 0,
+      duration: 0.36,
+      ease: "power3.inOut",
+      overwrite: true,
       onComplete: () => {
         gsap.set(el, { clearProps: "height, paddingTop, paddingBottom, overflow, willChange" });
         done();

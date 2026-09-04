@@ -4,6 +4,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { toast } from '@/utils/toast'
 import * as api from '@/api/signConfig'
+import { batchManageSchedules } from '@/api/schedules'
 
 export const useSignConfigStore = defineStore('signConfig', () => {
   const loading = ref(true)
@@ -742,6 +743,39 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     }
   }
 
+  // 批量管理：一次性开启或关闭一批「账号 × 任务类型」的定时调度。
+  // action='enable' 时可选 configSetId 统一套用配置套；'disable' 无需配置。
+  // 调后端 /schedules/batch-manage，返回 {action, affected, skipped, skippedReasons, affectedList}；
+  // 成功后刷新绑定与账号树徽标（启用态）。结果明细由抽屉结果页展示，此处只给轻量 toast。
+  async function batchManageTasks(targets, { action = 'enable', configSetId = null } = {}) {
+    if (!Array.isArray(targets) || targets.length === 0) {
+      toast(action === 'enable' ? '请先选择要启用的任务' : '请先选择要关闭的任务', 'warning')
+      return null
+    }
+    saving.value = true
+    try {
+      const data = await batchManageSchedules({
+        action,
+        targets,
+        configSetId: action === 'enable' ? (configSetId || null) : null,
+      })
+      await refreshBindings()
+      await load()
+      const affected = (data && data.affected) || 0
+      const skipped = (data && data.skipped) || 0
+      const verb = action === 'enable' ? '启用' : '关闭'
+      if (affected) toast(`已${verb} ${affected} 个账号任务`, 'success')
+      if (skipped) toast(`${skipped} 个任务未${verb}，详见结果`, 'warning')
+      else if (!affected) toast(`没有可${verb}的目标任务`, 'warning')
+      return data
+    } catch (e) {
+      toast(e.message || (action === 'enable' ? '批量启用失败' : '批量关闭失败'), 'error')
+      return null
+    } finally {
+      saving.value = false
+    }
+  }
+
   // 清空当前正在编辑的配置（舍弃所有已填内容，回到默认空白模板）。
   // 配合「保存按钮旁的清空填写」使用：Tab 切换内容由 store 持有不会丢失，此为手动显式清空。
   function resetActiveSetConfig() {
@@ -1003,6 +1037,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     bindSet,
     applyBind,
     applyConfigSetBatch,
+    batchManageTasks,
     saveTaskConfig,
     saveTaskConfigLinked,
     resetActiveSetConfig,

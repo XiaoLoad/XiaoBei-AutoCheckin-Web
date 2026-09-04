@@ -220,7 +220,12 @@ def test_dispatch_push_one_channel_exception_does_not_block_others(app_ctx, monk
 
 
 def test_dispatch_push_one_channel_business_failure_does_not_block_others(app_ctx, monkeypatch):
-    """某通道业务失败（返回 (False, 原因)）同样不得阻断其它通道"""
+    """某通道业务失败（返回 (False, 原因)）同样不得阻断其它通道。
+
+    失败通道由 _send_one 按 PUSH_SEND_ATTEMPTS 重试，故此处不能断言精确的调用序列
+    （历史上按 ['pushplus','email'] 等值断言，重试特性落地后即失效）；
+    改为与异常分支同口径：验证失败通道确实尝试过、且其它通道未被阻断。
+    """
     uid = _uid(sch.db)
     calls = []
     def fake_send_channel(channel, key, ctx, template):
@@ -230,5 +235,7 @@ def test_dispatch_push_one_channel_business_failure_does_not_block_others(app_ct
         return True, ''
     monkeypatch.setattr(sch, 'send_channel', fake_send_channel)
     sch.dispatch_push(_resolved_multi(), _FakeSchedule(uid), _FakeAcc(), 'success')
-    assert calls == ['pushplus', 'email']
+    assert 'pushplus' in calls                                  # 失败通道已尝试
+    assert 'email' in calls                                     # 关键断言：未被阻断
+    assert calls.count('pushplus') == sch.PUSH_SEND_ATTEMPTS    # 失败按配置重试不再静默
 

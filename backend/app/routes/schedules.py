@@ -153,3 +153,157 @@ def update_schedule(sched_id):
     # 事件钩子：对齐调度器 job 注册（启用→注册/替换，停用→移除）
     sync_schedule(s)
     return success(s.to_dict(), message='保存成功')
+
+
+@bp.route('/batch-manage', methods=['POST'])
+@token_required
+def batch_manage():
+    """批量管理：对一批「账号 × 任务类型」统一开启或关闭调度。
+
+    body: { action: 'enable'|'disable', targets:[{accountId,taskType}], configSetId? }
+    - enable：可选 configSetId，给定则先套用配置套（快照写 config_json、mode=standalone、
+      config_set_id 退化为来源标签）再开启；不给定则沿用各任务自身现有配置。
+      开启前复用与单任务一致的校验（4401/4402），不满足计入 skipped 并给出原因。
+    - disable：无需配置，直接关闭；任务实例不存在或本就未启用则计入 skipped。
+      关闭后 next_run_at 置空并移除调度 job（与单任务 update_schedule 同语义）。
+    返回 {action, affected, skipped, skippedReasons, affectedList}；affectedList 供结果页按账号分组展示。
+    """
+    payload = request.get_json(silent=True) or {}
+    action = payload.get('action') or 'enable'
+    if action not in ('enable', 'disable'):
+        return error(message='操作类型不合法', code=4400, status=400)
+
+    raw = payload.get('targets')
+    if not isinstance(raw, list):
+        return error(message='缺少操作目标', code=4401, status=400)
+
+    # 去重 + 过滤非法项（taskType 仅接受两种签到类型）
+    seen = set()
+    targets = []
+    for t in raw:
+        if not isinstance(t, dict):
+            continue
+        acc_id, task_type = t.get('accountId'), t.get('taskType')
+        if acc_id is None or task_type not in ('dorm', 'activity'):
+            continue
+        key = (int(acc_id), task_type)
+        if key not in seen:
+            seen.add(key)
+            targets.append(key)
+    if not targets:
+        return error(message='缺少有效的操作目标', code=4401, status=400)
+
+    config_set_id = payload.get('configSetId')
+    apply_set = None
+    if action == 'enable' and config_set_id is not None:
+        apply_set = ConfigSet.query.filter_by(id=config_set_id, user_id=request.current_user.id).first()
+        if not apply_set:
+            return error(message='配置套不存在或不可用', code=4400, status=400)
+
+    user = request.current_user
+    affected = skipped_count = 0
+    skipped_reasons = []
+    affected_list = []
+    task_label = {'dorm': '寝室签到', 'activity': '活动签到'}
+
+    # 跳过项统一登记：保证 skipped 计数与明细不会因分支增多而漏计/重复
+    def skip(acc_id, task_type, name, reason):
+        nonlocal skipped_count
+        skipped_count += 1
+        skipped_reasons.append({
+            'accountId': acc_id, 'taskType': task_type,
+            'accountName': name, 'taskLabel': task_label[task_type],
+            'reason': reason,
+        })
+
+    def succeed(acc_id, task_type, name):
+        nonlocal affected
+        affected += 1
+        affected_list.append({
+            'accountId': acc_id, 'taskType': task_type,
+            'accountName': name, 'taskLabel': task_label[task_type],
+        })
+
+    for acc_id, task_type in targets:
+        acc = BAccount.query.filter_by(id=acc_id, user_id=user.id).first()
+        if not acc:
+            skip(acc_id, task_type, f'账号{acc_id}', '账号不存在')
+            continue
+        # 启用要求账号本身启用；关闭不受此限（账号停用也可显式关闭其任务）
+        if action == 'enable' and not acc.enabled:
+            skip(acc_id, task_type, acc.profile.get('name') or acc.account, '账号未启用')
+            continue
+
+        name = acc.profile.get('name') or acc.account
+        sc = Schedule.query.filter_by(user_id=user.id, account_id=acc.id, task_type=task_type).first()
+
+        # ── 关闭：无需配置，未启用或无实例即跳过 ──
+        if action == 'disable':
+            if not sc or not sc.enabled:
+                skip(acc_id, task_type, name, '任务未启用，无需关闭')
+                continue
+            sc.enabled = False
+            sc.next_run_at = None
+            sync_schedule(sc)
+            succeed(acc_id, task_type, name)
+            continue
+
+        # ── 启用：可选套用配置套 ──
+        if apply_set:
+            if sc:
+                sc.set_config(apply_set.config)
+                sc.mode = 'standalone'
+                sc.config_set_id = apply_set.id
+            else:
+                sc = Schedule(user_id=user.id, account_id=acc.id, task_type=task_type,
+                              mode='standalone', enabled=False, config_set_id=apply_set.id)
+                sc.set_config(apply_set.config)
+                db.session.add(sc)
+                # 新建实例尚未 flush，sc.id 为 None；sync_schedule 注册 job 依赖 schedule.id，
+                # 须先 flush 拿到真实主键，否则 job 注册成 sched_None 且 run_schedule 回查不到。
+                db.session.flush()
+
+        if not sc:
+            skip(acc_id, task_type, name, '任务实例不存在且未选配置套，无法启用（请先在签到配置中配置该任务）')
+            continue
+
+        # 开启前校验（与 update_schedule 的 4401/4402 呼应）
+        reason = None
+        if sc.mode == 'standalone':
+            if not sc.has_own_config:
+                reason = '本任务缺少配置，请先完善配置再启用'
+        elif sc.mode == 'follow':
+            if not sc.config_set_id:
+                reason = '请先绑定配置套再启用'
+            else:
+                cs = ConfigSet.query.filter_by(id=sc.config_set_id, user_id=user.id).first()
+                if not cs:
+                    reason = '绑定的配置套不存在或不可用'
+        elif sc.mode == 'custom':
+            cfg = sc.custom or {}
+            if not isinstance(cfg.get('weekdays'), list) or not cfg['weekdays']:
+                reason = '自定义模式下必须设置执行星期'
+            elif (not isinstance(cfg.get('hour'), int) or not isinstance(cfg.get('minute'), int)
+                  or not (0 <= cfg['hour'] <= 23) or not (0 <= cfg['minute'] <= 59)):
+                reason = '自定义模式下必须设置合法的小时与分钟'
+
+        if reason:
+            skip(acc_id, task_type, name, reason)
+            continue
+
+        sc.enabled = True
+        sc.next_run_at = compute_next_run(sc)
+        sync_schedule(sc)
+        succeed(acc_id, task_type, name)
+
+    db.session.commit()
+
+    verb = '启用' if action == 'enable' else '关闭'
+    msg = f'已{verb} {affected} 个账号任务'
+    if skipped_count:
+        msg += f'，跳过 {skipped_count} 个'
+    return success(
+        {'action': action, 'affected': affected, 'skipped': skipped_count,
+         'skippedReasons': skipped_reasons, 'affectedList': affected_list},
+        message=msg,
+    )

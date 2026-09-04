@@ -1,6 +1,23 @@
 <template>
   <!-- 移动端：纵向布局，账号树限高收纳在顶部（先选账号任务，编辑器在下方） -->
-  <div class="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:flex-row">
+  <div class="flex min-h-0 flex-col gap-4 lg:flex-1">
+    <!-- 顶部操作条：标题 + 批量管理入口（作为卡片与下方配置区做划分） -->
+    <div class="flex shrink-0 items-center justify-between gap-3 rounded-2xl dash-card px-4 py-3">
+      <div class="min-w-0">
+        <h2 class="text-base font-semibold text-ink">账号任务配置</h2>
+        <p class="mt-0.5 text-xs text-ink-muted">为多个账号批量启用或关闭定时签到，启用时可选统一配置套</p>
+      </div>
+      <button
+        type="button"
+        class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-brand/30 bg-brand/5 px-3.5 text-sm font-medium text-brand transition hover:bg-brand/10"
+        @click="showBatchManage = true"
+      >
+        <Icon name="sliders" :size="15" />批量管理…
+      </button>
+    </div>
+
+    <!-- 账号树 + 编辑器 行 -->
+    <div class="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
     <!-- 左：账号 → 任务 树（搜索 + 折叠，应对账号过多） -->
     <aside class="flex w-full shrink-0 flex-col overflow-hidden rounded-2xl dash-card lg:max-h-none lg:w-60 xl:w-64">
       <div class="shrink-0 space-y-2 border-b border-ink/5 p-2">
@@ -157,6 +174,7 @@
         </MasonryGrid>
       </template>
     </div>
+    </div>
 
     <!-- 保存覆盖确认：已启用任务保存将立即覆盖运行中的配置 -->
     <div
@@ -189,6 +207,9 @@
         </div>
       </div>
     </div>
+
+    <!-- 批量管理抽屉（批量启用 / 批量关闭） -->
+    <BatchManageDrawer v-if="showBatchManage" @close="onBatchManageClose" />
   </div>
 </template>
 
@@ -206,6 +227,7 @@ import ImageSection from '@/components/signconfig/sections/ImageSection.vue'
 import PushSection from '@/components/signconfig/sections/PushSection.vue'
 import AdvancedSection from '@/components/signconfig/sections/AdvancedSection.vue'
 import MasonryGrid from '@/components/signconfig/MasonryGrid.vue'
+import BatchManageDrawer from '@/components/signconfig/BatchManageDrawer.vue'
 
 const store = useSignConfigStore()
 // 配置套变更需同步刷新定时任务视图（卡片的「下一次执行」取自任务实例，而非配置套）
@@ -219,6 +241,7 @@ async function refreshSchedulesView() {
 }
 
 // ── 左树：搜索 + 折叠 ──
+const showBatchManage = ref(false)
 const search = ref('')
 const expanded = reactive({})
 
@@ -335,9 +358,14 @@ async function onSaveConfig() {
   await store.saveTaskConfig()
   await refreshSchedulesView()
 }
-async function confirmSave() {
-  showSaveConfirm.value = false
-  await store.saveTaskConfig()
-  await refreshSchedulesView()
-}
+  async function confirmSave() {
+    showSaveConfirm.value = false
+    await store.saveTaskConfig()
+    await refreshSchedulesView()
+  }
+
+  // 批量管理抽屉
+  function onBatchManageClose() {
+    showBatchManage.value = false
+  }
 </script>

@@ -102,5 +102,13 @@ export async function fetchScheduleBindings() {
   return map
 }
 
+// 批量管理：对一批「账号 × 任务类型」统一开启或关闭调度（action='enable'|'disable'）。
+// body: { action, targets:[{accountId,taskType}], configSetId? }
+// 后端返回 {action, affected, skipped, skippedReasons, affectedList}
+export async function batchManageSchedules(payload) {
+  const data = await request({ url: '/schedules/batch-manage', method: 'post', data: payload, silent: true })
+  return data || {}
+}
+
 // 将某配置套应用到任务：仅传 configSetId，后端自动置 mode=follow
 // （历史上另有 bindScheduleConfigSet 直通包装，已随「套用即快照」语义并入 updateSchedule 删除）

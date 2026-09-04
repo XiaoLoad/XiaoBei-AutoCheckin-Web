@@ -29,7 +29,7 @@
       <template v-if="result">
         <div class="xb-scroll min-h-0 flex-1 overflow-y-auto px-6 py-5">
           <!-- 结论横幅：图标 + 一句话结论 -->
-          <div class="flex items-center gap-3 rounded-2xl px-5 py-4" :class="outcomeBandClass">
+          <div class="xb-band flex items-center gap-3 rounded-2xl px-5 py-4" :class="outcomeBandClass">
             <span class="grid h-12 w-12 shrink-0 place-items-center rounded-full" :class="outcomeIconWrap">
               <Icon :name="outcomeIcon" :size="26" />
             </span>
@@ -40,8 +40,8 @@
           </div>
 
           <!-- 双统计卡：已启用/关闭 + 未处理 -->
-          <div class="mt-4 grid grid-cols-2 gap-3">
-            <div class="rounded-2xl border px-5 py-4" :class="statPrimaryClass">
+          <div class="mt-4 grid grid-cols-2 gap-3 xb-stats">
+            <div class="xb-stat rounded-2xl border px-5 py-4" :class="statPrimaryClass">
               <div class="flex items-center gap-1.5 text-xs font-medium">
                 <Icon :name="result.action === 'disable' ? 'x-circle' : 'check-circle'" :size="14" />
                 {{ result.action === 'disable' ? '已关闭' : '已启用' }}
@@ -49,7 +49,7 @@
               <p class="mt-1.5 text-3xl font-semibold leading-none text-ink">{{ result.affected }}</p>
               <p class="mt-1.5 text-[11px] opacity-70">个账号任务</p>
             </div>
-            <div v-if="result.skipped" class="rounded-2xl border border-amber/30 bg-amber/5 px-5 py-4">
+            <div v-if="result.skipped" class="xb-stat rounded-2xl border border-amber/30 bg-amber/5 px-5 py-4">
               <div class="flex items-center gap-1.5 text-xs font-medium text-amber">
                 <Icon name="alert" :size="14" /> 未处理
               </div>
@@ -59,7 +59,7 @@
           </div>
 
           <!-- 操作指引 -->
-          <p class="mt-4 rounded-xl bg-cloud/60 px-4 py-3 text-xs leading-relaxed text-ink-soft">
+          <p class="xb-guidance mt-4 rounded-xl bg-cloud/60 px-4 py-3 text-xs leading-relaxed text-ink-soft">
             {{ guidance }}
           </p>
 
@@ -119,7 +119,7 @@
           </p>
         </div>
 
-        <footer class="shrink-0 border-t border-ink/10 px-6 py-4">
+        <footer class="shrink-0 border-t border-ink/10 px-6 py-3">
           <div class="flex items-center justify-between gap-3">
             <button
               type="button"
@@ -142,7 +142,7 @@
       <!-- ═══ 选择视图 ═══ -->
       <template v-else>
         <!-- 模式切换：批量启用 / 批量关闭 -->
-        <div class="shrink-0 px-6 pt-5">
+        <div class="shrink-0 px-6 pt-4 xb-stagger">
           <div class="grid grid-cols-2 gap-1.5 rounded-2xl bg-cloud/70 p-1.5">
             <button
               type="button"
@@ -165,14 +165,14 @@
 
         <!-- 模式说明 -->
         <div
-          class="mx-6 mt-4 shrink-0 rounded-xl border-l-4 px-4 py-3 text-xs leading-relaxed text-ink-soft"
+          class="mx-6 mt-3 shrink-0 rounded-xl border-l-4 px-4 py-2.5 text-xs leading-relaxed text-ink-soft xb-stagger"
           :class="mode === 'enable' ? 'border-brand/40 bg-brand/5' : 'border-amber/40 bg-amber/5'"
         >
           {{ hintText }}
         </div>
 
         <!-- 可选配置套（仅启用模式需要） -->
-        <div v-if="mode === 'enable'" class="shrink-0 px-6 pt-4">
+        <div v-if="mode === 'enable'" class="shrink-0 px-6 pt-3 xb-stagger">
           <label class="mb-1.5 block text-[11px] text-ink-muted">配置套（可选）</label>
           <div class="w-full">
             <BaseSelect v-model="pickSetId" :options="setPickOptions" :searchable="true" size="sm" placeholder="不设置（用各自现有配置）" />
@@ -180,7 +180,7 @@
         </div>
 
         <!-- 模糊搜索：账号名称 / 学号 / 班级，空格分词 AND 匹配 -->
-        <div class="shrink-0 px-6 pt-4">
+        <div class="shrink-0 px-6 pt-3 xb-stagger">
           <div class="relative">
             <Icon name="search" :size="15" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
             <input
@@ -201,8 +201,8 @@
           </div>
         </div>
 
-        <!-- 批量工具条：全选 / 反选 / 按类型刷选 /（关闭模式）只看运行中 -->
-        <div v-if="accounts.length" class="shrink-0 px-6 pt-3">
+        <!-- 批量工具条：全选 / 反选（批量行）；按类型刷选 + 关闭模式范围筛选（类型行） -->
+        <div v-if="accounts.length" class="shrink-0 px-6 pt-2.5 xb-stagger">
           <div class="flex flex-wrap items-center gap-2">
             <span class="text-[11px] text-ink-muted">批量：</span>
             <button
@@ -224,13 +224,14 @@
             >
               反选
             </button>
-            <span class="mx-0.5 h-4 w-px bg-ink/10" aria-hidden="true"></span>
+          </div>
+          <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
             <span class="text-[11px] text-ink-muted">按类型：</span>
             <button
               v-for="t in taskTypes"
               :key="t.value"
               type="button"
-              class="inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition"
+              class="inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition"
               :class="typeCounts[t.value]
                 ? 'border-brand/30 bg-brand/10 text-brand'
                 : 'border-ink/10 bg-white text-ink-soft hover:border-brand/30 hover:bg-brand/5 hover:text-brand'"
@@ -246,7 +247,7 @@
             <button
               v-if="mode === 'disable'"
               type="button"
-              class="inline-flex h-8 items-center gap-1 rounded-lg border px-3 text-xs font-medium transition"
+              class="inline-flex h-8 items-center gap-1 rounded-lg border px-2.5 text-xs font-medium transition"
               :class="onlyRunning
                 ? 'border-warning/40 bg-warning/10 text-warning'
                 : 'border-ink/10 bg-white text-ink-soft hover:border-brand/30 hover:bg-brand/5 hover:text-brand'"
@@ -278,7 +279,7 @@
               <li
                 v-for="acc in visible"
                 :key="acc.id"
-                class="xb-apply-acc relative flex items-center gap-3 px-6 py-3 transition hover:bg-cloud/40"
+                class="xb-apply-acc relative flex items-center gap-3 px-6 py-2.5 transition hover:bg-cloud/40"
                 :class="accHasSelection(acc) ? 'bg-brand/[0.04]' : ''"
               >
                 <!-- 选择左轨：该行有任一项被选中时显示，作为可扫读的状态锚 -->
@@ -304,7 +305,7 @@
                   <Icon name="check" :size="13" />
                 </button>
                 <!-- 头像 -->
-                <div class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand/10 text-sm font-semibold text-brand">
+                <div class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand/10 text-sm font-semibold text-brand">
                   {{ acc.name.charAt(0) }}
                 </div>
                 <!-- 身份 -->
@@ -359,7 +360,7 @@
         </div>
 
         <!-- 底部操作条：统计 + 执行（行内二次确认 / 已启用覆盖确认） -->
-        <footer class="shrink-0 border-t border-ink/10 px-6 py-4">
+        <footer class="shrink-0 border-t border-ink/10 px-6 py-3">
           <!-- 选择态 -->
           <template v-if="confirming === false">
             <div class="flex items-center justify-between gap-3">
@@ -467,6 +468,7 @@ const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').mat
 const overlay = ref(null)
 const panel = ref(null)
 const closing = ref(false)
+let ctx = null // gsap.context 句柄：作用域选择器 + 卸载时统一 revert
 
 const store = useSignConfigStore()
 const schedulesStore = useSchedulesStore()
@@ -603,16 +605,26 @@ const selectedAccounts = computed(() => {
 })
 
 // 按类型刷选：把作用域内账号的勾选收敛为「仅该类型」（不可选的组合不会凭空加入）
+// 二次点击同一类型 -> 清空选择（寝室/活动各自可再次点击取消）
 function selectByType(type) {
   const scopeIds = new Set(selectedAccounts.value.map((a) => String(a.id)))
   const inScope = (accId) => scopeIds.size === 0 || scopeIds.has(String(accId))
+  // 目标集合：作用域内「仅该类型」的全部可选键
+  const target = new Set()
+  for (const p of applyablePairs.value) {
+    if (inScope(p.accId) && p.type === type) target.add(keyOf(p.accId, p.type))
+  }
+  // 已完全等于目标集合 -> 视为再次点击该类型，清空
+  if (target.size > 0 && selected.value.size === target.size && [...target].every((k) => selected.value.has(k))) {
+    selected.value = new Set()
+    return
+  }
+  // 收敛为仅该类型，保留作用域外的既有选择
   const next = new Set(selected.value)
   for (const p of applyablePairs.value) {
     if (inScope(p.accId)) next.delete(keyOf(p.accId, p.type))
   }
-  for (const p of applyablePairs.value) {
-    if (inScope(p.accId) && p.type === type) next.add(keyOf(p.accId, p.type))
-  }
+  for (const k of target) next.add(k)
   selected.value = next
 }
 
@@ -667,9 +679,9 @@ const filtered = computed(() => {
 })
 
 // 列表首屏上限：紧凑行每屏约 8-9 条；超出时底部提供单一「显示全部」入口
-const cap = ref(20)
+const cap = ref(50)
 const visible = computed(() => filtered.value.slice(0, cap.value))
-watch(query, () => { cap.value = 20 })
+watch(query, () => { cap.value = 50 })
 
 // 切换模式：语义不同，清空选择与配置套，避免误操作沿用上一模式的选择
 function setMode(next) {
@@ -678,9 +690,19 @@ function setMode(next) {
   selected.value = new Set()
   pickSetId.value = ''
   query.value = ''
-  cap.value = 20
+  cap.value = 50
   confirming.value = false
   if (next === 'disable') onlyRunning.value = true
+  // 切换模式时列表轻微淡入，作为动画细节
+  if (!prefersReduced && panel.value) {
+    nextTick(() => {
+      const list = panel.value.querySelector('.xb-scroll')
+      if (!list) return
+      const fn = () => gsap.fromTo(list, { autoAlpha: 0.45 }, { autoAlpha: 1, duration: 0.3, ease: 'power1.out' })
+      if (ctx) ctx.add(fn)
+      else fn()
+    })
+  }
 }
 
 // ── 执行结果：{action, affected, skipped, skippedReasons, affectedList} ──
@@ -823,39 +845,56 @@ function backToSelect() {
 function revealRows() {
   if (prefersReduced || !panel.value) return
   const rows = panel.value.querySelectorAll('.xb-apply-acc')
-  if (rows.length) {
+  if (!rows.length) return
+  const fn = () =>
     gsap.fromTo(
       rows,
-      { opacity: 0, y: 12 },
-      { opacity: 1, y: 0, duration: 0.4, stagger: 0.04, ease: 'power2.out', clearProps: 'opacity,transform' }
+      { autoAlpha: 0, y: 12 },
+      { autoAlpha: 1, y: 0, duration: 0.4, stagger: 0.04, ease: 'power2.out', clearProps: 'opacity,visibility,transform' }
     )
-  }
+  if (ctx) ctx.add(fn)
+  else fn()
 }
 
 function revealResultRows() {
   if (prefersReduced || !panel.value) return
-  const rows = panel.value.querySelectorAll('.xb-result-row')
-  if (rows.length) {
-    gsap.fromTo(
-      rows,
-      { opacity: 0, y: 10 },
-      { opacity: 1, y: 0, duration: 0.36, stagger: 0.035, ease: 'power2.out', clearProps: 'opacity,transform' }
-    )
+  const fn = () => {
+    const tl = gsap.timeline({ defaults: { ease: 'power2.out' } })
+    const band = panel.value.querySelector('.xb-band')
+    const stats = panel.value.querySelectorAll('.xb-stat')
+    const guidance = panel.value.querySelector('.xb-guidance')
+    const rows = panel.value.querySelectorAll('.xb-result-row')
+    if (band) tl.fromTo(band, { autoAlpha: 0, y: 14 }, { autoAlpha: 1, y: 0, duration: 0.4 })
+    if (stats.length) tl.fromTo(stats, { autoAlpha: 0, y: 12 }, { autoAlpha: 1, y: 0, duration: 0.36, stagger: 0.08 }, '-=0.2')
+    if (guidance) tl.fromTo(guidance, { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: 0.32 }, '-=0.2')
+    if (rows.length) tl.fromTo(rows, { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: 0.36, stagger: 0.035 }, '-=0.15')
   }
+  if (ctx) ctx.add(fn)
+  else fn()
 }
 
 onMounted(async () => {
   await nextTick()
-  if (prefersReduced || !panel.value) {
+  if (!panel.value) return
+  ctx = gsap.context(() => {}, panel.value)
+  if (prefersReduced) {
     revealRows()
     return
   }
-  gsap.fromTo(overlay.value, { opacity: 0 }, { opacity: 1, duration: 0.25, ease: 'power2.out' })
-  gsap.fromTo(
-    panel.value,
-    { xPercent: 100 },
-    { xPercent: 0, duration: 0.34, ease: 'power3.out', onComplete: revealRows }
-  )
+  // 入场时间线：遮罩淡入 + 面板右滑 + 内容块错落入场 + 列表逐行
+  const open = () => {
+    gsap.fromTo(overlay.value, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.25, ease: 'power2.out' })
+    const tl = gsap.timeline({ defaults: { ease: 'power2.out' } })
+    tl.fromTo(panel.value, { xPercent: 100 }, { xPercent: 0, duration: 0.34, ease: 'power3.out' })
+      .fromTo(
+        '.xb-stagger',
+        { autoAlpha: 0, y: 12 },
+        { autoAlpha: 1, y: 0, duration: 0.42, stagger: 0.06 },
+        '-=0.18'
+      )
+      .add(() => revealRows(), '-=0.12')
+  }
+  ctx.add(open)
 })
 
 function requestClose() {
@@ -865,17 +904,21 @@ function requestClose() {
     emit('close')
     return
   }
-  gsap.to(overlay.value, { opacity: 0, duration: 0.26, ease: 'power2.in' })
-  gsap.to(panel.value, {
-    xPercent: 100,
-    duration: 0.28,
-    ease: 'power3.in',
-    onComplete: () => emit('close')
-  })
+  const close = () => {
+    gsap.to(overlay.value, { autoAlpha: 0, duration: 0.26, ease: 'power2.in' })
+    gsap.to(panel.value, {
+      xPercent: 100,
+      duration: 0.28,
+      ease: 'power3.in',
+      onComplete: () => emit('close')
+    })
+  }
+  if (ctx) ctx.add(close)
+  else close()
 }
 
 onBeforeUnmount(() => {
-  gsap.killTweensOf([panel.value, overlay.value])
+  if (ctx) ctx.revert()
 })
 </script>
 

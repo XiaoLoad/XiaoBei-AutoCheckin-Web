@@ -405,10 +405,13 @@ import BaseSelect from '@/components/BaseSelect.vue'
 import RefreshStrip from '@/components/RefreshStrip.vue'
 import Icon from '@/components/Icon.vue'
 import { useAdminOverviewStore } from '@/stores/adminOverview'
+import { useThemeStore } from '@/stores/theme'
 
 // [权限判断] 本页仅管理员可达（分发见 DashboardView；路由守卫二次校验）。
 const store = useAdminOverviewStore()
 const { data: dash, loading, refreshing, loaded } = storeToRefs(store)
+// 主题取色：额度分桶梯队等图表元素随主题联动（在 computed 内访问即自动重绘）
+const themeStore = useThemeStore()
 
 const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
@@ -465,12 +468,14 @@ const failOption = computed(() => ({
 }))
 
 // ===== 额度健康分桶 =====
+// 梯队中段两档（<50% / 50~79%）取当前主题的 light/brand 主色——额度充裕程度用
+// 主题色深浅表达、随主题切换自动重绘；未使用/预警/已满保持中性灰与语义色。
 const quotaOption = computed(() => {
   const b = quota.value.buckets
   const data = [
     { name: '未使用', value: b.unused, itemStyle: { color: '#cbd5e1' } },
-    { name: '<50%', value: b.lt50, itemStyle: { color: '#93c5fd' } },
-    { name: '50~79%', value: b.r50to79, itemStyle: { color: '#60a5fa' } },
+    { name: '<50%', value: b.lt50, itemStyle: { color: themeStore.meta.light } },
+    { name: '50~79%', value: b.r50to79, itemStyle: { color: themeStore.meta.brand } },
     { name: '80~99%', value: b.r80to99, itemStyle: { color: '#d97706' } },
     { name: '已满', value: b.full, itemStyle: { color: '#dc2626' } },
   ]

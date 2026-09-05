@@ -7,6 +7,15 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>小北寝室自动打卡 - Web 端</title>
+    <script>
+      // 首帧前恢复主题：非默认主题给 <html> 挂对应 class（与 tailwindcss-themer
+      // 的主题名约定一致：theme- + id），避免先渲染默认蓝再跳色。
+      // 色板与持久化键见 src/config/themePalette.js，新增主题需沿用命名约定。
+      try {
+        var __t = localStorage.getItem('xb_theme')
+        if (__t && __t !== 'ocean') document.documentElement.classList.add('theme-' + __t)
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="app"></div>

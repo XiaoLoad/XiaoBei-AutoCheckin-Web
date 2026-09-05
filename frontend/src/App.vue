@@ -10,7 +10,7 @@
     等 router.isReady() 后，route 已是守卫处理后的最终目标（如登录页），直接渲染正确布局。
   -->
   <component :is="layout" v-if="ready" :key="$route.path" />
-  <div v-else class="min-h-screen bg-cloud" />
+  <div v-else class="min-h-screen bg-surface" />
   <!-- 全局 Toast 宿主：独立于布局，路由守卫等任意位置均可触发提示 -->
   <ToastHost />
 </template>

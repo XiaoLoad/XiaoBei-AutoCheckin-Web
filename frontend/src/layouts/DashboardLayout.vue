@@ -1,8 +1,8 @@
 <template>
-  <div class="flex min-h-screen bg-cloud text-ink lg:h-screen lg:overflow-hidden">
-    <!-- 侧边栏：PC 常驻，移动端抽屉 -->
+  <div class="flex min-h-screen bg-surface text-ink lg:h-screen lg:overflow-hidden">
+    <!-- 侧边栏：PC 常驻，移动端抽屉（bg-panel 随主题换色的深色面板） -->
     <aside
-      class="fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-ink transition-transform duration-300 lg:static lg:translate-x-0"
+      class="fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-panel transition-transform duration-300 lg:static lg:translate-x-0"
       :class="open ? 'translate-x-0' : '-translate-x-full'"
     >
       <!-- 品牌区 -->
@@ -51,6 +51,44 @@
             <p class="text-sm font-medium text-white truncate">{{ auth.username || '未登录' }}</p>
             <p class="text-[11px] text-white/45 truncate">{{ roleLabel }}</p>
           </div>
+          <!-- 主题色快捷切换：弹层向上展开，点击色板即换全站品牌色 -->
+          <div ref="paletteWrap" class="relative shrink-0">
+            <button
+              type="button"
+              class="grid place-items-center w-8 h-8 rounded-lg hover:bg-white/10 text-white/40 transition-colors"
+              :class="paletteOpen ? 'bg-white/10 text-white' : ''"
+              aria-label="切换主题色"
+              :aria-expanded="paletteOpen"
+              @click="paletteOpen = !paletteOpen"
+            >
+              <Icon name="droplet" :size="17" />
+            </button>
+            <div
+              v-if="paletteOpen"
+              ref="palettePanel"
+              class="absolute bottom-full right-0 mb-2 w-44 rounded-xl bg-white p-1.5 shadow-[0_18px_40px_-20px_rgba(20,33,61,0.45)] ring-1 ring-ink/10"
+              role="menu"
+              aria-label="主题色"
+            >
+              <p class="px-2.5 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">主题色</p>
+              <button
+                v-for="t in themes"
+                :key="t.id"
+                type="button"
+                class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition hover:bg-cloud/70"
+                role="menuitemradio"
+                :aria-checked="themeStore.current === t.id"
+                @click="pickTheme(t, $event)"
+              >
+                <span
+                  class="h-4 w-4 shrink-0 rounded-full ring-1 ring-inset ring-ink/10"
+                  :style="{ backgroundColor: t.brand }"
+                ></span>
+                <span class="flex-1 text-xs font-medium text-ink">{{ t.label }}</span>
+                <Icon v-if="themeStore.current === t.id" name="check" :size="13" class="shrink-0 text-brand" />
+              </button>
+            </div>
+          </div>
           <button
             class="grid place-items-center w-8 h-8 rounded-lg hover:bg-white/10 text-white/40 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             :disabled="auth.loggingOut"
@@ -87,7 +125,7 @@
     <div class="flex-1 flex flex-col min-w-0">
       <!-- 顶栏：两端对齐（justify-between）。左侧为移动端菜单按钮 + 标题，
            右侧为消息图标 + 管理员头像；已移除搜索框元素。 -->
-      <header class="sticky top-0 z-20 flex items-center justify-between h-16 px-4 sm:px-6 bg-white/80 backdrop-blur border-b border-ink/5">
+      <header class="sticky top-0 z-20 flex items-center justify-between h-16 px-4 sm:px-6 bg-card/80 backdrop-blur border-b border-ink/5">
         <!-- 左侧：移动端菜单按钮 + 标题 -->
         <div class="flex items-center gap-3 min-w-0">
           <button class="lg:hidden grid place-items-center w-9 h-9 rounded-lg hover:bg-cloud text-ink-muted shrink-0" @click="open = true" aria-label="打开菜单">
@@ -123,9 +161,12 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter, RouterLink, RouterView } from 'vue-router'
+import { gsap } from 'gsap'
 import { useAuthStore } from '@/stores/auth'
+import { useThemeStore } from '@/stores/theme'
+import { THEME_PALETTE } from '@/config/themePalette'
 import { hasRole } from '@/directives/permission'
 import Icon from '@/components/Icon.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
@@ -134,6 +175,49 @@ const route = useRoute()
 const router = useRouter()
 const open = ref(false)
 const auth = useAuthStore()
+
+// 主题色快捷切换：色板清单来自单一事实源，选中态与切换动作走 theme store
+const themeStore = useThemeStore()
+const themes = THEME_PALETTE
+const paletteOpen = ref(false)
+const paletteWrap = ref(null)
+const palettePanel = ref(null)
+// 系统级减弱动效偏好下跳过弹层动画
+const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+function pickTheme(t, e) {
+  themeStore.setTheme(t.id)
+  // 选中即收起前给色点一个轻脉冲，确认"这次点击生效了"
+  if (!REDUCED_MOTION && e?.currentTarget) {
+    gsap.fromTo(
+      e.currentTarget,
+      { scale: 0.96 },
+      { scale: 1, duration: 0.28, ease: 'back.out(2)', clearProps: 'transform' }
+    )
+  }
+  paletteOpen.value = false
+}
+
+// 点击弹层外部收起
+function onDocClick(e) {
+  if (paletteOpen.value && paletteWrap.value && !paletteWrap.value.contains(e.target)) {
+    paletteOpen.value = false
+  }
+}
+onMounted(() => document.addEventListener('click', onDocClick))
+onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
+
+// 弹层展开/收起微动效：轻缩放 + 上浮
+watch(paletteOpen, async (openState) => {
+  if (!openState || REDUCED_MOTION) return
+  await nextTick()
+  if (!palettePanel.value) return
+  gsap.fromTo(
+    palettePanel.value,
+    { autoAlpha: 0, scale: 0.95, y: 4 },
+    { autoAlpha: 1, scale: 1, y: 0, duration: 0.22, ease: 'power2.out', clearProps: 'opacity,visibility,transform' }
+  )
+})
 // 顶栏标题：默认取路由 meta.title；签到配置页按角色区分（管理员维护平台资源池）
 const pageTitle = computed(() => {
   if (route.path === '/sign-config') return auth.isAdmin ? '平台资源池' : '签到配置'
@@ -216,7 +300,8 @@ function cancelLogout() {
 .nav-link--active {
   background-color: rgba(255, 255, 255, 0.1);
   color: #fff;
-  box-shadow: inset 3px 0 0 0 #1674f8;
+  /* 主题色指示条：取 tailwindcss-themer 生成的 --colors-brand（RGB 三元组），随主题切换 */
+  box-shadow: inset 3px 0 0 0 rgb(var(--colors-brand));
 }
 .fade-enter-active, .fade-leave-active { transition: opacity 0.2s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }

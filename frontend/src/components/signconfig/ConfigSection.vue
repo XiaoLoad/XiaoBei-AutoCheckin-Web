@@ -1,6 +1,6 @@
 <template>
   <section
-    class="rounded-xl border bg-white/60 p-4"
+    class="rounded-xl border bg-card/60 p-4"
     :class="error ? 'border-danger ring-1 ring-danger/20' : 'border-ink/10'"
   >
     <header class="mb-3 flex items-center justify-between gap-2">

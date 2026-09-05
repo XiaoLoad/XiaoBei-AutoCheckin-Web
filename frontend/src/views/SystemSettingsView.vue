@@ -1,7 +1,7 @@
 <template>
   <div class="flex flex-col gap-5 lg:flex-1 lg:min-h-0">
     <!--
-      总布局：按「账户 / 系统」两组分区，组头为「标签 + 延伸细线 + 提示」，组内模块各自成卡、全部通栏。
+      总布局：按「账户 / 外观 / 系统」三组分区，组头为「标签 + 延伸细线 + 提示」，组内模块各自成卡、全部通栏。
       系统参数卡内按业务语义二次分组（注册与额度 / 账号安全 / 数据治理 / 地图服务，未识别键兜底进「其他参数」），
       每组带图标章 + 一句话定位；短组 xl 双列网格，长文本组（地图服务）通栏不挤压描述。
       控件右置规范化：数字输入右对齐并带单位后缀，开关即拨，文本输入定宽。
@@ -146,7 +146,51 @@
       </div>
     </section>
 
-    <!-- ===== 组二：系统（仅管理员） ===== -->
+    <!-- ===== 组二：外观（所有角色） ===== -->
+    <section class="min-w-0" aria-labelledby="settings-hd-appearance">
+      <div class="mb-3 flex items-center gap-2">
+        <h2 id="settings-hd-appearance" class="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">外观</h2>
+        <span class="h-px flex-1 bg-ink/10" aria-hidden="true"></span>
+        <span class="text-xs text-ink-muted">所有角色</span>
+      </div>
+
+      <div class="dash-card fade-up p-4 sm:p-5" role="region" aria-label="主题色">
+        <div class="flex items-center gap-2.5">
+          <span class="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-brand/10 text-brand" aria-hidden="true">
+            <Icon name="droplet" :size="15" />
+          </span>
+          <div class="min-w-0">
+            <p class="text-sm font-semibold text-ink">主题色</p>
+            <p class="text-xs text-ink-muted">一键切换全站品牌色，即时生效，仅记忆在当前浏览器</p>
+          </div>
+        </div>
+
+        <!-- 色板选项：色点 inline style 展示各主题本色；选中态高亮随当前主题（自带自指强调） -->
+        <div class="mt-3 flex flex-wrap gap-2" role="radiogroup" aria-label="选择主题色">
+          <button
+            v-for="t in themePalette"
+            :key="t.id"
+            type="button"
+            role="radio"
+            :aria-checked="themeStore.current === t.id"
+            class="flex items-center gap-2 rounded-xl border px-3 py-2 transition"
+            :class="themeStore.current === t.id
+              ? 'border-brand/40 bg-brand/5 ring-1 ring-brand/15'
+              : 'border-ink/10 bg-white hover:border-ink/20 hover:bg-cloud/60'"
+            @click="onPickTheme(t, $event)"
+          >
+            <span
+              class="h-4 w-4 shrink-0 rounded-full ring-1 ring-inset ring-ink/10"
+              :style="{ backgroundColor: t.brand }"
+            ></span>
+            <span class="text-xs font-medium" :class="themeStore.current === t.id ? 'text-ink' : 'text-ink-soft'">{{ t.label }}</span>
+            <Icon v-if="themeStore.current === t.id" name="check" :size="13" class="shrink-0 text-brand" />
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 组三：系统（仅管理员） ===== -->
     <section v-if="auth.isAdmin" class="min-w-0" aria-labelledby="settings-hd-system">
       <div class="mb-3 flex items-center gap-2">
         <h2 id="settings-hd-system" class="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">系统</h2>
@@ -159,7 +203,7 @@
         <div
           role="region"
           aria-label="系统信息"
-          class="fade-up delay-2 flex flex-col gap-5 rounded-2xl bg-ink p-5 ring-1 ring-white/10 shadow-[0_1px_2px_rgba(20,33,61,0.04),0_18px_40px_-20px_rgba(20,33,61,0.45)] lg:flex-row lg:items-center"
+          class="fade-up delay-2 flex flex-col gap-5 rounded-2xl bg-panel p-5 ring-1 ring-white/10 shadow-[0_1px_2px_rgba(20,33,61,0.04),0_18px_40px_-20px_rgba(20,33,61,0.45)] lg:flex-row lg:items-center"
         >
           <!-- 加载骨架：与「版本主值区 + 三列体征」的最终几何同构 -->
           <div v-if="infoLoading" class="flex flex-1 flex-col gap-5 lg:flex-row lg:items-center">
@@ -397,9 +441,27 @@ import * as authApi from '@/api/auth'
 import { fetchAccountInfo } from '@/api/me'
 import { getSettings, updateSettings, getSystemInfo } from '@/api/settings'
 import { useAuthStore } from '@/stores/auth'
+import { useThemeStore } from '@/stores/theme'
+import { THEME_PALETTE as themePalette } from '@/config/themePalette'
 import { toast } from '@/utils/toast'
 
 const auth = useAuthStore()
+
+// ==================== 区零：主题色（所有角色） ====================
+const themeStore = useThemeStore()
+
+// 选择主题色：store 持久化并给 <html> 挂 class，全站即时生效；轻脉冲确认点击
+function onPickTheme(t, e) {
+  if (themeStore.current === t.id) return
+  themeStore.setTheme(t.id)
+  if (!REDUCED_MOTION && e?.currentTarget) {
+    gsap.fromTo(
+      e.currentTarget,
+      { scale: 0.95 },
+      { scale: 1, duration: 0.3, ease: 'back.out(2)', clearProps: 'transform' }
+    )
+  }
+}
 
 // 细节动效统一开关：系统级减弱动效偏好下，GSAP 全部短路，直接呈现最终状态
 const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches

@@ -96,7 +96,7 @@
             v-for="item in pagedRows"
             :key="item.id"
             v-reveal
-            class="flex flex-col rounded-xl border border-ink/10 bg-white p-4 transition hover:border-brand/40"
+            class="flex flex-col rounded-xl border border-ink/10 bg-card p-4 transition hover:border-brand/40"
           >
             <!-- 头部：头像（圆环色=上次签到状态）+ 姓名/账号 + 启用状态 -->
             <div class="flex items-center gap-3">

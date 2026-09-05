@@ -1,6 +1,23 @@
 /** @type {import('tailwindcss').Config} */
 // TailwindCSS 配置文件
 // content 指定扫描范围，确保构建时只生成使用到的样式类
+//
+// 主题色托管：brand 三档 + 表面三色（surface 页面底 / card 卡片底 / panel 深面板）
+// 由 tailwindcss-themer 接管——插件把每套主题的色值转成 CSS 变量（默认主题 :root、
+// 命名主题同名 class 作用域），运行时给 <html> 挂主题 class（如 theme-jade）即全局换色，
+// bg-brand/10、bg-card/80 等透明度写法自动兼容。色板定义见 src/config/themePalette.js。
+// 其余颜色（ink 文字/paper/语义色等）不随主题切换，保持静态定义。
+import themer from 'tailwindcss-themer'
+import { THEME_PALETTE } from './src/config/themePalette.js'
+
+const themeShades = (t) => ({
+  brand: { DEFAULT: t.brand, light: t.light, dark: t.dark },
+  surface: t.surface,
+  card: t.card,
+  panel: t.panel,
+})
+const [defaultPalette, ...otherPalettes] = THEME_PALETTE
+
 export default {
   content: [
     './index.html',
@@ -9,21 +26,6 @@ export default {
   theme: {
     extend: {
       colors: {
-        brand: {
-          DEFAULT: '#1674f8',
-          light: '#4a9aff',
-          dark: '#0f5dd4',
-          50: '#e8f2ff',
-          100: '#d1e5ff',
-          200: '#a3cbff',
-          300: '#75b1ff',
-          400: '#4a9aff',
-          500: '#1674f8',
-          600: '#0f5dd4',
-          700: '#0b47b0',
-          800: '#08358c',
-          900: '#052669'
-        },
         ink: {
           DEFAULT: '#14213D',
           soft: '#27324F',
@@ -42,5 +44,19 @@ export default {
       }
     }
   },
-  plugins: []
+  plugins: [
+    themer({
+      defaultTheme: {
+        extend: {
+          colors: themeShades(defaultPalette)
+        }
+      },
+      themes: otherPalettes.map((t) => ({
+        name: t.cls,
+        extend: {
+          colors: themeShades(t)
+        }
+      }))
+    })
+  ]
 }

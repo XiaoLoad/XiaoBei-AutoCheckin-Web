@@ -213,9 +213,11 @@ import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import BaseChart from '@/components/BaseChart.vue'
 import { useDashboardStore } from '@/stores/dashboard'
+import { useThemeStore } from '@/stores/theme'
 import RefreshStrip from '@/components/RefreshStrip.vue'
 
 const store = useDashboardStore()
+const themeStore = useThemeStore()
 const { overview: me, loading, refreshing } = storeToRefs(store)
 
 // ===== 状态映射 =====
@@ -279,12 +281,15 @@ const typeBadge = (t) => ({
 const initialOf = (a) => (a.name || a.account || '?').charAt(0)
 
 // ===== 图表配色（与 App 设计令牌对齐：brand/success/danger/info/amber/ink）=====
+// brand 与 dorm 均走 theme store：getter 形式保住 computed 的依赖追踪，切换主题时
+// 引用 C.brand / C.dorm 的图表 option 会重新求值，BaseChart 的 deep watch 自动重绘。
+// dorm 为主题系列副色（companion），保证与当前主题主色拉开色相、双系列可辨识。
 const C = {
   success: '#16a34a',
   fail:    '#dc2626',
   skip:    '#F2A65A',
-  brand:   '#1674f8',
-  dorm:    '#0ea5e9',
+  get brand() { return themeStore.brandHex },
+  get dorm() { return themeStore.companionHex },
   ink:     '#5B6478',
   grid:    'rgba(91,100,120,0.10)',
 }
@@ -314,7 +319,7 @@ const trendOption = computed(() => ({
   grid: { left: 44, right: 18, top: 40, bottom: 28 },
   tooltip: {
     trigger: 'axis',
-    backgroundColor: 'rgba(20,33,61,0.92)', borderWidth: 0, padding: [6, 10],
+    backgroundColor: rgba(themeStore.meta.panel, 0.92), borderWidth: 0, padding: [6, 10],
     textStyle: { color: '#fff', fontSize: 12 },
     axisPointer: { type: 'line', lineStyle: { color: C.brand, type: 'dashed' } }
   },
@@ -333,7 +338,7 @@ const trendOption = computed(() => ({
 }))
 
 const typeDistOption = computed(() => ({
-  tooltip: { trigger: 'item', backgroundColor: 'rgba(20,33,61,0.92)', borderWidth: 0, textStyle: { color: '#fff', fontSize: 12 }, formatter: '{b}：{c} 次 ({d}%)' },
+  tooltip: { trigger: 'item', backgroundColor: rgba(themeStore.meta.panel, 0.92), borderWidth: 0, textStyle: { color: '#fff', fontSize: 12 }, formatter: '{b}：{c} 次 ({d}%)' },
   legend: { bottom: 0, textStyle: { color: C.ink, fontSize: 11 }, type: 'scroll' },
   series: [{
     type: 'pie', radius: ['46%', '70%'], center: ['50%', '42%'], avoidLabelOverlap: true,
@@ -348,7 +353,7 @@ const typeDistOption = computed(() => ({
 }))
 
 const taskOption = computed(() => ({
-  tooltip: { trigger: 'item', backgroundColor: 'rgba(20,33,61,0.92)', borderWidth: 0, textStyle: { color: '#fff', fontSize: 12 }, formatter: '{b}：{c} 次 ({d}%)' },
+  tooltip: { trigger: 'item', backgroundColor: rgba(themeStore.meta.panel, 0.92), borderWidth: 0, textStyle: { color: '#fff', fontSize: 12 }, formatter: '{b}：{c} 次 ({d}%)' },
   title: {
     text: successRate.value + '%', subtext: '成功率',
     left: 'center', top: '37%',

@@ -363,6 +363,9 @@ export const useSignConfigStore = defineStore('signConfig', () => {
   }
 
   // ── 加载 ──
+  // seq 竞态守卫：并发两次 load（如抽屉冷加载与批量操作后的回写交叠）时，
+  // 仅采纳最新一次的响应；先结束者不得提前复位 loading/refreshing 或覆盖新数据
+  let loadSeq = 0
   async function load() {
     const first = !loaded.value
     if (first) loading.value = true
@@ -370,8 +373,10 @@ export const useSignConfigStore = defineStore('signConfig', () => {
       refreshing.value = true
       refreshBus.begin()
     }
+    const seq = ++loadSeq
     try {
       const [meta, sets, pools] = await Promise.all([api.fetchConfigMeta(), api.fetchConfigSets(), api.fetchPools()])
+      if (seq !== loadSeq) return // 竞态守卫：仅采纳最新请求
       accounts.value = meta.accounts
       taskTypes.value = meta.taskTypes
       userConfigSets.value = sets.userConfigSets
@@ -398,9 +403,12 @@ export const useSignConfigStore = defineStore('signConfig', () => {
       }
       loaded.value = true
     } finally {
+      // 总线计数按调用配对回落（与竞态守卫无关：被淘汰的请求也登记过 begin）
       if (!first) refreshBus.end()
-      loading.value = false
-      refreshing.value = false
+      if (seq === loadSeq) {
+        loading.value = false
+        refreshing.value = false
+      }
     }
   }
 

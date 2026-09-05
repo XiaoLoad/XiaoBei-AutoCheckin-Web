@@ -6,17 +6,20 @@
         class="fixed inset-0 z-[1000] flex items-center justify-center p-4 max-sm:items-end max-sm:p-0"
         role="dialog"
         aria-modal="true"
+        :aria-labelledby="title ? 'xb-modal-title' : undefined"
       >
         <div class="absolute inset-0 bg-ink/50 backdrop-blur-[2px]" @click="onOverlayClick" />
 
         <div
-          class="modal-panel relative flex w-full flex-col overflow-hidden rounded-2xl bg-white shadow-2xl shadow-ink/20 max-sm:rounded-b-none max-sm:rounded-t-2xl max-sm:max-h-[90dvh]"
+          ref="panel"
+          tabindex="-1"
+          class="modal-panel relative flex w-full flex-col overflow-hidden rounded-2xl bg-white shadow-2xl shadow-ink/20 max-sm:rounded-b-none max-sm:rounded-t-2xl max-sm:max-h-[90dvh] focus:outline-none"
           :class="[sizeClass, size === 'sm' ? 'max-h-[90vh]' : 'max-h-[92vh]']"
           @click.stop
         >
           <div class="flex shrink-0 items-center justify-between gap-3 px-5 pt-5">
             <slot name="title">
-              <h3 class="text-base font-semibold text-ink">{{ title }}</h3>
+              <h3 id="xb-modal-title" class="text-base font-semibold text-ink">{{ title }}</h3>
             </slot>
             <button
               v-if="!hideClose"
@@ -43,7 +46,7 @@
 </template>
 
 <script setup>
-import { watch, onBeforeUnmount, computed } from 'vue'
+import { ref, watch, onBeforeUnmount, computed, nextTick } from 'vue'
 import Icon from '@/components/Icon.vue'
 
 // 全站唯一弹窗骨架（ConfirmModal / UserFormModal / AccountFormModal 均基于本组件组装）。
@@ -61,6 +64,8 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue', 'close', 'cancel'])
+
+const panel = ref(null)
 
 const sizeClass = computed(
   () => ({ sm: 'max-w-sm', md: 'max-w-md', xl: 'max-w-xl', '2xl': 'max-w-2xl' }[props.size] || 'max-w-xl')
@@ -86,10 +91,14 @@ function onKeydown(e) {
 
 watch(
   () => props.modelValue,
-  (open) => {
+  async (open) => {
     if (open) {
       document.body.style.overflow = 'hidden'
       window.addEventListener('keydown', onKeydown)
+      // 初始焦点落到面板（tabindex="-1"）：键盘用户进入弹窗后有明确的焦点落点，
+      // 不会 Tab 穿透到被遮罩的背景页
+      await nextTick()
+      panel.value?.focus({ preventScroll: true })
     } else {
       document.body.style.overflow = ''
       window.removeEventListener('keydown', onKeydown)

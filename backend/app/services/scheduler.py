@@ -242,6 +242,12 @@ def init_scheduler(app):
         _reconcile_missed_runs()
     sched.add_job(reconcile, 'interval', seconds=_RECONCILE_SECONDS,
                   id=RECONCILE_JOB_ID, replace_existing=True)
+    # 超期日志清理：每日独立 job（启动后 30s 先跑一次，此后 24h 周期）
+    sched.add_job(
+        _prune_old_sign_records, 'interval', hours=24,
+        id='_prune_logs', replace_existing=True,
+        next_run_time=now_cst() + timedelta(seconds=30),
+    )
     sched.start()
     _started = True
 
@@ -324,7 +330,8 @@ def reconcile():
     """周期性对账：对齐 DB 启用态与调度器 job 注册。
     - 已注册但 DB 无启用任务（账号删除 / 任务禁用 / 参数变更）→ 移除 job（孤儿清理）
     - DB 启用但未注册（错过事件钩子的极端情况）→ 补注册
-    - 超期签到日志清理：按系统配置 sign_log_retention_days 删除陈旧 SignRecord（全局策略）"""
+    超期签到日志清理已拆出为每日独立 job（_prune_logs），不再挂在 30s 对账上——
+    按 created_at 范围 DELETE 的清理无需 30 秒级的执行频率。"""
     if _scheduler is None or _app is None:
         return
     with _app.app_context():
@@ -342,26 +349,28 @@ def reconcile():
         for s in Schedule.query.filter_by(enabled=True).all():
             if _job_id(s.id) not in jobs:
                 _register_job(s)
-        _prune_old_sign_records()
 
 
 def _prune_old_sign_records():
     """按 sign_log_retention_days 清理超期执行日志（全局策略，不区分用户）。
-    读取失败回退默认值，清理异常仅记录不中断对账周期。"""
-    try:
-        days = get_setting('sign_log_retention_days') or 180
-        cutoff = now_cst() - timedelta(days=int(days))
-        deleted = SignRecord.query.filter(SignRecord.created_at < cutoff).delete()
-        # push_logs 随签到日志同周期清理（created_at 与执行记录同刻生成）
-        PushLog.query.filter(PushLog.created_at < cutoff).delete(synchronize_session=False)
-        if deleted:
+    作为每日独立 job 运行（此前挂在 30s 对账上，created_at 已加索引仍无必要逐 30s 扫描）。
+    调度线程执行时无 Flask 应用上下文，此处自行入上下文（与 reconcile 同款守卫）；
+    读取失败回退默认值，清理异常仅记日志不中断。"""
+    if _app is None:
+        return
+    with _app.app_context():
+        try:
+            days = get_setting('sign_log_retention_days') or 180
+            cutoff = now_cst() - timedelta(days=int(days))
+            deleted = SignRecord.query.filter(SignRecord.created_at < cutoff).delete(synchronize_session=False)
+            # push_logs 随签到日志同周期清理（created_at 与执行记录同刻生成）
+            PushLog.query.filter(PushLog.created_at < cutoff).delete(synchronize_session=False)
+            if deleted:
+                log.info('清理超期签到日志 %d 条（保留 %d 天）', deleted, int(days))
             db.session.commit()
-            log.info('清理超期签到日志 %d 条（保留 %d 天）', deleted, int(days))
-        else:
-            db.session.commit()
-    except Exception as e:
-        db.session.rollback()
-        log.warning('签到日志自动清理失败：%s', e)
+        except Exception as e:
+            db.session.rollback()
+            log.warning('签到日志自动清理失败：%s', e)
 
 
 def _extract_jitter(schedule):
@@ -824,14 +833,34 @@ def dispatch_push(resolved, schedule, acc, status='success', reason='', image_ur
         return
 
     creds, issues = _resolve_push_creds(push, schedule.user_id)
-    for msg in issues:
-        log.warning('任务 %s 推送通道被跳过：%s', schedule.id, msg)
+    template = push.get('template') or 'html'
+    # 跳过原因落 push_logs（ok=false, attempts=0）：此前只进服务端日志，任务日志详情里
+    # 表现为「没有推送记录」，用户无法排查「配了推送但没收到」——现与发送结果同表可见
+    if issues:
+        try:
+            for it in issues:
+                db.session.add(PushLog(
+                    user_id=schedule.user_id,
+                    account_id=getattr(acc, 'id', None),
+                    schedule_id=getattr(schedule, 'id', None),
+                    sign_record_id=sign_record_id,
+                    channel=it['channel'],
+                    ok=False,
+                    error=('已跳过：' + it['reason'])[:500],
+                    attempts=0,
+                    template=template,
+                ))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            log.exception('任务 %s 推送跳过原因落库失败', schedule.id)
+        for it in issues:
+            log.warning('任务 %s 推送通道被跳过：%s（%s）', schedule.id, it['channel'], it['reason'])
     if not creds:
         log.warning('任务 %s 未解析到任何可用推送凭证（通道=%s），跳过推送',
                     schedule.id, channels)
         return
 
-    template = push.get('template') or 'html'
     # build_ctx 含 DB 读取（位置池/图库/配置套名），须在调用线程（已持 app context）完成；
     # 仅把无状态、纯网络 I/O 的 send_channel 扇出到线程池并发执行：
     # 墙钟时间由「各通道之和」降为「最慢单通道」，单通道异常仍隔离互不干扰。
@@ -887,8 +916,8 @@ def _resolve_push_creds(push, user_id):
     useOwnCredential=true（回填我的凭证）→ 按 push.credIds 解密资源池凭证（仅限本人）；
     useOwnCredential=false（直接填写）→ 读 push.cred 内联字段。
     返回 (creds, issues)：creds={channel: key_or_fields} 仅含已选且密钥非空的通道；
-    issues=[被跳过通道的原因]——凭证解析失败必须显式暴露（此前静默 continue，
-    通道被跳过用户完全无感知，表现为「设置了推送但从不推送」且无从排查）。"""
+    issues=[{channel, reason}] 逐通道跳过原因——凭证解析失败必须显式暴露（此前静默
+    continue，通道被跳过用户完全无感知），调用方负责把 issues 落 push_logs 并记日志。"""
     channels = push.get('channels') or []
     use_own = push.get('useOwnCredential', False)
     out = {}
@@ -908,11 +937,11 @@ def _resolve_push_creds(push, user_id):
         for ch in channels:
             cid = cred_ids.get(ch)
             if not cid:
-                issues.append(f'{ch} 通道未绑定凭证')
+                issues.append({'channel': ch, 'reason': '未绑定凭证'})
                 continue
             fields, err = _cred_fields(cid)
             if fields is None:
-                issues.append(f'{ch} 通道{err}')
+                issues.append({'channel': ch, 'reason': err})
                 continue
             key_field = {'serverchan': 'serverchanKey', 'pushplus': 'pushplusToken'}.get(ch)
             if key_field and fields.get(key_field):
@@ -921,7 +950,7 @@ def _resolve_push_creds(push, user_id):
             if ch == 'email' and fields.get('emailSmtp') and fields.get('emailFrom') and fields.get('emailTo'):
                 out[ch] = {k: fields.get(k) for k in ('emailSmtp', 'emailFrom', 'emailPass', 'emailTo')}
                 continue
-            issues.append(f'{ch} 通道凭证缺少必要字段')
+            issues.append({'channel': ch, 'reason': '凭证缺少必要字段'})
     else:
         cred = push.get('cred') or {}
         if 'serverchan' in channels and cred.get('serverchanKey'):
@@ -933,5 +962,5 @@ def _resolve_push_creds(push, user_id):
             if email.get('emailSmtp') and email.get('emailFrom') and email.get('emailTo'):
                 out['email'] = email
             else:
-                issues.append('email 通道内联凭证缺少 SMTP 地址/发件人/收件人字段')
+                issues.append({'channel': 'email', 'reason': '内联凭证缺少 SMTP 地址/发件人/收件人字段'})
     return out, issues

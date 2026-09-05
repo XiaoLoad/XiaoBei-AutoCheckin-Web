@@ -87,15 +87,17 @@ class RealAdapter:
         return headers
 
     def _check(self, resp):
-        """统一信封校验：HTTP 层异常→network；业务码非 200→credential"""
+        """统一信封校验：HTTP 层异常→network；业务码非 200→credential/unknown。
+        仅 401 归 credential（若依体系登录态失效的确定性信号）；500 等服务端错误归
+        unknown——此前 500 被误判为凭证失效，导致无谓的重登重试并把账号污染成
+        verify_status='fail'，之后每次执行都全量重登、放大平台压力。"""
         try:
             data = resp.json()
         except ValueError:
             raise BPlatformError('unknown', 'B 平台返回了非 JSON 内容')
         code = data.get('code')
         if code != 200:
-            # 若依体系 401 表示登录态失效；此处发生在登录阶段，归为凭证问题
-            kind = 'credential' if code in (401, 500) else 'unknown'
+            kind = 'credential' if code == 401 else 'unknown'
             raise BPlatformError(kind, data.get('msg') or f'B 平台业务错误码 {code}')
         return data
 
@@ -254,6 +256,13 @@ class RealAdapter:
                 try:
                     rsp = resp.json()
                 except ValueError:
+                    # 网关/反代的瞬时 5xx 常返回 HTML 错误页，是最典型的可重试瞬态故障，
+                    # 纳入重试循环（此前直接跳出、单发即失败）；4xx 非 JSON 才是真正的协议异常
+                    if resp.status_code >= 500:
+                        last_err = f'HTTP {resp.status_code} 非 JSON 响应'
+                        if attempt < _MAX_NET_RETRIES - 1:
+                            time.sleep(1 * (2 ** attempt))
+                        continue
                     raise BPlatformError('unknown', f'B 平台返回了非 JSON 内容（HTTP {resp.status_code}）')
 
                 if rsp.get('code') == 200 and rsp.get('msg') == '302':

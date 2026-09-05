@@ -123,7 +123,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { gsap } from 'gsap'
 import Icon from '@/components/Icon.vue'
 
@@ -205,12 +205,20 @@ onMounted(async () => {
   if (accent.value) gsap.set(accent.value, { scaleY: props.schedule.enabled ? 1 : 0, opacity: props.schedule.enabled ? 1 : 0 })
 })
 
+// 状态切换的瞬时标志定时器：组件卸载时清理，避免已卸载卡片仍被回调置值
+let switchTimer = null
+
 watch(
   () => props.schedule.enabled,
   () => {
     switching.value = true
     animateState()
-    setTimeout(() => (switching.value = false), 260)
+    clearTimeout(switchTimer)
+    switchTimer = setTimeout(() => (switching.value = false), 260)
   }
 )
+
+onBeforeUnmount(() => {
+  clearTimeout(switchTimer)
+})
 </script>

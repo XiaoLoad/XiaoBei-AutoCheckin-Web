@@ -171,15 +171,18 @@ export const useAccountsStore = defineStore('accounts', () => {
   }
 
   async function confirmDelete() {
-    if (!deletingItem.value) return
+    const target = deletingItem.value
+    if (!target) return
     deleting.value = true
     try {
-      await deleteAccount(deletingItem.value.id)
-      accounts.value = accounts.value.filter((a) => a.id !== deletingItem.value.id)
+      await deleteAccount(target.id)
+      accounts.value = accounts.value.filter((a) => a.id !== target.id)
+      // 仅成功才关弹窗并清目标：失败时保留 deletingItem，弹窗保持可重试
+      // （此前 finally 无条件清空，失败后弹窗仍开着但再点确认静默无效）
       showDelete.value = false
+      deletingItem.value = null
     } finally {
       deleting.value = false
-      deletingItem.value = null
     }
   }
 

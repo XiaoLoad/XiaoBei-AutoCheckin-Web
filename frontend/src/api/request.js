@@ -78,14 +78,26 @@ service.interceptors.response.use(
     const status = error.response?.status
     const url = error.config?.url || ''
     let message = '请求失败'
-    if (res && res.message) message = res.message
-    else if (error.message) message = error.message
+    if (res && res.message) {
+      message = res.message
+    } else if (!error.response) {
+      // 无响应 = 断网/超时/DNS 失败：axios 原文是英文技术信息（"Network Error"、
+      // "timeout of 10000ms exceeded"），对用户无意义，统一转成可行动的中文提示
+      message = '网络连接异常，请检查网络后重试'
+    } else if (error.message) {
+      message = error.message
+    }
 
-    // Token 过期/非法（非登录接口）：清除本地登录态并跳回登录页
+    // Token 过期/非法（非登录接口）：走 auth store 的清理链并跳回登录页。
+    // 此前只清 localStorage——不 emit AUTH_LOGOUT（并发请求取消、blob 缓存释放链失效）、
+    // 不清 Pinia token（守卫仍放行死 token）。动态 import 避免
+    // 与 stores/auth.js 的静态循环依赖（auth → api/auth → 本模块）。
     // [权限判断] 前端清理只是体验优化，真正的拦截由后端鉴权装饰器保证
     if (status === 401 && !url.includes('/auth/login')) {
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
+      import('@/stores/auth').then(({ useAuthStore }) => {
+        useAuthStore().clearSession()
+        bus.emit(EVENTS.AUTH_LOGOUT)
+      })
       if (location.pathname !== '/login') location.href = '/login'
     } else if (!error.config?.silent) {
       // 统一错误提示（401 已由跳转登录页兜底，不再叠加 toast）

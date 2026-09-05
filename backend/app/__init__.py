@@ -1,4 +1,6 @@
 # 应用工厂：创建并配置 Flask 应用实例
+import logging
+import logging.handlers
 import os
 
 from flask import Flask
@@ -31,6 +33,7 @@ def create_app(env_name=None):
     app = Flask(__name__)
     app.config.from_object(get_config(env_name))
     _assert_production_secrets(app)
+    _setup_logging(app)
 
     # 跨域：开发环境允许前端 5173 端口访问，并放行 Authorization 头
     CORS(
@@ -120,6 +123,44 @@ def _assert_production_secrets(app):
             '生产环境启动被拒绝：' + '；'.join(problems)
             + '。请在环境变量或 backend/.env 中配置后再以 production 启动'
         )
+
+
+_logging_configured = False
+
+
+def _setup_logging(app):
+    """全局日志落盘：调度/推送的 INFO 级关键日志（job 注册、执行汇总、推送成败）
+    此前不落盘（gunicorn 下仅 WARNING+ 走 stderr），线上排障只剩异常栈。
+    - 文件：backend/logs/app.log，5MB × 3 个轮转文件（目录自动创建，*.log 已 gitignore）；
+    - 控制台保留 WARNING+（根级别提到 INFO 后需把 werkzeug 压回 WARNING，
+      避免每个 HTTP 请求刷屏落盘；开发时请求日志仍由 werkzeug 自己的 stdout 承担）；
+    - 进程级幂等：create_app 可能被测试多次调用，模块级标志保证只装配一次。
+      RotatingFileHandler 严格多进程安全需队列方案，本项目为单实例部署（见 README
+      部署约束），直接轮转可接受。"""
+    global _logging_configured
+    if _logging_configured:
+        return
+    _logging_configured = True
+
+    logs_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'logs')
+    os.makedirs(logs_dir, exist_ok=True)
+
+    fmt = logging.Formatter('%(asctime)s %(levelname)s [%(name)s] %(message)s')
+    file_handler = logging.handlers.RotatingFileHandler(
+        os.path.join(logs_dir, 'app.log'),
+        maxBytes=5 * 1024 * 1024, backupCount=3, encoding='utf-8')
+    file_handler.setFormatter(fmt)
+    file_handler.setLevel(logging.INFO)
+
+    console = logging.StreamHandler()
+    console.setFormatter(fmt)
+    console.setLevel(logging.WARNING)
+
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    root.addHandler(file_handler)
+    root.addHandler(console)
+    logging.getLogger('werkzeug').setLevel(logging.WARNING)
 
 
 def _init_database(app):

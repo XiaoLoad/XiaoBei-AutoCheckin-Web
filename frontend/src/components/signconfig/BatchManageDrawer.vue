@@ -10,6 +10,7 @@
       class="absolute right-0 top-0 flex h-full w-full max-w-3xl flex-col bg-white shadow-2xl"
       role="dialog"
       aria-modal="true"
+      tabindex="-1"
       aria-labelledby="batch-drawer-title"
     >
       <header class="flex shrink-0 items-center justify-between gap-3 border-b border-ink/10 px-5 py-4">
@@ -468,6 +469,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { gsap } from 'gsap'
 import Icon from '@/components/Icon.vue'
+import { useOverlayA11y } from '@/composables/useOverlayA11y'
 import BaseSelect from '@/components/BaseSelect.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
 import { useSchedulesStore } from '@/stores/schedules'
@@ -478,6 +480,8 @@ const emit = defineEmits(['close'])
 const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 const overlay = ref(null)
 const panel = ref(null)
+// 无障碍基线：ESC 关闭 + 初始聚焦面板 + 背景滚动锁定
+useOverlayA11y(panel, requestClose)
 const closing = ref(false)
 let ctx = null // gsap.context 句柄：作用域选择器 + 卸载时统一 revert
 

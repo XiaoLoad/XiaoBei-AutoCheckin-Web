@@ -24,6 +24,10 @@ export const useDashboardStore = defineStore('dashboard', () => {
   // 无感刷新：再次进入仪表盘时旧数据原地保留（统计卡/图表原地换数），仅标记刷新态供视图降透明
   const refreshing = ref(false)
 
+  // seq 竞态守卫：并发两次调用时仅采纳最新响应，先结束者不得覆盖新数据
+  // 或提前复位 loading/refreshing（与 adminOverview.js 同款模式）
+  let seq = 0
+
   async function loadOverview() {
     const first = !loaded.value
     if (first) loading.value = true
@@ -31,16 +35,23 @@ export const useDashboardStore = defineStore('dashboard', () => {
       refreshing.value = true
       refreshBus.begin()
     }
+    const my = ++seq
     try {
-      overview.value = await fetchOverview()
+      const data = await fetchOverview()
+      if (my !== seq) return // 竞态守卫：仅采纳最新请求
+      overview.value = data
       loaded.value = true
     } catch (e) {
+      if (my !== seq) return
       // 失败时保留旧数据（首次失败才落回空态骨架），避免刷新把已渲染内容打空
       if (!loaded.value) overview.value = { ...EMPTY }
     } finally {
+      // 总线计数按调用配对回落（被淘汰的请求也登记过 begin）
       if (!first) refreshBus.end()
-      loading.value = false
-      refreshing.value = false
+      if (my === seq) {
+        loading.value = false
+        refreshing.value = false
+      }
     }
   }
 

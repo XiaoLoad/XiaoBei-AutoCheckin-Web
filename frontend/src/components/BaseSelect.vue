@@ -12,6 +12,12 @@
         :inputmode="numeric ? 'numeric' : 'text'"
         :value="draft"
         :placeholder="placeholder"
+        role="combobox"
+        aria-haspopup="listbox"
+        :aria-expanded="open"
+        aria-autocomplete="list"
+        :aria-activedescendant="open && highlightedIndex >= 0 ? listboxId + '-' + highlightedIndex : undefined"
+        :aria-controls="open ? listboxId : undefined"
         class="min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-ink-muted"
         :disabled="disabled"
         @focus="onEditableFocus"
@@ -34,6 +40,10 @@
       type="button"
       class="xb-select-trigger flex w-full items-center justify-between gap-2 rounded-xl border border-ink/10 bg-white text-left text-sm text-ink-soft outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
       :class="size === 'sm' ? 'py-2 px-2.5' : 'py-2.5 px-3'"
+      aria-haspopup="listbox"
+      :aria-expanded="open"
+      :aria-activedescendant="open && highlightedIndex >= 0 ? listboxId + '-' + highlightedIndex : undefined"
+      :aria-controls="open ? listboxId : undefined"
       :disabled="disabled"
       @click="toggle"
       @keydown="onKeydown"
@@ -63,16 +73,20 @@
                 v-model="query"
                 type="text"
                 placeholder="搜索…"
+                aria-label="搜索选项"
                 class="w-full rounded-lg border border-ink/10 bg-cloud/40 py-1.5 pl-8 pr-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/10"
                 @keydown.stop="onSearchKeydown"
               />
             </div>
           </div>
 
-          <ul ref="list" class="xb-select-list max-h-60 overflow-auto py-1">
+          <ul :id="listboxId" ref="list" role="listbox" class="xb-select-list max-h-60 overflow-auto py-1">
             <li
               v-for="(opt, i) in filteredOptions"
               :key="String(opt.value)"
+              :id="listboxId + '-' + i"
+              role="option"
+              :aria-selected="isSelected(opt)"
               class="xb-select-option flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-sm transition"
               :class="[
                 i === highlightedIndex ? 'bg-cloud' : '',
@@ -117,8 +131,13 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue'])
 
+// 组件实例 id 种子（模块级）：为 listbox/option 生成全页唯一 id
+let listboxSeed = 0
+
 const open = ref(false)
 const query = ref('')
+// listbox 稳定 id：供 aria-activedescendant 指向当前高亮项（多实例共存不冲突）
+const listboxId = `xb-listbox-${++listboxSeed}`
 const highlightedIndex = ref(-1)
 const root = ref(null)
 const list = ref(null)

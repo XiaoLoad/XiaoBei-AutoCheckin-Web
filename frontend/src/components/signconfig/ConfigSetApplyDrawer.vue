@@ -10,6 +10,7 @@
       class="absolute right-0 top-0 flex h-full w-full max-w-lg flex-col bg-white shadow-2xl"
       role="dialog"
       aria-modal="true"
+      tabindex="-1"
     >
       <header class="flex shrink-0 items-center justify-between gap-3 border-b border-ink/10 px-5 py-4">
         <div class="min-w-0">
@@ -232,6 +233,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { gsap } from 'gsap'
 import Icon from '@/components/Icon.vue'
+import { useOverlayA11y } from '@/composables/useOverlayA11y'
 import { useSignConfigStore } from '@/stores/signConfig'
 
 const props = defineProps({
@@ -242,6 +244,8 @@ const emit = defineEmits(['close'])
 const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 const overlay = ref(null)
 const panel = ref(null)
+// 无障碍基线：ESC 关闭 + 初始聚焦面板 + 背景滚动锁定
+useOverlayA11y(panel, requestClose)
 const closing = ref(false)
 
 const store = useSignConfigStore()

@@ -585,6 +585,8 @@ function clearSelect() {
 // ── 批量操作：进度面板 + 部分失败汇总；无批量接口，循环单图端点逐张 try/catch ──
 const batchRunning = ref(false)
 const batchPanel = ref({ show: false, title: '', done: 0, total: 0, failed: [] })
+// 批量完成面板自动收起的定时器句柄（卸载时清理）
+let batchHideTimer = null
 async function runBatch(ids, fn) {
   const total = ids.length
   batchPanel.value = { show: true, title: '处理中…', done: 0, total, failed: [] }
@@ -609,7 +611,7 @@ async function runBatch(ids, fn) {
     batchRunning.value = false
   }
   if (!failed.length) {
-    setTimeout(() => {
+    batchHideTimer = setTimeout(() => {
       if (!batchPanel.value.failed.length && batchPanel.value.total === total) batchPanel.value.show = false
     }, 1500)
   }
@@ -1115,6 +1117,8 @@ async function openPreview(img) {
 onBeforeUnmount(() => {
   lightbox?.destroy()
   if (undoState.value.timer) clearTimeout(undoState.value.timer)
+  // 批量完成面板的自动收起定时器：卸载后不再触发（此前悬空访问已卸载的 batchPanel）
+  if (batchHideTimer) clearTimeout(batchHideTimer)
 })
 
 function toTrash(id) { store.trashImage(id) }

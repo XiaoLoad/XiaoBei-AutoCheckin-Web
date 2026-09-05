@@ -78,16 +78,22 @@ export const useThemeStore = defineStore('theme', () => {
     }
   }
 
-  // 全局色彩补间：在 :root 内联变量上从当前值渐变到目标值（内联样式优先级高于
+  // 全局色彩补间：在 :root 内联变量上从旧主题值渐变到目标值（内联样式优先级高于
   // class 变量，补间期间全站颜色连续流动），完成后清内联、交还 class 变量接管。
-  function tweenToTheme(target) {
+  function tweenToTheme(fromMeta, target) {
     const root = document.documentElement
     const computedStyle = getComputedStyle(root)
     const fromChannels = []
     const toChannels = []
 
     for (const { field, suffix } of THEMED_VARS) {
-      fromChannels.push(...tripletChannels(computedStyle.getPropertyValue('--colors-' + suffix)))
+      // 补间起点：上一次补间仍在进行时取内联中间值续接；否则取切换前主题的色板值。
+      // 不能读计算值——目标 class 已在 setTheme 中挂上，计算值此刻已是终点，
+      // 起点若等于终点，补间将原地踏步、视觉上退化为瞬间切换。
+      const fromStr = activeTween
+        ? computedStyle.getPropertyValue('--colors-' + suffix)
+        : hexToTriplet(fromMeta[field])
+      fromChannels.push(...tripletChannels(fromStr))
       toChannels.push(...tripletChannels(hexToTriplet(target[field])))
     }
 
@@ -102,8 +108,8 @@ export const useThemeStore = defineStore('theme', () => {
     activeTween?.kill()
     activeTween = gsap.to(proxy, {
       ...toProps,
-      duration: 0.55,
-      ease: 'power2.inOut',
+      duration: 0.6,
+      ease: 'none',
       onUpdate: () => {
         for (let i = 0; i < THEMED_VARS.length; i++) {
           const { suffix } = THEMED_VARS[i]
@@ -121,9 +127,11 @@ export const useThemeStore = defineStore('theme', () => {
     })
   }
 
-  // 切换主题：class 与 localStorage 立即生效（持久真相），视觉上由补间渐变到位
+  // 切换主题：class 与 localStorage 立即生效（持久真相），视觉上由补间线性流动到位
   function setTheme(id) {
     if (!isValidId(id) || current.value === id) return
+    // 先记录切换前主题作为补间起点（必须在挂 class 之前）
+    const prevMeta = meta.value
     current.value = id
     applyToRoot(id)
     try {
@@ -132,7 +140,7 @@ export const useThemeStore = defineStore('theme', () => {
       /* storage 不可用时主题仅本次会话生效 */
     }
     const target = THEME_PALETTE.find((t) => t.id === id)
-    if (target && !REDUCED_MOTION) tweenToTheme(target)
+    if (target && !REDUCED_MOTION) tweenToTheme(prevMeta, target)
     else clearInlineVars()
   }
 

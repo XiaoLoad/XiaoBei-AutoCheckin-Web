@@ -16,3 +16,17 @@ export async function fetchOverview() {
     recentLogs: data.recentLogs || [],
   }
 }
+
+// 个人设置页「账户信息」只读卡（对应后端 /api/me/account-info）。
+// 空值兜底为稳定默认值，避免骨架屏结束后渲染出 undefined。
+export async function fetchAccountInfo() {
+  const data = await request({ url: '/me/account-info', method: 'get' })
+  return {
+    userId: data.userId ?? null,
+    username: data.username || '',
+    role: data.role || 'user',
+    createdAt: data.createdAt || '',
+    lastLogin: data.lastLogin || '',
+    quota: data.quota || { used: 0, limit: 0, pct: 0 },
+  }
+}

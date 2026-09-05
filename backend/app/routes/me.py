@@ -22,6 +22,27 @@ def _status_pill(status):
     return {'success': 'success', 'fail': 'fail', 'skip': 'skip'}.get(status, 'skip')
 
 
+@bp.route('/account-info', methods=['GET'])
+@token_required
+def me_account_info():
+    """个人设置页「账户信息」只读卡：身份体征（注册/最近登录）与额度体征。
+    额度口径与仪表盘一致：上限取 users.quota，已用恒等于平台账号数现算，不读 used_quota 计数器。"""
+    u = request.current_user
+    used = BAccount.query.filter_by(user_id=u.id).count()
+    limit = u.quota or 0
+    pct = round(used / limit * 100) if limit else 0
+    return success(
+        {
+            'userId': u.id,
+            'username': u.username,
+            'role': u.role,
+            'createdAt': u.created_at.strftime('%Y-%m-%d %H:%M') if u.created_at else '',
+            'lastLogin': u.last_login.strftime('%Y-%m-%d %H:%M') if u.last_login else '',
+            'quota': {'used': used, 'limit': limit, 'pct': pct},
+        }
+    )
+
+
 @bp.route('/overview', methods=['GET'])
 @token_required
 def me_overview():

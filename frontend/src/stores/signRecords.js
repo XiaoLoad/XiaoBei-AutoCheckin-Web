@@ -14,6 +14,7 @@
 // 日历着色直接用任务列表自带的 finished（isFinishKnowing / isFinishSign）——2026-08-29
 // 抓包实证该字段会取 0 表示漏签，无需逐任务查 listLog；listLog 仅用于展开详情按需拉取。
 import { defineStore } from 'pinia'
+import { useRefreshBusStore } from '@/stores/refreshBus'
 import { ref, computed } from 'vue'
 import { fetchAccounts, fetchSignRecords, fetchTaskDetail } from '@/api/signRecords'
 
@@ -57,6 +58,7 @@ function eachDayInRange(start, end) {
 const EMPTY_OVERVIEW = { total: 0, finished: 0, unsigned: 0, needPhoto: 0, rate: 0 }
 
 export const useSignRecordsStore = defineStore('signRecords', () => {
+  const refreshBus = useRefreshBusStore()
   const accounts = ref([])
   const selectedAccountId = ref(null)
   const loadingAccounts = ref(false)
@@ -221,8 +223,13 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     }
     const seq = ++listSeq
     const day = dayFilter.value
-    if (listLoaded.value) refreshingRecords.value = true
-    else loadingRecords.value = true
+    const silentList = listLoaded.value
+    if (silentList) {
+      refreshingRecords.value = true
+      refreshBus.begin()
+    } else {
+      loadingRecords.value = true
+    }
     try {
       const res = await fetchSignRecords(selectedAccountId.value, {
         type: typeFilter.value,
@@ -239,6 +246,7 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
       if (res.meta && res.meta.latest_date) dataLatest.value = res.meta.latest_date
       listLoaded.value = true
     } finally {
+      if (silentList) refreshBus.end()
       if (seq === listSeq) {
         loadingRecords.value = false
         refreshingRecords.value = false
@@ -259,8 +267,13 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     const first = new Date(y, m - 1, 1 - lead)
     const last = new Date(first)
     last.setDate(first.getDate() + 41)
-    if (calendarLoaded.value) refreshingCalendar.value = true
-    else loadingCalendar.value = true
+    const silentCal = calendarLoaded.value
+    if (silentCal) {
+      refreshingCalendar.value = true
+      refreshBus.begin()
+    } else {
+      loadingCalendar.value = true
+    }
     try {
       const res = await fetchSignRecords(selectedAccountId.value, {
         type: typeFilter.value,
@@ -282,6 +295,7 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
       monthCache.value = { ...monthCache.value, [key]: acc }
       calendarLoaded.value = true
     } finally {
+      if (silentCal) refreshBus.end()
       if (seq === monthSeq) {
         loadingCalendar.value = false
         refreshingCalendar.value = false

@@ -1,4 +1,5 @@
 <template>
+  <Teleport to="body">
   <div class="fixed inset-0 z-50">
     <!-- 遮罩 -->
     <div ref="overlay" class="absolute inset-0 bg-ink/40" @click="requestClose" />
@@ -25,7 +26,7 @@
         </div>
       </header>
 
-      <div class="xb-scroll flex-1 min-h-0 space-y-5 overflow-y-auto px-5 py-5">
+      <div class="xb-scroll flex-1 min-h-0 space-y-5 overflow-y-auto px-5 py-5 transition-opacity" :class="syncing && 'opacity-60 pointer-events-none'">
         <div v-if="!signConfigStore.taskConfig" class="rounded-xl border border-ink/10 bg-cloud/40 p-5 text-center text-sm text-ink-muted">
           该任务暂无可编辑配置，请先在「签到配置 · 账号任务配置」中绑定配置套或保存本任务配置。
         </div>
@@ -131,6 +132,7 @@
       </div>
     </div>
   </div>
+  </Teleport>
 </template>
 
 <script setup>
@@ -140,6 +142,7 @@ import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
 import { useSchedulesStore } from '@/stores/schedules'
+import { useRefreshBusStore } from '@/stores/refreshBus'
 import { toast } from '@/utils/toast'
 import TimeSection from '@/components/signconfig/sections/TimeSection.vue'
 import LocationSection from '@/components/signconfig/sections/LocationSection.vue'
@@ -161,6 +164,11 @@ const closing = ref(false)
 
 const signConfigStore = useSignConfigStore()
 const schedulesStore = useSchedulesStore()
+const refreshBus = useRefreshBusStore()
+
+// 抽屉冷加载中：打开时若配置 store 尚无数据需现场拉取（非静默刷新、总线只登记
+// 静默分支），此处局部登记总线并在抽屉体上降透明，保证抽屉内加载有感知
+const syncing = ref(false)
 
 // 当前任务调度实例状态（来自 signConfigStore，已含 enabled / scheduleId / configSetId）
 const taskState = computed(() => signConfigStore.taskScheduleState)
@@ -181,7 +189,12 @@ const bindHint = computed(() => {
 // 打开抽屉即把 signConfigStore 指向该任务，复用其编辑副本与关联逻辑（单一真相源，与签到配置页同步）
 onMounted(async () => {
   if (!signConfigStore.userConfigSets.length && !signConfigStore.loading) {
-    await signConfigStore.load()
+    syncing.value = true
+    try {
+      await refreshBus.run(() => signConfigStore.load())
+    } finally {
+      syncing.value = false
+    }
   }
   signConfigStore.selectTask(props.schedule.accountId, props.schedule.taskType)
   await nextTick()
@@ -237,10 +250,11 @@ async function doSave() {
   if (ok) await refreshSchedulesView()
 }
 
-// 配置套变更需同步刷新定时任务视图（卡片的「下一次执行」取自任务实例，而非配置套）
+// 配置套变更需同步刷新定时任务视图（卡片的「下一次执行」取自任务实例，而非配置套）；
+// 经总线登记，即使该 store 在本会话尚未加载过（首载无静默分支）也有顶部进度条
 async function refreshSchedulesView() {
   try {
-    await schedulesStore.load()
+    await refreshBus.run(() => schedulesStore.load())
   } catch (e) {
     /* 抽屉内无需强依赖 */
   }

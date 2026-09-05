@@ -1,6 +1,7 @@
 // 任务日志领域状态（Pinia）：编排全局跨账号执行日志（sign_records 本地流水）。
 // 账号列表复用 accounts API，供执行日志筛选器使用。
 import { defineStore } from 'pinia'
+import { useRefreshBusStore } from '@/stores/refreshBus'
 import { ref, computed } from 'vue'
 import { fetchAccounts } from '@/api/accounts'
 import { fetchTaskLogs, fetchTaskLogDetail, deleteTaskLog, purgeTaskLogs } from '@/api/taskLogs'
@@ -11,6 +12,7 @@ function toNum(v) {
 }
 
 export const useTaskLogsStore = defineStore('taskLogs', () => {
+  const refreshBus = useRefreshBusStore()
   // 账号（执行日志筛选共用）
   const accounts = ref([])
   const selectedAccountId = ref(null)
@@ -56,7 +58,10 @@ export const useTaskLogsStore = defineStore('taskLogs', () => {
   async function loadLogs() {
     const first = !logsLoaded.value
     if (first) loadingLogs.value = true
-    else refreshingLogs.value = true
+    else {
+      refreshingLogs.value = true
+      refreshBus.begin()
+    }
     const seq = ++logsSeq
     try {
       const res = await fetchTaskLogs({
@@ -79,6 +84,7 @@ export const useTaskLogsStore = defineStore('taskLogs', () => {
       total.value = 0
       overview.value = { total: 0, success: 0, fail: 0, skip: 0 }
     } finally {
+      if (!first) refreshBus.end()
       if (seq === logsSeq) {
         loadingLogs.value = false
         refreshingLogs.value = false

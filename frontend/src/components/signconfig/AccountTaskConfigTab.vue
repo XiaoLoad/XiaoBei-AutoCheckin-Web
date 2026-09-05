@@ -176,37 +176,41 @@
     </div>
     </div>
 
-    <!-- 保存覆盖确认：已启用任务保存将立即覆盖运行中的配置 -->
-    <div
-      v-if="showSaveConfirm"
-      class="fixed inset-0 z-40 flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm"
-      @click.self="showSaveConfirm = false"
-    >
-      <div class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
-        <h3 class="text-base font-semibold text-ink">任务已启用</h3>
-        <p class="mt-2 text-sm leading-relaxed text-ink-muted">该定时任务当前正在运行，保存将覆盖其配置并立即生效。确定继续保存吗？</p>
-        <div class="mt-5 flex items-center justify-end gap-2">
-          <button type="button" class="h-9 rounded-lg px-4 text-sm font-medium text-ink-muted transition hover:bg-cloud" @click="showSaveConfirm = false">取消</button>
-          <button type="button" class="h-9 rounded-lg bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-dark" @click="confirmSave">确定保存</button>
+    <!-- 保存覆盖确认：已启用任务保存将立即覆盖运行中的配置（Teleport 逃离祖先层叠上下文） -->
+    <Teleport to="body">
+      <div
+        v-if="showSaveConfirm"
+        class="fixed inset-0 z-40 flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm"
+        @click.self="showSaveConfirm = false"
+      >
+        <div class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+          <h3 class="text-base font-semibold text-ink">任务已启用</h3>
+          <p class="mt-2 text-sm leading-relaxed text-ink-muted">该定时任务当前正在运行，保存将覆盖其配置并立即生效。确定继续保存吗？</p>
+          <div class="mt-5 flex items-center justify-end gap-2">
+            <button type="button" class="h-9 rounded-lg px-4 text-sm font-medium text-ink-muted transition hover:bg-cloud" @click="showSaveConfirm = false">取消</button>
+            <button type="button" class="h-9 rounded-lg bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-dark" @click="confirmSave">确定保存</button>
+          </div>
         </div>
       </div>
-    </div>
+    </Teleport>
 
     <!-- 换绑确认：运行中的任务换绑立即生效 -->
-    <div
-      v-if="showBindConfirm"
-      class="fixed inset-0 z-40 flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm"
-      @click.self="showBindConfirm = false"
-    >
-      <div class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
-        <h3 class="text-base font-semibold text-ink">换绑配置套</h3>
-        <p class="mt-2 text-sm leading-relaxed text-ink-muted">任务正在运行，换绑后立即按新配置套执行。确定继续吗？</p>
-        <div class="mt-5 flex items-center justify-end gap-2">
-          <button type="button" class="h-9 rounded-lg px-4 text-sm font-medium text-ink-muted transition hover:bg-cloud" @click="showBindConfirm = false">取消</button>
-          <button type="button" class="h-9 rounded-lg bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-dark" @click="confirmBind">确定换绑</button>
+    <Teleport to="body">
+      <div
+        v-if="showBindConfirm"
+        class="fixed inset-0 z-40 flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm"
+        @click.self="showBindConfirm = false"
+      >
+        <div class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+          <h3 class="text-base font-semibold text-ink">换绑配置套</h3>
+          <p class="mt-2 text-sm leading-relaxed text-ink-muted">任务正在运行，换绑后立即按新配置套执行。确定继续吗？</p>
+          <div class="mt-5 flex items-center justify-end gap-2">
+            <button type="button" class="h-9 rounded-lg px-4 text-sm font-medium text-ink-muted transition hover:bg-cloud" @click="showBindConfirm = false">取消</button>
+            <button type="button" class="h-9 rounded-lg bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-dark" @click="confirmBind">确定换绑</button>
+          </div>
         </div>
       </div>
-    </div>
+    </Teleport>
 
     <!-- 批量管理抽屉（批量启用 / 批量关闭） -->
     <BatchManageDrawer v-if="showBatchManage" @close="onBatchManageClose" />

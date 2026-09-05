@@ -2,10 +2,12 @@
 // 把原本散落在 AccountManagementView 里的数据编排逻辑下沉到 store，
 // 视图只负责渲染与事件派发。后端接入时只需改 api/accounts.js，本 store 与视图无需变动。
 import { defineStore } from 'pinia'
+import { useRefreshBusStore } from '@/stores/refreshBus'
 import { ref, computed, watch } from 'vue'
 import { fetchAccounts, createAccount, updateAccount, deleteAccount } from '@/api/accounts'
 
 export const useAccountsStore = defineStore('accounts', () => {
+  const refreshBus = useRefreshBusStore()
   const loading = ref(false)
   // 无感刷新：已有数据时后台静默换新（视图仅降透明），loading 只用于真正的首次加载
   const refreshing = ref(false)
@@ -94,7 +96,10 @@ export const useAccountsStore = defineStore('accounts', () => {
   async function load() {
     const first = !loaded.value
     if (first) loading.value = true
-    else refreshing.value = true
+    else {
+      refreshing.value = true
+      refreshBus.begin()
+    }
     const seq = ++loadSeq
     try {
       // 后端接入时此处可传 { keyword, type, signStatus, enabled } 由服务端过滤与分页
@@ -103,6 +108,7 @@ export const useAccountsStore = defineStore('accounts', () => {
       accounts.value = list
       loaded.value = true
     } finally {
+      if (!first) refreshBus.end()
       if (seq === loadSeq) {
         loading.value = false
         refreshing.value = false

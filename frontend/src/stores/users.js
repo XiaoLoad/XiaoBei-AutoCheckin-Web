@@ -2,10 +2,12 @@
 // 把原本散落在 UserManagementView 里的数据编排逻辑下沉到 store，
 // 视图只负责渲染、展示辅助与 toast 提示。
 import { defineStore } from 'pinia'
+import { useRefreshBusStore } from '@/stores/refreshBus'
 import { ref, computed } from 'vue'
 import { getUsers, createUser, updateUser, setUserStatus, deleteUser } from '@/api/users'
 
 export const useUsersStore = defineStore('users', () => {
+  const refreshBus = useRefreshBusStore()
   const list = ref([])
   const total = ref(0)
   const page = ref(1)
@@ -51,7 +53,10 @@ export const useUsersStore = defineStore('users', () => {
   async function fetchUsers() {
     const first = !loaded.value
     if (first) loading.value = true
-    else refreshing.value = true
+    else {
+      refreshing.value = true
+      refreshBus.begin()
+    }
     const seq = ++fetchSeq
     try {
       const res = await getUsers(buildParams())
@@ -64,6 +69,7 @@ export const useUsersStore = defineStore('users', () => {
       if (page.value > tp) page.value = tp
       loaded.value = true
     } finally {
+      if (!first) refreshBus.end()
       if (seq === fetchSeq) {
         loading.value = false
         refreshing.value = false

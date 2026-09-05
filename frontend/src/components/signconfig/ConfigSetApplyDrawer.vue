@@ -1,4 +1,5 @@
 <template>
+  <Teleport to="body">
   <div class="fixed inset-0 z-50">
     <!-- 遮罩 -->
     <div ref="overlay" class="absolute inset-0 bg-ink/40" @click="requestClose" />
@@ -224,6 +225,7 @@
       </footer>
     </aside>
   </div>
+  </Teleport>
 </template>
 
 <script setup>

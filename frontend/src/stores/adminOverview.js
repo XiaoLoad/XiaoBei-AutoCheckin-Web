@@ -3,6 +3,7 @@
 // 日志区筛选（type/username/page）随 overview 一并传参，后端仅作用于日志区，
 // 筛选同时会静默刷新其它区块（顺带换新，无额外代价）。
 import { defineStore } from 'pinia'
+import { useRefreshBusStore } from '@/stores/refreshBus'
 import { ref } from 'vue'
 import { fetchAdminOverview } from '@/api/admin'
 
@@ -27,6 +28,7 @@ const EMPTY = {
 }
 
 export const useAdminOverviewStore = defineStore('adminOverview', () => {
+  const refreshBus = useRefreshBusStore()
   const data = ref(JSON.parse(JSON.stringify(EMPTY)))
   const loading = ref(false)
   const refreshing = ref(false)
@@ -39,7 +41,10 @@ export const useAdminOverviewStore = defineStore('adminOverview', () => {
     if (filters) logFilters.value = { ...logFilters.value, ...filters }
     const first = !loaded.value
     if (first) loading.value = true
-    else refreshing.value = true
+    else {
+      refreshing.value = true
+      refreshBus.begin()
+    }
     const my = ++seq
     const f = logFilters.value
     const params = {}
@@ -52,6 +57,7 @@ export const useAdminOverviewStore = defineStore('adminOverview', () => {
       data.value = res
       loaded.value = true
     } finally {
+      if (!first) refreshBus.end()
       if (my === seq) {
         loading.value = false
         refreshing.value = false

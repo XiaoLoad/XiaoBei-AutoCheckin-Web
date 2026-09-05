@@ -1,6 +1,5 @@
 <template>
   <div class="flex flex-col gap-6 lg:flex-1 lg:min-h-0">
-    <RefreshStrip v-if="refreshingLogs" />
     <!-- 概览：总执行 / 成功 / 失败 / 跳过 -->
     <div class="grid shrink-0 grid-cols-2 gap-4 lg:grid-cols-4">
       <StatCard
@@ -112,7 +111,8 @@
       </div>
     </div>
 
-    <!-- 清空我的日志：确认弹窗（必须指定 before 上限，防误清空全部历史） -->
+    <!-- 清空我的日志：确认弹窗（必须指定 before 上限，防误清空全部历史）；Teleport 逃离祖先层叠上下文 -->
+    <Teleport to="body">
     <Transition name="fade">
       <div
         v-if="purgeOpen"
@@ -150,6 +150,7 @@
         </div>
       </div>
     </Transition>
+    </Teleport>
 
     <!-- 平铺列表：按执行时间倒序，状态色条为纵向扫读锚点；列表固定高度内部滚动，分页常驻底部。
          min-h-[480px] 给列表卡片一个舒适下限（与 SignRecordsView 一致），短屏不至过矮、长屏仍随 flex-1 撑满。
@@ -624,7 +625,6 @@ import Icon from "@/components/Icon.vue";
 import BaseSelect from "@/components/BaseSelect.vue";
 import StatCard from "@/components/StatCard.vue";
 import BasePagination from "@/components/BasePagination.vue";
-import RefreshStrip from '@/components/RefreshStrip.vue'
 
 const store = useTaskLogsStore();
 const route = useRoute();

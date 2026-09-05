@@ -1,6 +1,7 @@
 // 定时任务领域状态（Pinia）：收纳账号 × 任务类型的调度任务、开启/暂停、定时设置。
 // 已接真实 /api/schedules：本 store 负责开启前预校验与错误兜底，视图无需关心接口细节。
 import { defineStore } from 'pinia'
+import { useRefreshBusStore } from '@/stores/refreshBus'
 import { ref, computed } from 'vue'
 import { toast } from '@/utils/toast'
 import * as api from '@/api/schedules'
@@ -21,6 +22,7 @@ function enableBlockReason(s) {
 }
 
 export const useSchedulesStore = defineStore('schedules', () => {
+  const refreshBus = useRefreshBusStore()
   const loading = ref(false)
   // 无感刷新：已有数据时后台静默换新（视图仅降透明），loading 只用于真正的首次加载
   const refreshing = ref(false)
@@ -60,7 +62,10 @@ export const useSchedulesStore = defineStore('schedules', () => {
   async function load() {
     const first = !loaded.value
     if (first) loading.value = true
-    else refreshing.value = true
+    else {
+      refreshing.value = true
+      refreshBus.begin()
+    }
     const seq = ++loadSeq
     try {
       const list = await api.fetchSchedules()
@@ -68,6 +73,7 @@ export const useSchedulesStore = defineStore('schedules', () => {
       schedules.value = list
       loaded.value = true
     } finally {
+      if (!first) refreshBus.end()
       if (seq === loadSeq) {
         loading.value = false
         refreshing.value = false

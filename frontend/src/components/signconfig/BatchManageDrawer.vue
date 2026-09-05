@@ -1,4 +1,5 @@
 <template>
+  <Teleport to="body">
   <div class="fixed inset-0 z-50">
     <!-- 遮罩 -->
     <div ref="overlay" class="absolute inset-0 bg-ink/40" @click="requestClose" />
@@ -460,6 +461,7 @@
       </template>
     </aside>
   </div>
+  </Teleport>
 </template>
 
 <script setup>
@@ -469,6 +471,7 @@ import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
 import { useSchedulesStore } from '@/stores/schedules'
+import { useRefreshBusStore } from '@/stores/refreshBus'
 
 const emit = defineEmits(['close'])
 
@@ -480,6 +483,10 @@ let ctx = null // gsap.context 句柄：作用域选择器 + 卸载时统一 rev
 
 const store = useSignConfigStore()
 const schedulesStore = useSchedulesStore()
+// 总线登记：本抽屉触发的定时任务页回写可能是该 store 的首次加载（用户未曾到过
+// 定时任务页，store 的静默分支不会登记），此处统一经 run() 保证顶部进度条出现；
+// 与 store 内部的静默登记叠加时计数成对增减，互不干扰
+const refreshBus = useRefreshBusStore()
 
 const accounts = computed(() => store.accounts)
 const taskTypes = computed(() => store.taskTypes)
@@ -770,7 +777,7 @@ async function onApply() {
   }
   // 同步刷新定时任务页（若用户停留在其它 tab，无感知失败）
   try {
-    await schedulesStore.load()
+    await refreshBus.run(() => schedulesStore.load())
   } catch (e) {
     /* 非当前视图，忽略 */
   }

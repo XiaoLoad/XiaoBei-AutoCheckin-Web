@@ -1,12 +1,14 @@
 // 签到配置领域状态（Pinia）：收纳用户配置套 / 任务实例配置 / 四类资源池的真实后端数据
 // 与 UI 状态。接口细节见 api/signConfig.js，本 store 只做编排与本地派生。
 import { defineStore } from 'pinia'
+import { useRefreshBusStore } from '@/stores/refreshBus'
 import { ref, computed, watch } from 'vue'
 import { toast } from '@/utils/toast'
 import * as api from '@/api/signConfig'
 import { batchManageSchedules } from '@/api/schedules'
 
 export const useSignConfigStore = defineStore('signConfig', () => {
+  const refreshBus = useRefreshBusStore()
   const loading = ref(true)
   // 无感刷新：首次加载显示骨架屏；再次进入页面（store 已有缓存）后台静默换新
   const refreshing = ref(false)
@@ -364,7 +366,10 @@ export const useSignConfigStore = defineStore('signConfig', () => {
   async function load() {
     const first = !loaded.value
     if (first) loading.value = true
-    else refreshing.value = true
+    else {
+      refreshing.value = true
+      refreshBus.begin()
+    }
     try {
       const [meta, sets, pools] = await Promise.all([api.fetchConfigMeta(), api.fetchConfigSets(), api.fetchPools()])
       accounts.value = meta.accounts
@@ -393,6 +398,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
       }
       loaded.value = true
     } finally {
+      if (!first) refreshBus.end()
       loading.value = false
       refreshing.value = false
     }

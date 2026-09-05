@@ -13,6 +13,8 @@
   <div v-else class="min-h-screen bg-surface" />
   <!-- 全局 Toast 宿主：独立于布局，路由守卫等任意位置均可触发提示 -->
   <ToastHost />
+  <!-- 全局刷新进度条：refreshBus 总线驱动（App 级唯一实例），覆盖所有页面与抽屉的静默加载 -->
+  <RefreshStrip v-if="refreshBus.active" />
 </template>
 
 <script setup>
@@ -21,9 +23,12 @@ import { useRoute, useRouter } from 'vue-router'
 import DashboardLayout from '@/layouts/DashboardLayout.vue'
 import BlankLayout from '@/layouts/BlankLayout.vue'
 import ToastHost from '@/components/ToastHost.vue'
+import RefreshStrip from '@/components/RefreshStrip.vue'
+import { useRefreshBusStore } from '@/stores/refreshBus'
 
 const route = useRoute()
 const router = useRouter()
+const refreshBus = useRefreshBusStore()
 const ready = ref(false)
 
 // 等待初始导航（含全局守卫鉴权/重定向）结束后才渲染，杜绝首屏布局闪烁

@@ -1,6 +1,7 @@
 // 仪表盘领域状态（Pinia）：对接 /api/me/overview，聚合当前用户的配额/账号/任务/日志概览。
 // 纯只读；loading 态驱动统计卡与图表的骨架占位。
 import { defineStore } from 'pinia'
+import { useRefreshBusStore } from '@/stores/refreshBus'
 import { ref } from 'vue'
 import { fetchOverview } from '@/api/me'
 
@@ -16,6 +17,7 @@ const EMPTY = {
 }
 
 export const useDashboardStore = defineStore('dashboard', () => {
+  const refreshBus = useRefreshBusStore()
   const overview = ref({ ...EMPTY })
   const loading = ref(false)
   const loaded = ref(false)
@@ -25,7 +27,10 @@ export const useDashboardStore = defineStore('dashboard', () => {
   async function loadOverview() {
     const first = !loaded.value
     if (first) loading.value = true
-    else refreshing.value = true
+    else {
+      refreshing.value = true
+      refreshBus.begin()
+    }
     try {
       overview.value = await fetchOverview()
       loaded.value = true
@@ -33,6 +38,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
       // 失败时保留旧数据（首次失败才落回空态骨架），避免刷新把已渲染内容打空
       if (!loaded.value) overview.value = { ...EMPTY }
     } finally {
+      if (!first) refreshBus.end()
       loading.value = false
       refreshing.value = false
     }

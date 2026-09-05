@@ -81,7 +81,8 @@
     </aside>
 
     <!-- 右：选中配置套的六段编辑器 -->
-    <div class="xb-scroll overflow-auto lg:flex-1 lg:min-h-0">
+    <!-- 右：工作台画布——编辑区整体收纳进一张大卡，头部/提示/瀑布流皆为画布内容 -->
+    <div class="dash-card xb-scroll overflow-auto p-4 sm:p-5 lg:flex-1 lg:min-h-0">
       <!-- 移动端配置套切换器（桌面端见左侧列表） -->
       <div class="mb-3 flex shrink-0 items-center gap-2 lg:hidden">
         <div class="min-w-0 flex-1">
@@ -96,7 +97,7 @@
           <Icon name="plus" :size="13" />新建
         </button>
       </div>
-      <div v-if="!store.activeSet" class="dash-card flex min-h-[300px] items-center justify-center text-ink-muted">请先在左侧创建配置套</div>
+      <div v-if="!store.activeSet" class="flex min-h-[300px] items-center justify-center text-ink-muted">请先在左侧创建配置套</div>
       <template v-else>
         <div class="xb-reveal mb-3 flex flex-wrap items-center justify-between gap-2">
           <div class="min-w-0">
@@ -142,8 +143,10 @@
           </div>
         </div>
 
-        <div class="xb-reveal rounded-xl border-l-4 border-brand/30 bg-brand/5 px-4 py-3 text-xs leading-relaxed text-ink-soft">
-          这是<strong>你的配置套（命名模板）</strong>。不同 B 账号批次时间规律不同（如一批周三至周五、一批仅周日），可分别建套；填写账号任务时再引用对应套回填，避免重复配置。改完点右上角保存。
+        <!-- 提示条：统一信息条材质（图标 + 品牌淡底），与账号任务配置页同款 -->
+        <div class="xb-reveal flex items-start gap-2 rounded-xl bg-brand/5 px-3.5 py-2.5 text-xs leading-relaxed text-ink-soft">
+          <Icon name="info" :size="14" class="mt-0.5 shrink-0 text-brand" />
+          <span>这是<strong>你的配置套（命名模板）</strong>。不同 B 账号批次时间规律不同（如一批周三至周五、一批仅周日），可分别建套；填写账号任务时再引用对应套回填，避免重复配置。改完点右上角保存。</span>
         </div>
 
         <MasonryGrid class="mt-4">

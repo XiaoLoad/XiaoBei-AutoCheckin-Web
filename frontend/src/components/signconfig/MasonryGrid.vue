@@ -4,12 +4,22 @@
 // 导致卡片跨列重排、位置抖动。
 // 本实现：列分配（卡片归属哪一列、列内顺序）仅在「挂载 / 断点变化 / 区块数量变化 / 显式刷新」时计算一次并固定；
 // 日常内容高度变化（如凭证新增）只重算同一列内的纵向偏移以避免重叠，绝不让卡片跨列重排，从而稳定位置。
-// 底部对齐：仅把每列「末张卡片」用 min-height 拉伸到统一的静止底边，使卡片底边本身落在同一条水平线；
-// 用 min-height 而非 height —— 内容短则底部留白对齐、内容增长超出底边时自动撑高（绝不溢出），
-// 因此展开态下某卡超出底边只是「临时不统一」，收回（内容减少）后自然回到统一底边。
+//
+// 列高策略：自然错落（经典瀑布流）——卡片高度完全由内容决定，不做底边强制对齐。
+// 此前版本会把每列末卡用 min-height 拉伸到统一静止底边：内容短的卡被撑高出现
+// 大片卡内留白，且任一卡展开超出冻结底边时该列凸出、底边错落，观感不佳，故移除。
+//
+// GSAP 位移补间（FLIP）：布局重算前后各记录一次卡片位置，位置变化的卡片用
+// transform 从旧位平滑滑到新位（0.35s power2.out），不与 left/top 内联绑定冲突；
+// 配合 GCollapse 的高度折叠动画，展开/收起/重排时整列行云流水。
+// 首次布局后卡片轻错落淡入（仅一次，keep-alive 重激活不重复播）。
+// 全部动效尊重 prefers-reduced-motion。
 import { h, ref, onMounted, onActivated, onBeforeUnmount, nextTick, watch } from 'vue'
+import { gsap } from 'gsap'
 
 const GAP = 16
+const REDUCED_MOTION =
+  typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 export default {
   name: 'MasonryGrid',
@@ -22,15 +32,15 @@ export default {
   setup(props, { slots, expose }) {
     const rootRef = ref(null)
     const itemEls = []
-    const styles = ref([]) // 每张卡片的内联定位样式 {left,top,width,height,minHeight,visibility}
+    const styles = ref([]) // 每张卡片的内联定位样式 {left,top,width,visibility}
     const containerHeight = ref(0)
 
     let colOf = [] // 固定：第 i 张卡片归属的列
     let currentCols = 1
-    let frozenBottom = 0 // 静止态底边：结构变化/刷新时重算，内容增减时冻结
     let ro = null
     let isRelayouting = false
     let rafId = null
+    let entranceDone = false
 
     function getSlotList() {
       return (slots.default?.() || []).filter((v) => v && v.type)
@@ -45,7 +55,7 @@ export default {
       return itemEls.map((el) => (el ? el.offsetHeight : 0))
     }
 
-    // full=true 时重新计算列分配与静止底边；full=false 时仅按固定 colOf 重算同一列内偏移
+    // full=true 时重新计算列分配；full=false 时仅按固定 colOf 重算同一列内偏移
     async function relayout(full) {
       if (!rootRef.value) return
       const list = getSlotList()
@@ -59,8 +69,14 @@ export default {
       const cols = getCols()
       const colWidth = (w - GAP * (cols - 1)) / cols
 
+      // FLIP 第一步：记录重排前每张卡的实际位置（内联样式即上一次布局的结果；
+      // 元素已脱离文档（keep-alive 收起）时跳过，避免陈旧位置引发怪异滑动）
+      const oldPos = itemEls.map((el) =>
+        el && el.isConnected ? { left: parseFloat(el.style.left) || 0, top: parseFloat(el.style.top) || 0 } : null
+      )
+
       isRelayouting = true
-      // 测量：全部 height:auto、隐藏态，量到内容真实高度（min-height 不反喂进测量，避免回环）
+      // 测量：全部 height:auto、隐藏态，量到内容真实高度
       styles.value = list.map(() => ({
         left: '0px',
         top: '0px',
@@ -72,8 +88,6 @@ export default {
       const heights = measureHeights()
       const recompute = full || colOf.length !== n
       const colHeights = new Array(cols).fill(0)
-      const colLast = new Array(cols).fill(-1) // 每列末张卡片索引
-      const colLastTop = new Array(cols).fill(0) // 每列末张卡片的 top
       const ns = []
 
       if (recompute) colOf = new Array(n).fill(0)
@@ -86,46 +100,54 @@ export default {
         } else {
           c = colOf[i] || 0
         }
-        const top = colHeights[c]
         ns[i] = {
           left: c * (colWidth + GAP) + 'px',
-          top: top + 'px',
+          top: colHeights[c] + 'px',
           width: colWidth + 'px',
           height: 'auto',
           visibility: 'visible'
         }
         colHeights[c] += (heights[i] || 0) + GAP
-        colLast[c] = i
-        colLastTop[c] = top
       })
 
-      const actualMax = Math.max(0, Math.max(...colHeights) - GAP)
-      // 仅结构变化（重分配列 / 显式刷新）才重算静止底边；内容增减时冻结，
-      // 避免「展开一张卡片」把其它卡片也撑高留白
-      if (recompute || full) frozenBottom = actualMax
-
-      // 仅拉伸每列「末张卡片」到静止底边：用 min-height 而非固定 height —— 内容短则卡片底边撑到
-      // 静止线、底部对齐统一；内容增长超出底边时卡片随内容自然撑高（min-height 是下界、盒子真实增高），
-      // 绝不溢出，且 ResizeObserver 会正常触发重排；此时该列临时超出统一线，收回（内容减少）后自然回落。
-      let maxBottom = 0
-      for (let c = 0; c < cols; c++) {
-        const li = colLast[c]
-        if (li === -1) continue
-        const desired = frozenBottom - colLastTop[c]
-        const natural = heights[li] || 0
-        if (natural <= desired) {
-          // 内容短：以 min-height 拉伸到静止线，内层卡片借 flex:1 填满，底边齐平
-          ns[li] = { ...ns[li], minHeight: desired + 'px' }
-          maxBottom = Math.max(maxBottom, frozenBottom)
-        } else {
-          // 内容已超出静止线：不拉伸，卡片按自然高度，该列底临时超出统一线
-          maxBottom = Math.max(maxBottom, colLastTop[c] + natural)
-        }
-      }
-      containerHeight.value = Math.max(0, maxBottom - GAP)
+      containerHeight.value = Math.max(0, Math.max(...colHeights) - GAP)
       currentCols = cols
       styles.value = ns
       await nextTick()
+
+      // FLIP 第二步：位置变化的卡片从旧位平滑滑到新位（transform 补间，
+      // 与 left/top 内联绑定互不干扰，动画结束清 transform）
+      if (!REDUCED_MOTION) {
+        list.forEach((_, i) => {
+          const el = itemEls[i]
+          const old = oldPos[i]
+          if (!el || !old || !el.isConnected) return
+          const dx = old.left - (parseFloat(ns[i].left) || 0)
+          const dy = old.top - (parseFloat(ns[i].top) || 0)
+          if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return
+          gsap.fromTo(
+            el,
+            { x: dx, y: dy },
+            { x: 0, y: 0, duration: 0.35, ease: 'power2.out', clearProps: 'transform' }
+          )
+        })
+      }
+
+      // 首次布局入场：卡片轻错落淡入（仅挂载后第一次；keep-alive 重激活不重复播）
+      if (!entranceDone) {
+        entranceDone = true
+        if (!REDUCED_MOTION) {
+          const els = itemEls.filter(Boolean)
+          if (els.length) {
+            gsap.fromTo(
+              els,
+              { autoAlpha: 0, y: 10 },
+              { autoAlpha: 1, y: 0, duration: 0.4, stagger: 0.05, ease: 'power2.out', clearProps: 'opacity,visibility,transform' }
+            )
+          }
+        }
+      }
+
       isRelayouting = false
     }
 
@@ -171,7 +193,7 @@ export default {
       }
     )
 
-    // 供父组件在需要时显式刷新排列（如切换配置套后强制重算静止底边）
+    // 供父组件在需要时显式刷新排列（如切换配置套后强制重算）
     function refresh() {
       relayout(true)
     }
@@ -212,12 +234,5 @@ export default {
 }
 .xb-masonry-item {
   box-sizing: border-box;
-  /* 用 flex 列让内部卡片在 min-height 拉伸时仍能填满包裹层，底边齐平且不溢出 */
-  display: flex;
-  flex-direction: column;
-}
-.xb-masonry-item > * {
-  flex: 1 1 auto;
-  min-height: 0;
 }
 </style>

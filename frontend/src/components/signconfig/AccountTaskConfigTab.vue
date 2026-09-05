@@ -76,9 +76,9 @@
       </div>
     </aside>
 
-    <!-- 右：编辑器 -->
-    <div class="xb-scroll overflow-auto lg:flex-1 lg:min-h-0">
-      <div v-if="!store.taskConfig" class="dash-card flex min-h-[300px] items-center justify-center text-ink-muted">请选择左侧账号任务</div>
+    <!-- 右：工作台画布——编辑区整体收纳进一张大卡，头部/工具条/瀑布流皆为画布内容 -->
+    <div class="dash-card xb-scroll overflow-auto p-4 sm:p-5 lg:flex-1 lg:min-h-0">
+      <div v-if="!store.taskConfig" class="flex min-h-[300px] items-center justify-center text-ink-muted">请选择左侧账号任务</div>
       <template v-else>
         <div class="mb-3 space-y-3">
           <div class="flex flex-wrap items-center justify-between gap-2">
@@ -127,8 +127,8 @@
             <span>启用前请先完善必填项：{{ blockHint }}。补全后保存，再点「启用定时任务」。</span>
           </div>
 
-          <!-- 配置套选择（仅本地选择/预览）+ 手动套用 + 次要编辑动作 -->
-          <div class="flex flex-wrap items-center gap-2 rounded-lg bg-cloud/50 px-3 py-2">
+          <!-- 配置套选择（仅本地选择/预览）+ 手动套用 + 次要编辑动作：内嵌件统一 bg-cloud 材质 -->
+          <div class="flex flex-wrap items-center gap-2 rounded-lg bg-cloud px-3 py-2">
             <span class="shrink-0 text-xs text-ink-soft">配置套</span>
             <div class="w-48">
               <BaseSelect v-model="bindPick" :options="store.setOptions" :searchable="true" size="sm" placeholder="选择配置套" />

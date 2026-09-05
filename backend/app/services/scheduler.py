@@ -13,6 +13,7 @@ import json
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.date import DateTrigger
 from apscheduler.jobstores.base import JobLookupError
 # 注意是 APScheduler 自带的线程池执行器（默认 max_workers=10），非标准库同名类
 from apscheduler.executors.pool import ThreadPoolExecutor
@@ -235,6 +236,10 @@ def init_scheduler(app):
     sched = get_scheduler()
     with app.app_context():
         register_all_enabled()
+        # 启动漏跑对账：进程重启落在签到时刻附近时，cron 只会排「下一次未来时刻」，
+        # 刚过去的触发会被静默丢失（无记录、无失败、无推送），此处按 DB 缓存的
+        # next_run_at 找回并补跑（详见 _reconcile_missed_runs）
+        _reconcile_missed_runs()
     sched.add_job(reconcile, 'interval', seconds=_RECONCILE_SECONDS,
                   id=RECONCILE_JOB_ID, replace_existing=True)
     sched.start()
@@ -261,6 +266,40 @@ def register_all_enabled():
     sched = get_scheduler()
     for s in Schedule.query.filter_by(enabled=True).all():
         _register_job(s)
+
+
+def _reconcile_missed_runs():
+    """启动漏跑对账：进程重启落在签到时刻附近时，重新注册的 cron 只会排
+    「下一次未来时刻」，刚过去的触发被静默丢失——无记录、无失败、无推送。
+    以 DB 缓存的 next_run_at 为基准：enabled 且 next_run_at <= now 的任务，
+    安排一次立即补跑（每任务错峰 2 秒，避免重启瞬间集中打向 B 平台）。
+
+    补跑走完整执行链路（run_schedule）：内部自会做账号可用性与平台时间窗校验，
+    不适用的场景（如宕机过久、平台无进行中任务）会如实落 skip/fail 记录而非凭空
+    消失，并把 next_run_at 推进到未来、不会重复进入本对账。
+
+    防重复提交：_commit_result 中签到记录与 next_run_at 同事务原子提交——
+    已成功执行的任务 next_run_at 必已推进到未来，不会进入本对账；唯一残留歧义是
+    「平台已受理但进程在落库前崩溃」，此时补跑最坏得到一条平台「已签到」的
+    业务失败记录，不会产生两条成功日志。"""
+    now = now_cst()
+    stale = (Schedule.query
+             .filter(Schedule.enabled.is_(True),
+                     Schedule.next_run_at.isnot(None),
+                     Schedule.next_run_at <= now)
+             .all())
+    if not stale:
+        return
+    log.info('启动对账：发现 %d 个任务的计划执行时刻已过，安排补跑', len(stale))
+    sched = get_scheduler()
+    for idx, s in enumerate(stale):
+        sched.add_job(
+            run_schedule,
+            trigger=DateTrigger(run_date=now + timedelta(seconds=2 * idx)),
+            args=[s.id, True],
+            id=f'_reconcile_{s.id}',
+            replace_existing=True,
+        )
 
 
 def sync_schedule(schedule):
@@ -356,22 +395,23 @@ def _register_job(schedule):
                   args=[schedule.id], replace_existing=True)
 
 
-def run_schedule(schedule_id):
-    """执行入口（被 APScheduler job 与测试直接调用）。全程异常隔离，不向上抛。"""
+def run_schedule(schedule_id, allow_retry=True):
+    """执行入口（被 APScheduler job 与测试直接调用）。全程异常隔离，不向上抛。
+    allow_retry=False：网络失败补跑 job 自身失败不再级联安排重试（每次失败至多补跑一次）。"""
     if _app is None:
         return
     with _app.app_context():
-        _run(schedule_id)
+        _run(schedule_id, allow_retry=allow_retry)
 
 
-def _run(schedule_id):
+def _run(schedule_id, allow_retry=True):
     """执行入口（被 run_schedule 调用）。异常由 _execute 内部就地回写，
     此处仅兜底提交失败等极端情况。"""
     s = db.session.get(Schedule, schedule_id)
     if s is None or not s.enabled:
         return
     try:
-        _execute(s)
+        _execute(s, allow_retry=allow_retry)
     except Exception as e:
         log.exception('任务 %s 外层兜底异常', schedule_id)
         try:
@@ -561,7 +601,7 @@ def _checkin_flow(schedule, acc, session, resolved, remark):
         raise
 
 
-def _execute(schedule):
+def _execute(schedule, allow_retry=True):
     acc = db.session.get(BAccount, schedule.account_id)
     if acc is None or not acc.enabled:
         log.info('任务 %s 跳过：账号不存在或已禁用', schedule.id)
@@ -624,6 +664,10 @@ def _execute(schedule):
             acc.verify_status = 'fail'  # 凭证失效，下次执行触发 reverify
         log.warning('任务 %s 执行异常（B 平台）：%s', schedule.id, e.message)
         _commit_result(schedule, acc, 'fail', f'B 平台错误：{e.message}', resolved=resolved)
+        # 网络类失败：安排窗口内补跑（请求层已有 3 次指数退避，此处覆盖更长的平台抖动；
+        # credential 已在上方就地重登重试过、业务失败重跑无意义，均不补跑）
+        if e.kind == 'network' and allow_retry:
+            _schedule_retry(schedule)
         return
     except Exception as e:
         log.exception('任务 %s 执行异常', schedule.id)
@@ -645,6 +689,35 @@ def _execute(schedule):
                           sign_record_id=rec.id if rec else None)
     except Exception as e:
         log.warning('任务 %s 后置动作失败（已落库的执行记录不受影响）：%s', schedule.id, e)
+
+
+# ===== 网络失败补跑（窗口内重试）=====
+# 平台瞬时抖动（断网/超时/5xx）常在几分钟内自愈，而 cron 当天不会再触发。
+# 请求层已有 3 次指数退避（覆盖秒级抖动），此处覆盖分钟级抖动：失败后安排一次
+# 一次性延迟 job 重走完整执行链路。环境变量可调：SCHEDULER_RETRY_DELAY_MIN 延迟分钟数（默认 10）。
+RETRY_JOB_PREFIX = '_retry_'
+_RETRY_DELAY_MINUTES = max(1, int(os.getenv('SCHEDULER_RETRY_DELAY_MIN', '10') or 10))
+
+
+def _schedule_retry(schedule):
+    """网络类失败后的窗口内补跑：安排一次延迟 job（默认 10 分钟后）重走完整执行链路。
+    replace_existing 防止连续失败堆叠多个重试；补跑失败不再级联安排（args 传 allow_retry=False）。
+    注意：提交型超时存在「平台已受理但响应超时」的固有二义性，补跑最坏得到一条
+    平台「已签到」的业务失败记录，不会产生两条成功日志。补跑内部自会校验任务
+    启用状态与平台时间窗，窗口已关则如实落 skip。"""
+    sched = get_scheduler()
+    run_at = now_cst() + timedelta(minutes=_RETRY_DELAY_MINUTES)
+    try:
+        sched.add_job(
+            run_schedule,
+            trigger=DateTrigger(run_date=run_at),
+            args=[schedule.id, False],
+            id=f'{RETRY_JOB_PREFIX}{schedule.id}',
+            replace_existing=True,
+        )
+        log.info('任务 %s 网络失败，已安排 %d 分钟后补跑', schedule.id, _RETRY_DELAY_MINUTES)
+    except Exception:
+        log.exception('任务 %s 补跑安排失败（不影响已落库的失败记录）', schedule.id)
 
 
 def _select_remark(resolved):

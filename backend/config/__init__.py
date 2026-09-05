@@ -26,9 +26,16 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     # 连接池：归还连接时回滚 + 取出前探活，避免事务泄漏导致 MySQL 可重复读快照串味
     # （直接表现：跨请求复用的连接读不到刚提交的数据）
+    # 容量必须 ≥ 调度器并发（SCHEDULER_MAX_WORKERS，默认 30）：每个签到 job 在
+    # 「登录→定位→提交」的整段网络 I/O 期间都持有连接、直到落库才释放，池容量小于
+    # 并发 job 数时，高峰期排队的 job 会等满 pool_timeout 整批超时失败（连失败记录都写不进）。
+    _sched_workers = int(os.getenv('SCHEDULER_MAX_WORKERS', '30') or 30)
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_reset_on_return': 'rollback',
         'pool_pre_ping': True,
+        'pool_size': max(10, _sched_workers),
+        'max_overflow': 10,
+        'pool_timeout': 60,
     }
 
     # JWT 凭证

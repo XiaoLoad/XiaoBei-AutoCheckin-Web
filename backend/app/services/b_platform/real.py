@@ -164,16 +164,25 @@ class RealAdapter:
         return VerifyResult(ok=True, token=token, bp_uid=bp_uid, profile=profile)
 
     def _request(self, method, path, token=None, params=None, json=None, ua=None):
-        """统一的 B 平台读取请求：拼 /xiaobei-api/ 前缀，走信封校验。"""
+        """统一的 B 平台读取请求：拼 /xiaobei-api/ 前缀，走信封校验。
+        网络异常指数退避重试 ≤3 次（与提交链路同策略）：找任务/读历史同属签到关键路径，
+        平台一次抖动不应让当天签到直接失败；业务码/凭证错误不重试。"""
         url = f'{BASE_URL}/xiaobei-api/{path}'
-        try:
-            resp = requests.request(
-                method, url, headers=self._headers(ua, token),
-                params=params, json=json, timeout=_TIMEOUT, verify=SSL_VERIFY,
-            )
-        except requests.RequestException as e:
-            raise BPlatformError('network', f'请求 B 平台失败：{e}')
-        return self._check(resp)
+        last_err = None
+        for attempt in range(_MAX_NET_RETRIES):
+            try:
+                resp = requests.request(
+                    method, url, headers=self._headers(ua, token),
+                    params=params, json=json, timeout=_TIMEOUT, verify=SSL_VERIFY,
+                )
+                return self._check(resp)
+            except BPlatformError:
+                raise
+            except requests.RequestException as e:
+                last_err = e
+                if attempt < _MAX_NET_RETRIES - 1:
+                    time.sleep(1 * (2 ** attempt))
+        raise BPlatformError('network', f'请求 B 平台失败（已重试 {_MAX_NET_RETRIES} 次）：{last_err}')
 
     # ---- 提交签到（模块 E）----
 

@@ -1,16 +1,19 @@
 <template>
-  <!-- 全局 Toast 宿主：挂载到 body，独立于任何布局，保证守卫等任意位置都能触发 -->
+  <!-- 全局 Toast 宿主：挂载到 body，独立于任何布局，保证守卫等任意位置都能触发。
+       样式与全站卡片语言同源：实心主题卡（bg-card 随主题）+ 环形图标章承载语义色，
+       文字恒为 ink 保证可读；语义色只落在图标章上，不再使用半透明色调底。 -->
   <Teleport to="body">
-    <div class="fixed left-1/2 top-6 z-[100] -translate-x-1/2 pointer-events-none">
+    <div class="pointer-events-none fixed left-1/2 top-6 z-[100] -translate-x-1/2">
       <Transition name="toast">
         <div
           v-if="toastState.show"
-          class="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium shadow-lg ring-1 backdrop-blur"
-          :class="toneClass"
+          class="flex items-center gap-3 rounded-2xl bg-card py-2.5 pl-2.5 pr-5 shadow-[0_1px_2px_rgba(20,33,61,0.06),0_18px_40px_-18px_rgba(20,33,61,0.4)] ring-1 ring-ink/5"
           role="alert"
         >
-          <Icon :name="iconName" :size="16" />
-          <span>{{ toastState.message }}</span>
+          <span class="grid h-8 w-8 shrink-0 place-items-center rounded-full" :class="iconWrapCls" aria-hidden="true">
+            <Icon :name="iconName" :size="16" />
+          </span>
+          <span class="text-sm font-medium text-ink">{{ toastState.message }}</span>
         </div>
       </Transition>
     </div>
@@ -22,26 +25,30 @@ import { computed } from 'vue'
 import { toastState } from '@/utils/toast'
 import Icon from '@/components/Icon.vue'
 
-const toneClass = computed(() => {
+// 语义色只落在图标章：成功绿 / 错误红 / 警告琥珀 / 信息品牌蓝
+const iconWrapCls = computed(() => {
   switch (toastState.type) {
     case 'error':
-      return 'bg-danger/10 text-danger ring-danger/20'
+      return 'bg-danger/10 text-danger'
     case 'success':
-      return 'bg-success/10 text-success ring-success/20'
+      return 'bg-success/10 text-success'
     case 'warning':
-      return 'bg-amber/10 text-amber ring-amber/20'
+      return 'bg-warning/10 text-warning'
     default:
-      return 'bg-ink/10 text-ink ring-ink/15'
+      return 'bg-brand/10 text-brand'
   }
 })
 
 const iconName = computed(() => {
   switch (toastState.type) {
     case 'success':
-      return 'check'
-    default:
-      // 'alert' 同时覆盖 error / warning / info 的语义
+      return 'check-circle'
+    case 'error':
+      return 'x-circle'
+    case 'warning':
       return 'alert'
+    default:
+      return 'info'
   }
 })
 </script>
@@ -51,9 +58,12 @@ const iconName = computed(() => {
 .toast-leave-active {
   transition: opacity 0.25s ease, transform 0.25s ease;
 }
-.toast-enter-from,
+.toast-enter-from {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.97);
+}
 .toast-leave-to {
   opacity: 0;
-  transform: translateY(-8px);
+  transform: translateY(-6px);
 }
 </style>

@@ -47,7 +47,8 @@
           <span class="shrink-0 text-sm font-medium text-ink-soft"
             >平台账号</span
           >
-          <div class="w-44 sm:w-56">
+          <!-- 宽度按「18 位身份证号 · 姓名」全量展示设计（约 250px），与签到记录页一致 -->
+          <div class="w-64 sm:w-72">
             <BaseSelect
               :model-value="selectedAccountId"
               :options="accountFilterOptions"

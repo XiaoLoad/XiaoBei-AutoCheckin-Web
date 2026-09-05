@@ -3,22 +3,20 @@
     <!-- 遮罩 -->
     <div ref="overlay" class="absolute inset-0 bg-ink/40" @click="requestClose" />
 
-    <!-- 右滑抽屉面板 -->
+    <!-- 右滑抽屉面板：主从双列（左轨模式/配置套，右列搜索/工具/账号列表），加宽到 3xl 换列表高度 -->
     <aside
       ref="panel"
-      class="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col bg-white shadow-2xl"
+      class="absolute right-0 top-0 flex h-full w-full max-w-3xl flex-col bg-white shadow-2xl"
       role="dialog"
       aria-modal="true"
+      aria-labelledby="batch-drawer-title"
     >
-      <header class="flex shrink-0 items-center justify-between gap-3 border-b border-ink/10 px-6 py-5">
-        <div class="min-w-0">
-          <div class="flex items-center gap-2">
-            <span class="grid h-8 w-8 place-items-center rounded-xl bg-brand/10 text-brand">
-              <Icon name="sliders" :size="16" />
-            </span>
-            <h3 class="text-lg font-semibold text-ink">批量管理任务</h3>
-          </div>
-          <p class="mt-2 truncate pl-10 text-xs text-ink-muted">批量开启或关闭多个账号的定时签到</p>
+      <header class="flex shrink-0 items-center justify-between gap-3 border-b border-ink/10 px-5 py-4">
+        <div class="flex min-w-0 items-center gap-2.5">
+          <span class="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand">
+            <Icon name="sliders" :size="16" />
+          </span>
+          <h3 id="batch-drawer-title" class="truncate text-base font-semibold text-ink">批量管理任务</h3>
         </div>
         <button type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-ink-muted transition hover:bg-cloud" aria-label="关闭" @click="requestClose">
           <Icon name="close" :size="20" />
@@ -27,7 +25,7 @@
 
       <!-- ═══ 结果视图：动作感知横幅 + 双统计卡 + 操作指引 + 分组明细 ═══ -->
       <template v-if="result">
-        <div class="xb-scroll min-h-0 flex-1 overflow-y-auto px-6 py-5">
+        <div class="xb-scroll min-h-0 flex-1 overflow-y-auto px-5 py-5">
           <!-- 结论横幅：图标 + 一句话结论 -->
           <div class="xb-band flex items-center gap-3 rounded-2xl px-5 py-4" :class="outcomeBandClass">
             <span class="grid h-12 w-12 shrink-0 place-items-center rounded-full" :class="outcomeIconWrap">
@@ -119,7 +117,7 @@
           </p>
         </div>
 
-        <footer class="shrink-0 border-t border-ink/10 px-6 py-3">
+        <footer class="shrink-0 border-t border-ink/10 px-5 py-3">
           <div class="flex items-center justify-between gap-3">
             <button
               type="button"
@@ -139,228 +137,238 @@
         </footer>
       </template>
 
-      <!-- ═══ 选择视图 ═══ -->
+      <!-- ═══ 选择视图：主从双列 ═══
+           左轨收纳「操作模式 + 模式说明 +（启用模式）配置套」，右列留给「搜索 + 批量工具 + 账号列表」；
+           固定控件不再纵向堆叠挤压列表，账号列表独占几乎整屏高度。<sm 单列降级为纵向堆叠。
+           选择逻辑、工具行为、确认链路均零改动。 -->
       <template v-else>
-        <!-- 模式切换：批量启用 / 批量关闭 -->
-        <div class="shrink-0 px-6 pt-4 xb-stagger">
-          <div class="grid grid-cols-2 gap-1.5 rounded-2xl bg-cloud/70 p-1.5">
-            <button
-              type="button"
-              class="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl text-sm font-medium transition"
-              :class="mode === 'enable' ? 'bg-white text-brand shadow-sm' : 'text-ink-muted hover:text-ink'"
-              @click="setMode('enable')"
-            >
-              <Icon name="check-circle" :size="16" />批量启用
-            </button>
-            <button
-              type="button"
-              class="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl text-sm font-medium transition"
-              :class="mode === 'disable' ? 'bg-white text-warning shadow-sm' : 'text-ink-muted hover:text-ink'"
-              @click="setMode('disable')"
-            >
-              <Icon name="x-circle" :size="16" />批量关闭
-            </button>
-          </div>
-        </div>
-
-        <!-- 模式说明 -->
-        <div
-          class="mx-6 mt-3 shrink-0 rounded-xl border-l-4 px-4 py-2.5 text-xs leading-relaxed text-ink-soft xb-stagger"
-          :class="mode === 'enable' ? 'border-brand/40 bg-brand/5' : 'border-amber/40 bg-amber/5'"
-        >
-          {{ hintText }}
-        </div>
-
-        <!-- 可选配置套（仅启用模式需要） -->
-        <div v-if="mode === 'enable'" class="shrink-0 px-6 pt-3 xb-stagger">
-          <label class="mb-1.5 block text-[11px] text-ink-muted">配置套（可选）</label>
-          <div class="w-full">
-            <BaseSelect v-model="pickSetId" :options="setPickOptions" :searchable="true" size="sm" placeholder="不设置（用各自现有配置）" />
-          </div>
-        </div>
-
-        <!-- 模糊搜索：账号名称 / 学号 / 班级，空格分词 AND 匹配 -->
-        <div class="shrink-0 px-6 pt-3 xb-stagger">
-          <div class="relative">
-            <Icon name="search" :size="15" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
-            <input
-              v-model="query"
-              type="text"
-              placeholder="搜索账号名称 / 学号 / 班级，空格分隔多关键词"
-              class="h-10 w-full rounded-lg border border-ink/10 bg-cloud/40 pl-9 pr-8 text-sm text-ink outline-none transition placeholder:text-ink-muted/70 focus:border-brand/40 focus:bg-white focus:ring-2 focus:ring-brand/10"
-            />
-            <button
-              v-if="query"
-              type="button"
-              class="absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-md text-ink-muted transition hover:bg-ink/5"
-              aria-label="清除搜索"
-              @click="query = ''"
-            >
-              <Icon name="close" :size="14" />
-            </button>
-          </div>
-        </div>
-
-        <!-- 批量工具条：全选 / 反选（批量行）；按类型刷选 + 关闭模式范围筛选（类型行） -->
-        <div v-if="accounts.length" class="shrink-0 px-6 pt-2.5 xb-stagger">
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="text-[11px] text-ink-muted">批量：</span>
-            <button
-              type="button"
-              class="inline-flex h-8 items-center rounded-lg border px-3 text-xs font-medium transition"
-              :class="allSelected
-                ? 'border-brand bg-brand text-white'
-                : 'border-ink/10 bg-white text-ink-soft hover:border-brand/30 hover:bg-brand/5 hover:text-brand'"
-              :disabled="applyablePairs.length === 0"
-              @click="selectAllTasks"
-            >
-              {{ allSelected ? '清空' : '全选' }}
-            </button>
-            <button
-              type="button"
-              class="inline-flex h-8 items-center rounded-lg border border-ink/10 bg-white px-3 text-xs font-medium text-ink-soft transition hover:border-brand/30 hover:bg-brand/5 hover:text-brand disabled:opacity-50"
-              :disabled="applyablePairs.length === 0"
-              @click="invertSelection"
-            >
-              反选
-            </button>
-          </div>
-          <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <span class="text-[11px] text-ink-muted">按类型：</span>
-            <button
-              v-for="t in taskTypes"
-              :key="t.value"
-              type="button"
-              class="inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition"
-              :class="typeCounts[t.value]
-                ? 'border-brand/30 bg-brand/10 text-brand'
-                : 'border-ink/10 bg-white text-ink-soft hover:border-brand/30 hover:bg-brand/5 hover:text-brand'"
-              :title="brushTitle(t)"
-              @click="selectByType(t.value)"
-            >
-              只选{{ t.label }}
-              <span
-                v-if="typeCounts[t.value]"
-                class="rounded-full bg-brand px-1.5 text-[10px] leading-4 text-white"
-              >{{ typeCounts[t.value] }}</span>
-            </button>
-            <button
-              v-if="mode === 'disable'"
-              type="button"
-              class="inline-flex h-8 items-center gap-1 rounded-lg border px-2.5 text-xs font-medium transition"
-              :class="onlyRunning
-                ? 'border-warning/40 bg-warning/10 text-warning'
-                : 'border-ink/10 bg-white text-ink-soft hover:border-brand/30 hover:bg-brand/5 hover:text-brand'"
-              @click="onlyRunning = !onlyRunning"
-            >
-              {{ onlyRunning ? '显示全部账号' : '只看运行中' }}
-            </button>
-          </div>
-          <p class="mt-2 text-[11px] leading-relaxed text-ink-muted">{{ brushHint }}</p>
-        </div>
-
-        <!-- 账号列表：干净的花名册（细线分隔 + 紧凑行 + 左侧选择轨） -->
-        <div class="xb-scroll min-h-0 flex-1 overflow-y-auto">
-          <div v-if="accounts.length === 0" class="flex flex-col items-center justify-center gap-3 px-6 py-14 text-center">
-            <span class="grid h-14 w-14 place-items-center rounded-full bg-brand/10 text-brand">
-              <Icon name="users" :size="24" />
-            </span>
-            <p class="text-sm font-medium text-ink">暂无平台账号</p>
-            <p class="text-xs leading-relaxed text-ink-muted">先到「账号管理」添加账号，再回来批量管理。</p>
-          </div>
-
-          <div v-else-if="filtered.length === 0" class="flex flex-col items-center justify-center gap-2 px-6 py-12 text-center">
-            <p class="text-sm font-medium text-ink">没有符合条件的账号</p>
-            <p class="text-xs text-ink-muted">{{ emptyHint }}</p>
-          </div>
-
-          <template v-else>
-            <ul class="divide-y divide-ink/10">
-              <li
-                v-for="acc in visible"
-                :key="acc.id"
-                class="xb-apply-acc relative flex items-center gap-3 px-6 py-2.5 transition hover:bg-cloud/40"
-                :class="accHasSelection(acc) ? 'bg-brand/[0.04]' : ''"
-              >
-                <!-- 选择左轨：该行有任一项被选中时显示，作为可扫读的状态锚 -->
-                <span
-                  v-if="accHasSelection(acc)"
-                  class="absolute left-0 top-1/2 h-7 w-1 -translate-y-1/2 rounded-r bg-brand"
-                  aria-hidden="true"
-                />
-                <!-- 账号级勾选 -->
+        <div class="flex min-h-0 flex-1 flex-col sm:flex-row">
+          <!-- 左轨：模式选择（移动端横排两列，sm+ 纵排选项卡）+ 模式说明 + 配置套 -->
+          <div class="xb-stagger flex shrink-0 flex-col gap-4 border-b border-ink/5 px-5 py-4 sm:w-60 sm:border-b-0 sm:border-r sm:bg-cloud/30">
+            <div>
+              <p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">操作模式</p>
+              <div class="grid grid-cols-2 gap-1.5 sm:grid-cols-1">
                 <button
                   type="button"
-                  class="grid h-5 w-5 shrink-0 place-items-center rounded-md border transition"
-                  :class="accChecked(acc.id)
-                    ? 'border-brand bg-brand text-white'
-                    : accountSelectable(acc)
-                      ? 'border-ink/25 bg-white text-transparent hover:border-brand/50'
-                      : 'border-ink/15 bg-cloud/60 text-transparent cursor-not-allowed'"
-                  :disabled="!accountSelectable(acc)"
-                  :title="accountSelectable(acc) ? (accChecked(acc.id) ? '取消勾选该账号全部任务' : '勾选该账号全部任务') : accountDisabledTitle(acc)"
-                  :aria-label="`勾选 ${acc.name} 的全部任务`"
-                  @click="toggleAccount(acc)"
+                  class="flex flex-col items-start gap-0.5 rounded-xl border px-3 py-2.5 text-left transition"
+                  :class="mode === 'enable'
+                    ? 'border-brand/40 bg-brand/5 ring-1 ring-brand/15'
+                    : 'border-ink/10 bg-white hover:border-brand/30'"
+                  @click="setMode('enable')"
                 >
-                  <Icon name="check" :size="13" />
+                  <span class="inline-flex items-center gap-1.5 text-sm font-medium" :class="mode === 'enable' ? 'text-brand' : 'text-ink-soft'">
+                    <Icon name="check-circle" :size="15" /> 批量启用
+                  </span>
+                  <span class="text-[11px] text-ink-muted">开启所选任务的定时签到</span>
                 </button>
-                <!-- 头像 -->
-                <div class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand/10 text-sm font-semibold text-brand">
-                  {{ acc.name.charAt(0) }}
-                </div>
-                <!-- 身份 -->
-                <div class="min-w-0 flex-1">
-                  <p class="truncate text-sm font-medium text-ink">
-                    {{ acc.name }}
-                    <span v-if="!accEnabled(acc)" class="ml-1.5 rounded-full bg-ink/5 px-1.5 py-0.5 text-[10px] font-normal text-ink-muted">账号未启用</span>
-                  </p>
-                  <p class="truncate text-[11px] text-ink-muted">
-                    <template v-if="acc.studentNo">{{ acc.studentNo }}</template>
-                    <template v-if="acc.studentNo && acc.className"> · </template>
-                    <template v-if="acc.className">{{ acc.className }}</template>
-                  </p>
-                </div>
-                <!-- 任务类型切换（紧凑 pill，含运行中点） -->
-                <div class="flex shrink-0 items-center gap-1.5">
-                  <button
-                    v-for="t in taskTypes"
-                    :key="t.value"
-                    type="button"
-                    class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition"
-                    :class="isChecked(acc.id, t.value)
-                      ? 'border-brand bg-brand text-white'
-                      : taskSelectable(acc, t.value)
-                        ? 'border-ink/10 bg-white text-ink-soft hover:border-brand/30'
-                        : 'cursor-not-allowed border-ink/10 bg-white text-ink-muted opacity-55'"
-                    :disabled="!taskSelectable(acc, t.value)"
-                    :title="taskSelectable(acc, t.value) ? '' : taskDisabledTitle(acc, t.value)"
-                    @click="toggleTask(acc.id, t.value)"
-                  >
-                    <span
-                      class="h-1.5 w-1.5 rounded-full"
-                      :class="isChecked(acc.id, t.value) ? 'bg-white' : (taskRunning(acc.id, t.value) ? 'bg-success' : 'bg-ink/25')"
-                    />
-                    <span>{{ t.label }}</span>
-                    <span v-if="taskRunning(acc.id, t.value)" class="text-[10px] opacity-70">运行中</span>
-                  </button>
-                </div>
-              </li>
-            </ul>
+                <button
+                  type="button"
+                  class="flex flex-col items-start gap-0.5 rounded-xl border px-3 py-2.5 text-left transition"
+                  :class="mode === 'disable'
+                    ? 'border-warning/40 bg-warning/5 ring-1 ring-warning/15'
+                    : 'border-ink/10 bg-white hover:border-brand/30'"
+                  @click="setMode('disable')"
+                >
+                  <span class="inline-flex items-center gap-1.5 text-sm font-medium" :class="mode === 'disable' ? 'text-warning' : 'text-ink-soft'">
+                    <Icon name="x-circle" :size="15" /> 批量关闭
+                  </span>
+                  <span class="text-[11px] text-ink-muted">停止所选任务的自动签到</span>
+                </button>
+              </div>
+            </div>
 
-            <!-- 列表较长时的单一安静入口，不带任何分组家具 -->
-            <button
-              v-if="filtered.length > visible.length"
-              type="button"
-              class="w-full py-3 text-center text-xs font-medium text-brand transition hover:bg-brand/5"
-              @click="cap = filtered.length"
-            >
-              显示全部 {{ filtered.length }} 个账号
-            </button>
-          </template>
+            <!-- 模式说明：随所选模式切换的长文案放进左轨，不再挤占列表上方的通栏 -->
+            <p class="text-[11px] leading-relaxed text-ink-muted">{{ hintText }}</p>
+
+            <!-- 可选配置套（仅启用模式需要） -->
+            <div v-if="mode === 'enable'">
+              <label class="mb-1.5 block text-[11px] text-ink-muted">配置套（可选）</label>
+              <BaseSelect v-model="pickSetId" :options="setPickOptions" :searchable="true" size="sm" placeholder="不设置（用各自现有配置）" />
+            </div>
+          </div>
+
+          <!-- 右列：搜索行 + 批量工具行 + 账号列表（唯一滚动区，flex-1 吃满剩余高度） -->
+          <div class="flex min-w-0 flex-1 flex-col">
+            <!-- 模糊搜索：账号名称 / 学号 / 班级，空格分词 AND 匹配；（关闭模式）运行中筛选就近放在搜索旁 -->
+            <div class="xb-stagger flex flex-wrap items-center gap-2 px-5 pb-2 pt-4">
+              <div class="relative min-w-[180px] flex-1">
+                <Icon name="search" :size="15" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
+                <input
+                  v-model="query"
+                  type="text"
+                  placeholder="搜索账号名称 / 学号 / 班级"
+                  title="支持空格分隔多关键词，取交集匹配"
+                  class="h-9 w-full rounded-lg border border-ink/10 bg-cloud/40 pl-9 pr-8 text-sm text-ink outline-none transition placeholder:text-ink-muted/70 focus:border-brand/40 focus:bg-white focus:ring-2 focus:ring-brand/10"
+                />
+                <button
+                  v-if="query"
+                  type="button"
+                  class="absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-md text-ink-muted transition hover:bg-ink/5"
+                  aria-label="清除搜索"
+                  @click="query = ''"
+                >
+                  <Icon name="close" :size="14" />
+                </button>
+              </div>
+              <button
+                v-if="mode === 'disable'"
+                type="button"
+                class="inline-flex h-9 shrink-0 items-center gap-1 rounded-lg border px-2.5 text-xs font-medium transition"
+                :class="onlyRunning
+                  ? 'border-warning/40 bg-warning/10 text-warning'
+                  : 'border-ink/10 bg-white text-ink-soft hover:border-brand/30 hover:bg-brand/5 hover:text-brand'"
+                @click="onlyRunning = !onlyRunning"
+              >
+                {{ onlyRunning ? '显示全部账号' : '只看运行中' }}
+              </button>
+            </div>
+
+            <!-- 批量工具行：全选 / 反选 + 按类型刷选（收敛为单行，作用域说明走 title 悬停） -->
+            <div v-if="accounts.length" class="xb-stagger flex flex-wrap items-center gap-1.5 px-5 pb-2.5">
+              <button
+                type="button"
+                class="inline-flex h-7 items-center rounded-lg border px-2.5 text-xs font-medium transition"
+                :class="allSelected
+                  ? 'border-brand bg-brand text-white'
+                  : 'border-ink/10 bg-white text-ink-soft hover:border-brand/30 hover:bg-brand/5 hover:text-brand'"
+                :disabled="applyablePairs.length === 0"
+                @click="selectAllTasks"
+              >
+                {{ allSelected ? '清空' : '全选' }}
+              </button>
+              <button
+                type="button"
+                class="inline-flex h-7 items-center rounded-lg border border-ink/10 bg-white px-2.5 text-xs font-medium text-ink-soft transition hover:border-brand/30 hover:bg-brand/5 hover:text-brand disabled:opacity-50"
+                :disabled="applyablePairs.length === 0"
+                @click="invertSelection"
+              >
+                反选
+              </button>
+              <span class="mx-0.5 h-4 w-px bg-ink/10" aria-hidden="true"></span>
+              <button
+                v-for="t in taskTypes"
+                :key="t.value"
+                type="button"
+                class="inline-flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition"
+                :class="typeCounts[t.value]
+                  ? 'border-brand/30 bg-brand/10 text-brand'
+                  : 'border-ink/10 bg-white text-ink-soft hover:border-brand/30 hover:bg-brand/5 hover:text-brand'"
+                :title="brushTitle(t)"
+                @click="selectByType(t.value)"
+              >
+                只选{{ t.label }}
+                <span
+                  v-if="typeCounts[t.value]"
+                  class="rounded-full bg-brand px-1.5 text-[10px] leading-4 text-white"
+                >{{ typeCounts[t.value] }}</span>
+              </button>
+              <p class="w-full truncate text-[11px] text-ink-muted" :title="brushHint">{{ brushHint }}</p>
+            </div>
+
+            <!-- 账号列表：干净的花名册（细线分隔 + 紧凑行 + 左侧选择轨） -->
+            <div class="xb-scroll min-h-0 flex-1 overflow-y-auto border-t border-ink/5">
+              <div v-if="accounts.length === 0" class="flex flex-col items-center justify-center gap-3 px-5 py-14 text-center">
+                <span class="grid h-14 w-14 place-items-center rounded-full bg-brand/10 text-brand">
+                  <Icon name="users" :size="24" />
+                </span>
+                <p class="text-sm font-medium text-ink">暂无平台账号</p>
+                <p class="text-xs leading-relaxed text-ink-muted">先到「账号管理」添加账号，再回来批量管理。</p>
+              </div>
+
+              <div v-else-if="filtered.length === 0" class="flex flex-col items-center justify-center gap-2 px-5 py-12 text-center">
+                <p class="text-sm font-medium text-ink">没有符合条件的账号</p>
+                <p class="text-xs text-ink-muted">{{ emptyHint }}</p>
+              </div>
+
+              <template v-else>
+                <ul class="divide-y divide-ink/10">
+                  <li
+                    v-for="acc in visible"
+                    :key="acc.id"
+                    class="xb-apply-acc relative flex items-center gap-3 px-5 py-2.5 transition hover:bg-cloud/40"
+                    :class="accHasSelection(acc) ? 'bg-brand/[0.04]' : ''"
+                  >
+                    <!-- 选择左轨：该行有任一项被选中时显示，作为可扫读的状态锚 -->
+                    <span
+                      v-if="accHasSelection(acc)"
+                      class="absolute left-0 top-1/2 h-7 w-1 -translate-y-1/2 rounded-r bg-brand"
+                      aria-hidden="true"
+                    />
+                    <!-- 账号级勾选 -->
+                    <button
+                      type="button"
+                      class="grid h-5 w-5 shrink-0 place-items-center rounded-md border transition"
+                      :class="accChecked(acc.id)
+                        ? 'border-brand bg-brand text-white'
+                        : accountSelectable(acc)
+                          ? 'border-ink/25 bg-white text-transparent hover:border-brand/50'
+                          : 'border-ink/15 bg-cloud/60 text-transparent cursor-not-allowed'"
+                      :disabled="!accountSelectable(acc)"
+                      :title="accountSelectable(acc) ? (accChecked(acc.id) ? '取消勾选该账号全部任务' : '勾选该账号全部任务') : accountDisabledTitle(acc)"
+                      :aria-label="`勾选 ${acc.name} 的全部任务`"
+                      @click="toggleAccount(acc)"
+                    >
+                      <Icon name="check" :size="13" />
+                    </button>
+                    <!-- 头像 -->
+                    <div class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand/10 text-sm font-semibold text-brand">
+                      {{ acc.name.charAt(0) }}
+                    </div>
+                    <!-- 身份 -->
+                    <div class="min-w-0 flex-1">
+                      <p class="truncate text-sm font-medium text-ink">
+                        {{ acc.name }}
+                        <span v-if="!accEnabled(acc)" class="ml-1.5 rounded-full bg-ink/5 px-1.5 py-0.5 text-[10px] font-normal text-ink-muted">账号未启用</span>
+                      </p>
+                      <p class="truncate text-[11px] text-ink-muted">
+                        <template v-if="acc.studentNo">{{ acc.studentNo }}</template>
+                        <template v-if="acc.studentNo && acc.className"> · </template>
+                        <template v-if="acc.className">{{ acc.className }}</template>
+                      </p>
+                    </div>
+                    <!-- 任务类型切换（紧凑 pill，含运行中点） -->
+                    <div class="flex shrink-0 items-center gap-1.5">
+                      <button
+                        v-for="t in taskTypes"
+                        :key="t.value"
+                        type="button"
+                        class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition"
+                        :class="isChecked(acc.id, t.value)
+                          ? 'border-brand bg-brand text-white'
+                          : taskSelectable(acc, t.value)
+                            ? 'border-ink/10 bg-white text-ink-soft hover:border-brand/30'
+                            : 'cursor-not-allowed border-ink/10 bg-white text-ink-muted opacity-55'"
+                        :disabled="!taskSelectable(acc, t.value)"
+                        :title="taskSelectable(acc, t.value) ? '' : taskDisabledTitle(acc, t.value)"
+                        @click="toggleTask(acc.id, t.value)"
+                      >
+                        <span
+                          class="h-1.5 w-1.5 rounded-full"
+                          :class="isChecked(acc.id, t.value) ? 'bg-white' : (taskRunning(acc.id, t.value) ? 'bg-success' : 'bg-ink/25')"
+                        />
+                        <span>{{ t.label }}</span>
+                        <span v-if="taskRunning(acc.id, t.value)" class="text-[10px] opacity-70">运行中</span>
+                      </button>
+                    </div>
+                  </li>
+                </ul>
+
+                <!-- 列表较长时的单一安静入口，不带任何分组家具 -->
+                <button
+                  v-if="filtered.length > visible.length"
+                  type="button"
+                  class="w-full py-3 text-center text-xs font-medium text-brand transition hover:bg-brand/5"
+                  @click="cap = filtered.length"
+                >
+                  显示全部 {{ filtered.length }} 个账号
+                </button>
+              </template>
+            </div>
+          </div>
         </div>
 
         <!-- 底部操作条：统计 + 执行（行内二次确认 / 已启用覆盖确认） -->
-        <footer class="shrink-0 border-t border-ink/10 px-6 py-3">
+        <footer class="shrink-0 border-t border-ink/10 px-5 py-3">
           <!-- 选择态 -->
           <template v-if="confirming === false">
             <div class="flex items-center justify-between gap-3">

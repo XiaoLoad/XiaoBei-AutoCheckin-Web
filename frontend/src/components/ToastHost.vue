@@ -2,10 +2,20 @@
   <!-- 全局 Toast 宿主：挂载到 body，独立于任何布局，保证守卫等任意位置都能触发。
        队列渲染（utils/toast.js）：同屏最多 3 条、各自计时，连发不再互相覆盖。
        样式与全站卡片语言同源：实心主题卡（bg-card 随主题）+ 环形图标章承载语义色，
-       文字恒为 ink 保证可读；语义色只落在图标章上，不再使用半透明色调底。 -->
+       文字恒为 ink 保证可读；语义色只落在图标章上，不再使用半透明色调底。
+       动画：GSAP JS 钩子驱动（:css="false"）——
+         入场：自顶部 -24px 坠落 + back.out(2) 回弹过冲，干脆的"弹出"手感；
+         离场：上飘淡出微缩（power2.in），离场瞬间绝对定位锁定宽度，其余补位平滑；
+       全部动效尊重 prefers-reduced-motion（瞬时出现/消失）。 -->
   <Teleport to="body">
     <div class="pointer-events-none fixed left-1/2 top-6 z-[100] flex -translate-x-1/2 flex-col items-center gap-2">
-      <TransitionGroup name="toast">
+      <TransitionGroup
+        name="toast"
+        :css="false"
+        @before-enter="onBeforeEnter"
+        @enter="onEnter"
+        @leave="onLeave"
+      >
         <div
           v-for="t in toastState.list"
           :key="t.id"
@@ -23,8 +33,12 @@
 </template>
 
 <script setup>
+import { gsap } from 'gsap'
 import { toastState } from '@/utils/toast'
 import Icon from '@/components/Icon.vue'
+
+const REDUCED_MOTION =
+  typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 // 语义色只落在图标章：成功绿 / 错误红 / 警告琥珀 / 信息品牌蓝
 function iconWrapCls(type) {
@@ -52,25 +66,54 @@ function iconName(type) {
       return 'info'
   }
 }
+
+// ── GSAP 进出场钩子（:css="false"，Vue 等待 done 回调后才卸载元素） ──
+
+// 入场前置：置初始态（顶部上方、微缩、透明）
+function onBeforeEnter(el) {
+  if (REDUCED_MOTION) return
+  gsap.set(el, { autoAlpha: 0, y: -24, scale: 0.9 })
+}
+
+// 入场：坠落 + back.out 回弹过冲（缩放短暂越过 1 再回正，"弹出"手感）
+function onEnter(el, done) {
+  if (REDUCED_MOTION) {
+    done()
+    return
+  }
+  gsap.to(el, {
+    autoAlpha: 1,
+    y: 0,
+    scale: 1,
+    duration: 0.45,
+    ease: 'back.out(2)',
+    onComplete: done,
+    clearProps: 'transform',
+  })
+}
+
+// 离场：上飘淡出微缩；瞬间切绝对定位锁定原宽度，避免列表跳动（其余条目由
+// TransitionGroup 的 move 补位机制平滑上移）
+function onLeave(el, done) {
+  if (REDUCED_MOTION) {
+    done()
+    return
+  }
+  el.style.pointerEvents = 'none'
+  gsap.set(el, { position: 'absolute', left: '50%', xPercent: -50, width: el.offsetWidth })
+  gsap.to(el, {
+    autoAlpha: 0,
+    y: -14,
+    scale: 0.92,
+    duration: 0.22,
+    ease: 'power2.in',
+    onComplete: done,
+  })
+}
 </script>
 
 <style scoped>
-.toast-enter-active,
-.toast-leave-active {
-  transition: opacity 0.25s ease, transform 0.25s ease;
-}
-.toast-enter-from {
-  opacity: 0;
-  transform: translateY(-10px) scale(0.97);
-}
-/* 离场项脱离文档流，其余 toast 平滑补位 */
-.toast-leave-active {
-  position: absolute;
-}
-.toast-leave-to {
-  opacity: 0;
-  transform: translateY(-6px);
-}
+/* 离场项脱离文档流后，其余 toast 的补位位移（TransitionGroup FLIP 的 move 类） */
 .toast-move {
   transition: transform 0.25s ease;
 }

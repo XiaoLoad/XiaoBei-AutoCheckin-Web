@@ -218,6 +218,34 @@ def block_key(entry):
     return f'{entry.weekday}|{entry.course}|{seg}'
 
 
+# 相邻小节之间的间隔超过该分钟数，视为上午/下午/晚上的时段分界（午休 12:05-14:00
+# 间隔 115 分钟、晚饭 17:40-18:50 间隔 70 分钟，均远超大课间的 15~25 分钟）。
+# 跨时段课程（如 1-8 节）的窗口随之拆分为多个独立窗口：上午命中签到后上午窗完成，
+# 注意力自然转移到下午窗——一天可能有一次或两次签到，各时段互不阻塞。
+_DAYPART_SPLIT_MINUTES = 60
+
+
+def _split_dayparts(sections, times, today):
+    """把小节序列按 ≥60 分钟的相邻间隔切分为上午/下午/晚上段。
+    返回 [[小节, ...], ...]（各段内部小节升序连续）；作息缺失的相邻对不切分。"""
+    if not sections:
+        return []
+    ordered = sorted(sections)
+    groups = [[ordered[0]]]
+    for s in ordered[1:]:
+        prev = times.get(groups[-1][-1])
+        nxt = times.get(s)
+        split = False
+        if prev and nxt:
+            gap = (datetime.combine(today, nxt[0]) - datetime.combine(today, prev[1])).total_seconds() / 60
+            split = gap >= _DAYPART_SPLIT_MINUTES
+        if split:
+            groups.append([s])
+        else:
+            groups[-1].append(s)
+    return groups
+
+
 def current_week_of(today, sem_row):
     """教学周次：第 1 周周一为基准；周历之外（寒暑假）返回 0。"""
     if today < sem_row.week1_monday:
@@ -275,24 +303,26 @@ def expand_windows_for_schedule(schedule, today=None):
                         continue
                     if min(e.sections) > max_idx:
                         continue
-                    start_t = times[min(e.sections)][0]
-                    end_t = times[min(max(e.sections), max_idx)][1]
-                    start_at = datetime.combine(today, start_t) - timedelta(minutes=act['lead'])
-                    end_at = datetime.combine(today, end_t) + timedelta(minutes=act['tail'])
-                    secs = f'{min(e.sections)}-{max(e.sections)}'
-                    row = ActivityWindow(
-                        schedule_id=schedule.id, date=today,
-                        start_at=start_at, end_at=end_at,
-                        course_name=e.course[:64], sections=secs,
-                        # 轮询起点抖动：同窗口多账号错开首个查询时刻（±一个轮询间隔内）
-                        last_polled_at=start_at - timedelta(seconds=random.uniform(0, act['poll'])),
-                        done=False,
-                    )
-                    prev = keep_state.get((row.course_name, row.sections, row.start_at, row.end_at))
-                    if prev is not None:
-                        row.done = prev.done
-                        row.last_polled_at = prev.last_polled_at
-                    new_rows.append(row)
+                    # 跨时段课程拆分为上午/下午/晚上多个独立窗口，各段独立"命中即完成"
+                    for group in _split_dayparts(e.sections, times, today):
+                        start_t = times[min(group)][0]
+                        end_t = times[min(max(group), max_idx)][1]
+                        start_at = datetime.combine(today, start_t) - timedelta(minutes=act['lead'])
+                        end_at = datetime.combine(today, end_t) + timedelta(minutes=act['tail'])
+                        secs = f'{min(group)}-{max(group)}' if len(group) > 1 else f'{group[0]}'
+                        row = ActivityWindow(
+                            schedule_id=schedule.id, date=today,
+                            start_at=start_at, end_at=end_at,
+                            course_name=e.course[:64], sections=secs,
+                            # 轮询起点抖动：同窗口多账号错开首个查询时刻（±一个轮询间隔内）
+                            last_polled_at=start_at - timedelta(seconds=random.uniform(0, act['poll'])),
+                            done=False,
+                        )
+                        prev = keep_state.get((row.course_name, row.sections, row.start_at, row.end_at))
+                        if prev is not None:
+                            row.done = prev.done
+                            row.last_polled_at = prev.last_polled_at
+                        new_rows.append(row)
 
     for w in existing:
         db.session.delete(w)

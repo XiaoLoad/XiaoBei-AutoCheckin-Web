@@ -105,18 +105,22 @@ def test_resolve_activity_cfg_none_for_dorm(app_ctx):
     assert resolve_activity_cfg(sched) is None
 
 
-def test_expand_windows_monday_week1(jw_env):
+def test_expand_windows_monday_week1_dayparts(jw_env):
+    # 1-8 节横跨午休（12:05-14:00 间隔 ≥60 分钟），拆分为上午/下午两个独立窗口：
+    # 上午命中签到后上午窗完成，注意力自然转移到下午窗
     sched = jw_env['schedule']
     count = expand_windows_for_schedule(sched, today=date(2026, 9, 7))   # 第 1 周周一
-    assert count == 1
-    rows = (ActivityWindow.query.filter_by(schedule_id=sched.id).all())
-    assert len(rows) == 1
-    w = rows[0]
-    assert w.course_name == 'Web开发技术课程设计'
-    assert w.start_at == datetime(2026, 9, 7, 8, 5)    # 08:20 - lead15
-    assert w.end_at == datetime(2026, 9, 7, 18, 10)    # 17:40 + tail30
-    assert w.sections == '1-8'
-    assert w.done is False
+    assert count == 2
+    rows = ActivityWindow.query.filter_by(schedule_id=sched.id).order_by(ActivityWindow.start_at).all()
+    assert [(w.sections, w.course_name) for w in rows] == [
+        ('1-4', 'Web开发技术课程设计'),
+        ('5-8', 'Web开发技术课程设计'),
+    ]
+    assert rows[0].start_at == datetime(2026, 9, 7, 8, 5)     # 08:20 - lead15
+    assert rows[0].end_at == datetime(2026, 9, 7, 12, 35)     # 12:05 + tail30
+    assert rows[1].start_at == datetime(2026, 9, 7, 13, 45)   # 14:00 - lead15
+    assert rows[1].end_at == datetime(2026, 9, 7, 18, 10)     # 17:40 + tail30
+    assert all(w.done is False for w in rows)
 
 
 def test_expand_windows_sunday_block_excluded(jw_env):
@@ -144,13 +148,13 @@ def test_expand_windows_holiday_clears(jw_env):
 def test_expand_windows_preserves_poll_state(jw_env):
     sched = jw_env['schedule']
     expand_windows_for_schedule(sched, today=date(2026, 9, 7))
-    row = ActivityWindow.query.filter_by(schedule_id=sched.id).one()
+    row = ActivityWindow.query.filter_by(schedule_id=sched.id, date=date(2026, 9, 7), sections='1-4').first()
     row.done = True
     row.last_polled_at = datetime(2026, 9, 7, 9, 0)
     db.session.commit()
     # 重复展开（如再次同步/调度心跳触发）不得丢失轮询状态
     expand_windows_for_schedule(sched, today=date(2026, 9, 7))
-    row2 = ActivityWindow.query.filter_by(schedule_id=sched.id).one()
+    row2 = ActivityWindow.query.filter_by(schedule_id=sched.id, date=date(2026, 9, 7), sections='1-4').first()
     assert row2.done is True
     assert row2.last_polled_at == datetime(2026, 9, 7, 9, 0)
 

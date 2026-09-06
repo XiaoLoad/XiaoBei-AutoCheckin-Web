@@ -71,7 +71,7 @@ export const useJwxtStore = defineStore('jwxt', () => {
       const final = await waitSyncDone(accountId)
       return reportResult(accountId, final, 'bind')
     } catch (e) {
-      toast(e.message || '绑定失败', 'error')
+      // 错误提示由请求拦截器统一弹出（含"账号或密码错误，未绑定"），此处不再叠加
       load(accountId, { force: true })
       return false
     } finally {
@@ -87,7 +87,6 @@ export const useJwxtStore = defineStore('jwxt', () => {
       const final = await waitSyncDone(accountId)
       return reportResult(accountId, final, 'sync')
     } catch (e) {
-      toast(e.message || '同步失败', 'error')
       load(accountId, { force: true })
       return false
     } finally {
@@ -104,7 +103,6 @@ export const useJwxtStore = defineStore('jwxt', () => {
       toast('已解绑教务账号', 'success')
       return true
     } catch (e) {
-      toast(e.message || '解绑失败', 'error')
       return false
     } finally {
       syncing.value = { ...syncing.value, [key]: false }

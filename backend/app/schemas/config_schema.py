@@ -38,7 +38,7 @@ def _clean_activity(act):
         if not isinstance(course, dict):
             return False, None
         cleaned = {}
-        for key, lo, hi, default in (('leadMinutes', 0, 120, 15),
+        for key, lo, hi, default in (('leadMinutes', 0, 120, 60),
                                      ('tailMinutes', 0, 120, 30),
                                      ('pollIntervalSec', 30, 1800, 120)):
             v = course.get(key)

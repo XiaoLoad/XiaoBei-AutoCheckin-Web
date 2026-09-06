@@ -52,8 +52,9 @@ def get_jwxt(account_id):
 @bp.route('/<int:account_id>/jwxt', methods=['POST'])
 @token_required
 def bind_jwxt(account_id):
-    """绑定（或更新）教务凭证并提交后台课表同步。凭证加密落库后立即返回，
-    同步结果经概览轮询获取（account.status / lastError）。"""
+    """绑定（或更新）教务凭证：**先同步探测登录、验证通过才落库**——错误的学号/
+    密码不绑定，用户需重新填写再试。验证通过后提交后台课表同步，结果经概览
+    轮询获取（account.status / lastError）。"""
     acc = _own_account(account_id)
     if not acc:
         return error(message='账号不存在', code=4040, status=404)
@@ -64,6 +65,21 @@ def bind_jwxt(account_id):
         return error(message='教务学号格式不正确（4~32 位）', code=4400, status=400)
     if not (1 <= len(password) <= 64):
         return error(message='教务密码不能为空（64 位以内）', code=4400, status=400)
+
+    # 凭证探测：登录成功即丢弃会话（真实课表拉取由后台同步完成）；失败不落库
+    from app.services.jwxt import get_client
+    from app.services.jwxt.base import JwxtError
+    client = get_client()
+    try:
+        client.login(student_no, password)
+    except JwxtError as e:
+        kind_code = {'credential': 4501, 'captcha': 4502, 'network': 4503}.get(e.kind, 4504)
+        kind_message = {
+            'credential': '教务账号或密码错误，未绑定；请核对后重新填写',
+            'captcha': '教务系统触发验证码，未绑定；请稍后在浏览器确认可登录后再试',
+            'network': '教务系统暂不可达，未保存本次填写，请稍后再试',
+        }.get(e.kind, e.message)
+        return error(message=kind_message, code=kind_code, status=400)
 
     jw = JwAccount.query.filter_by(b_account_id=account_id).first()
     if jw is None:

@@ -3,31 +3,71 @@
   <div ref="root" class="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:flex-row">
     <!-- 左：配置套列表（多项命名模板） -->
     <aside class="hidden w-56 shrink-0 flex-col overflow-hidden rounded-2xl dash-card lg:flex xl:w-60">
-      <div class="flex shrink-0 items-center justify-between border-b border-ink/5 p-3">
-        <span class="text-sm font-semibold text-ink">我的配置套</span>
-        <div class="flex gap-1">
+      <div class="shrink-0 space-y-2 border-b border-ink/5 p-3">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-sm font-semibold text-ink">我的配置套</span>
+          <div class="flex gap-1">
+            <button
+              type="button"
+              class="inline-flex h-7 items-center gap-0.5 rounded-lg border border-brand/30 bg-brand/5 px-2 text-xs font-medium text-brand transition hover:bg-brand/10 disabled:opacity-50"
+              :disabled="store.saving"
+              title="新建寝室签到配置套"
+              @click="store.createConfigSet(null, 'dorm')"
+            >
+              <Icon name="plus" :size="12" />寝室
+            </button>
+            <button
+              type="button"
+              class="inline-flex h-7 items-center gap-0.5 rounded-lg border border-info/30 bg-info/5 px-2 text-xs font-medium text-info transition hover:bg-info/10 disabled:opacity-50"
+              :disabled="store.saving"
+              title="新建活动签到配置套"
+              @click="store.createConfigSet(null, 'activity')"
+            >
+              <Icon name="plus" :size="12" />活动
+            </button>
+          </div>
+        </div>
+        <!-- 搜索 + 类型筛选：收纳在侧栏头部下方，配置套多时快速定位 -->
+        <div class="flex items-center gap-2 rounded-lg bg-cloud px-2.5">
+          <Icon name="search" :size="14" class="shrink-0 text-ink-muted" />
+          <input
+            v-model="setSearch"
+            type="text"
+            placeholder="搜索配置套…"
+            aria-label="搜索配置套"
+            class="w-full bg-transparent py-2 text-sm text-ink outline-none placeholder:text-ink-muted"
+          />
           <button
+            v-if="setSearch"
             type="button"
-            class="inline-flex h-7 items-center gap-0.5 rounded-lg border border-brand/30 bg-brand/5 px-2 text-xs font-medium text-brand transition hover:bg-brand/10 disabled:opacity-50"
-            :disabled="store.saving"
-            title="新建寝室签到配置套"
-            @click="store.createConfigSet(null, 'dorm')"
+            class="shrink-0 text-ink-muted transition hover:text-ink-soft"
+            aria-label="清空搜索"
+            @click="setSearch = ''"
           >
-            <Icon name="plus" :size="12" />寝室
+            <Icon name="close" :size="13" />
           </button>
-          <button
-            type="button"
-            class="inline-flex h-7 items-center gap-0.5 rounded-lg border border-info/30 bg-info/5 px-2 text-xs font-medium text-info transition hover:bg-info/10 disabled:opacity-50"
-            :disabled="store.saving"
-            title="新建活动签到配置套"
-            @click="store.createConfigSet(null, 'activity')"
-          >
-            <Icon name="plus" :size="12" />活动
-          </button>
+        </div>
+        <div class="flex items-center justify-between gap-2">
+          <div class="inline-flex rounded-lg bg-cloud p-0.5" role="group" aria-label="按类型筛选">
+            <button
+              v-for="f in typeFilters"
+              :key="f.value"
+              type="button"
+              class="rounded-md px-2.5 py-1 text-[11px] font-medium transition"
+              :class="setTypeFilter === f.value ? 'bg-white text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
+              @click="setTypeFilter = f.value"
+            >
+              {{ f.label }}
+            </button>
+          </div>
+          <span class="text-[11px] text-ink-muted">{{ filteredCount }} 个</span>
         </div>
       </div>
       <div class="xb-scroll flex-1 min-h-0 overflow-auto p-2">
         <p v-if="store.userConfigSets.length === 0" class="px-1 py-8 text-center text-xs text-ink-muted">暂无配置套<br />点击右上角新建</p>
+        <p v-else-if="filteredCount === 0" class="px-1 py-8 text-center text-xs text-ink-muted">
+          没有匹配的配置套<br />试试调整类型筛选或搜索关键词
+        </p>
         <template v-for="group in setGroups" :key="group.type">
           <p class="px-2 pb-1 pt-2 text-[11px] font-medium text-ink-muted">{{ group.label }}</p>
           <div v-for="s in group.items" :key="s.id" class="xb-set-item mb-1">
@@ -228,12 +268,27 @@ const setOptions = computed(() => store.userConfigSets.map((s) => ({
   value: s.id
 })))
 
+// ── 侧栏搜索 + 类型筛选（组合过滤，纯前端派生） ──
+const setSearch = ref('')
+const setTypeFilter = ref('all')
+const typeFilters = [
+  { value: 'all', label: '全部' },
+  { value: 'dorm', label: '寝室' },
+  { value: 'activity', label: '活动' }
+]
+const setGroups = computed(() => {
+  const q = setSearch.value.trim().toLowerCase()
+  const t = setTypeFilter.value
+  const match = (s) => (t === 'all' || s.taskType === t) && (!q || s.name.toLowerCase().includes(q))
+  return [
+    { type: 'dorm', label: '寝室签到', items: store.userConfigSets.filter((s) => s.taskType !== 'activity' && match(s)) },
+    { type: 'activity', label: '活动签到', items: store.userConfigSets.filter((s) => s.taskType === 'activity' && match(s)) },
+  ].filter((g) => g.items.length)
+})
+const filteredCount = computed(() => setGroups.value.reduce((n, g) => n + g.items.length, 0))
+
 // 配置套分组（寝室签到 / 活动签到）：编辑器按类型渲染区块，寝室套不含活动调度卡片
 const isActivitySet = computed(() => store.activeSet?.taskType === 'activity')
-const setGroups = computed(() => ([
-  { type: 'dorm', label: '寝室签到', items: store.userConfigSets.filter((s) => s.taskType !== 'activity') },
-  { type: 'activity', label: '活动签到', items: store.userConfigSets.filter((s) => s.taskType === 'activity') },
-]).filter((g) => g.items.length))
 
 // 套用明细抽屉：点击徽标查看哪些账号的哪些任务套用了某配置套
 const usageSetId = ref('')

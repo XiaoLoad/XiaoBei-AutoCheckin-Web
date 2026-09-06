@@ -44,7 +44,7 @@ export function makeConfig() {
       // course=按教务课表展开的当日时间窗内低频轮询（无课日零查询）
       strategy: 'fixed',
       course: {
-        leadMinutes: 15, // 上课时刻前 15 分钟开窗（活动一般课前发布）
+        leadMinutes: 60, // 时段开始前 60 分钟开始留意（辅导员最早提前 50 分钟发布，实测数据）
         tailMinutes: 30, // 课程结束后延续 30 分钟关窗（覆盖拖堂/课间发布）
         pollIntervalSec: 120, // 窗口内查询 B 平台的间隔（秒）
         excludeCourses: [], // 课程名黑名单（如毕业实习不参与轮询）

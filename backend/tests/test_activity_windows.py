@@ -112,9 +112,10 @@ def test_expand_windows_monday_week1_dayparts(jw_env):
     count = expand_windows_for_schedule(sched, today=date(2026, 9, 7))   # 第 1 周周一
     assert count == 2
     rows = ActivityWindow.query.filter_by(schedule_id=sched.id).order_by(ActivityWindow.start_at).all()
+    # 窗口粒度=时段（辅导员按整个上午/下午抽查发布）：course_name 为时段标签
     assert [(w.sections, w.course_name) for w in rows] == [
-        ('1-4', 'Web开发技术课程设计'),
-        ('5-8', 'Web开发技术课程设计'),
+        ('1-4', '上午'),
+        ('5-8', '下午'),
     ]
     assert rows[0].start_at == datetime(2026, 9, 7, 8, 5)     # 08:20 - lead15
     assert rows[0].end_at == datetime(2026, 9, 7, 12, 35)     # 12:05 + tail30
@@ -132,8 +133,8 @@ def test_expand_windows_sunday_block_excluded(jw_env):
 
     expand_windows_for_schedule(sched, today=date(2026, 10, 14))   # 第 6 周周三
     rows = ActivityWindow.query.filter_by(schedule_id=sched.id, date=date(2026, 10, 14)).all()
-    # 企业项目实践（6-9 周，周三 1-2 节）未被排除，照常展开
-    assert [w.course_name for w in rows] == ['企业项目实践']
+    # 企业项目实践（6-9 周，周三 1-2 节）未被排除 → 上午时段有覆盖，照常展开
+    assert [w.course_name for w in rows] == ['上午']
     assert rows[0].start_at == datetime(2026, 10, 14, 8, 5)
 
 

@@ -20,7 +20,7 @@ def test_activity_block_normalized_with_defaults():
     assert ok
     act = cfg['activity']
     assert act['strategy'] == 'course'
-    assert act['course']['leadMinutes'] == 15       # 默认值补齐
+    assert act['course']['leadMinutes'] == 60       # 默认值补齐（实测辅导员最早提前 50 分钟发布）
     assert act['course']['tailMinutes'] == 30
     assert act['course']['pollIntervalSec'] == 120
     assert act['course']['excludeCourses'] == []

@@ -52,7 +52,7 @@ def resolve_activity_cfg(schedule):
     exclude = [str(x).strip() for x in (course.get('excludeCourses') or []) if str(x).strip()]
     exclude_blocks = [str(x).strip() for x in (course.get('excludeBlocks') or []) if str(x).strip()]
     return {
-        'lead': _clamp_int(course.get('leadMinutes'), 0, 120, 15),
+        'lead': _clamp_int(course.get('leadMinutes'), 0, 120, 60),
         'tail': _clamp_int(course.get('tailMinutes'), 0, 120, 30),
         'poll': _clamp_int(course.get('pollIntervalSec'), 30, 1800, 120),
         'exclude': exclude,

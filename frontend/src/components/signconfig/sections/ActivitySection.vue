@@ -105,21 +105,21 @@
           </div>
         </div>
 
-        <!-- 自动签到时机：用户语言描述，替代"开窗/关窗"术语 -->
+        <!-- 自动签到时机：辅导员按整个时段抽查发布，窗口覆盖整个时段 -->
         <div>
           <label class="mb-1.5 block text-xs font-medium text-ink-muted">自动签到时机</label>
           <div class="space-y-2.5">
             <div class="flex items-center gap-2">
-              <span class="shrink-0 text-xs text-ink-muted">上课前</span>
+              <span class="shrink-0 text-xs text-ink-muted">时段开始前</span>
               <input
                 v-model.number="config.activity.course.leadMinutes"
                 type="number" min="0" max="120"
                 class="w-20 rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
               />
-              <span class="text-xs text-ink-muted">分钟开始留意签到</span>
+              <span class="text-xs text-ink-muted">分钟开始留意</span>
             </div>
             <div class="flex items-center gap-2">
-              <span class="shrink-0 text-xs text-ink-muted">下课后继续留意</span>
+              <span class="shrink-0 text-xs text-ink-muted">时段结束后继续留意</span>
               <input
                 v-model.number="config.activity.course.tailMinutes"
                 type="number" min="0" max="120"
@@ -129,7 +129,7 @@
             </div>
           </div>
           <p class="mt-1.5 text-xs leading-relaxed text-ink-muted">
-            有课的日子，从上课前到下课后这段时间里，系统会自动留意老师发布的签到并代签；没课的日子完全不打扰。
+            活动签到由辅导员按整个上午/下午时段抽查发布（并非任课教师卡准某一节课），因此系统按"有课的时段"整段轮询：上午有课就整个上午留意，下午有课就整个下午留意，没课的时段零查询。命中一次后该时段即完成。默认提前 1 小时开始留意——实测辅导员最早会在时段开始前 50 分钟发布。
           </p>
         </div>
 
@@ -142,15 +142,17 @@
           >
             <Icon name="chevron" :size="13" :class="showAdvanced ? 'rotate-90 transition' : 'transition'" />高级 · 查询频率
           </button>
-          <div v-if="showAdvanced" class="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-cloud px-3 py-2">
-            <span class="text-xs text-ink-muted">留意时段内每</span>
-            <input
-              v-model.number="config.activity.course.pollIntervalSec"
-              type="number" min="30" max="1800" step="30"
-              class="w-20 rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
-            />
-            <span class="text-xs text-ink-muted">秒检查一次（默认 120 秒，一般无需修改）</span>
-          </div>
+          <GCollapse :show="showAdvanced">
+            <div class="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-cloud px-3 py-2">
+              <span class="text-xs text-ink-muted">留意时段内每</span>
+              <input
+                v-model.number="config.activity.course.pollIntervalSec"
+                type="number" min="30" max="1800" step="30"
+                class="w-20 rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
+              />
+              <span class="text-xs text-ink-muted">秒检查一次（默认 120 秒，一般无需修改）</span>
+            </div>
+          </GCollapse>
         </div>
 
         <!-- 每日兜底 -->
@@ -214,6 +216,7 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
 import ConfigSection from '@/components/signconfig/ConfigSection.vue'
+import GCollapse from '@/components/signconfig/GCollapse.vue'
 import Icon from '@/components/Icon.vue'
 import ActivityTimetableDrawer from '@/components/signconfig/ActivityTimetableDrawer.vue'
 import { useSignConfigStore } from '@/stores/signConfig'

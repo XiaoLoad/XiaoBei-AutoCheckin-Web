@@ -260,13 +260,20 @@ const dayNames = [
   { day: 5, label: '五' }, { day: 6, label: '六' }, { day: 7, label: '日' }
 ]
 
-// ── 作息表（后端生效配置） ──
+// ── 作息表（后端生效配置）──
+// 显示上限：实际课程最多到第 10 节（20:30 结束），11/12 节行不渲染；
+// 若未来同步到更晚小节的课程，行数自动延展（取 max(10, 最大使用小节)）
+const displayMaxPeriod = computed(() => {
+  const used = courses.value.reduce((m, c) => Math.max(m, ...(c.sections || [0])), 0)
+  return Math.max(10, used)
+})
 const periodRows = computed(() => {
   const pt = overview.value?.periodTimes || {}
   return Object.keys(pt).map((k) => ({ idx: Number(k), start: pt[k][0], end: pt[k][1] }))
+    .filter((p) => p.idx <= displayMaxPeriod.value)
     .sort((a, b) => a.idx - b.idx)
 })
-const maxPeriod = computed(() => periodRows.value.reduce((m, p) => Math.max(m, p.idx), 12))
+const maxPeriod = computed(() => displayMaxPeriod.value)
 const gridStyle = computed(() => ({
   gridTemplateColumns: '52px repeat(7, minmax(76px, 1fr))',
   gridTemplateRows: `26px repeat(${maxPeriod.value}, minmax(34px, auto))`

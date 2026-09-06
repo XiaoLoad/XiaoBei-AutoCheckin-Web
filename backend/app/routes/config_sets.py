@@ -40,13 +40,14 @@ def create_set():
     if err:
         return err
     s = ConfigSet(user_id=request.current_user.id, name=data['name'],
+                  task_type=data['task_type'],
                   location_id=location_id, is_default=False)
     s.set_config(data['config'])
     db.session.add(s)
     if data.get('is_default'):
         db.session.flush()  # 先取 s.id 供唯一性约束使用
         s.is_default = True
-        ConfigSet.enforce_single_default(request.current_user.id, s.id)
+        ConfigSet.enforce_single_default(request.current_user.id, s.id, task_type=s.task_type)
     db.session.commit()
     return success(s.to_dict(), message='创建成功', status=201)
 
@@ -72,7 +73,7 @@ def update_set(set_id):
     if 'is_default' in data:
         s.is_default = data['is_default']
         if s.is_default:
-            ConfigSet.enforce_single_default(request.current_user.id, s.id)
+            ConfigSet.enforce_single_default(request.current_user.id, s.id, task_type=s.task_type)
     db.session.commit()
     # 配置套仅为模板：保存只更新配置套本身，不回写已绑定任务（任务持自有快照，互不影响）
     return success(s.to_dict(), message='保存成功')
@@ -129,8 +130,12 @@ def apply_set_batch(set_id):
     from app.utils.schedule_utils import compute_next_run
 
     user = request.current_user
-    updated = created = skipped = 0
+    updated = created = skipped = mismatched = 0
     for acc_id, task_type in targets:
+        # 类型过滤：寝室套不套到活动任务、活动套不套到寝室任务（配置语义错配防护）
+        if task_type != s.task_type:
+            mismatched += 1
+            continue
         acc = BAccount.query.filter_by(id=acc_id, user_id=user.id).first()
         if not acc or not acc.enabled:
             skipped += 1
@@ -155,6 +160,10 @@ def apply_set_batch(set_id):
     msg = f'已套用到 {updated} 个账号任务'
     if created:
         msg += f'（新建 {created}）'
+    if mismatched:
+        label = '活动' if s.task_type == 'activity' else '寝室'
+        msg += f'，跳过 {mismatched} 个（本套仅适用于{label}签到任务）'
     if skipped:
         msg += f'，跳过 {skipped} 个（账号不存在或未启用）'
-    return success({'updated': updated, 'created': created, 'skipped': skipped}, message=msg)
+    return success({'updated': updated, 'created': created,
+                    'skipped': skipped + mismatched}, message=msg)

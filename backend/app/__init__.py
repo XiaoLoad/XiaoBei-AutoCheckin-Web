@@ -18,6 +18,7 @@ from app.routes.users import bp as users_bp
 from app.routes.settings import bp as settings_bp
 from app.routes.system import bp as system_bp
 from app.routes.accounts import bp as accounts_bp
+from app.routes.jwxt import bp as jwxt_bp
 from app.routes.config_sets import bp as config_sets_bp
 from app.routes.schedules import bp as schedules_bp
 from app.routes.pools import bp as pools_bp
@@ -66,6 +67,7 @@ def create_app(env_name=None):
     app.register_blueprint(settings_bp)      # /api/settings
     app.register_blueprint(system_bp)        # /api/system
     app.register_blueprint(accounts_bp)      # /api/accounts
+    app.register_blueprint(jwxt_bp)          # /api/b-accounts/:id/jwxt（教务绑定/课表同步/窗口预览）
     app.register_blueprint(config_sets_bp)   # /api/config-sets
     app.register_blueprint(schedules_bp)     # /api/schedules
     app.register_blueprint(pools_bp)         # /api/pools
@@ -193,21 +195,26 @@ def _init_database(app):
 
 
 def _seed_default_config_sets(app):
-    """为每个用户保证至少一条 is_default 配置套：无套则建空默认套，有套无默认则提升第一条。"""
+    """为每个用户保证「寝室 / 活动」各有一条 is_default 配置套：
+    某类型无套则建空默认套，有套无默认则提升该类型下最早的一条。
+    配置套已按 task_type 类型化（dorm/activity），绑定与批量应用按类型过滤。"""
     try:
         with app.app_context():
             users = User.query.all()
             for u in users:
-                default = ConfigSet.query.filter_by(user_id=u.id, is_default=True).first()
-                if default:
-                    continue
-                first = ConfigSet.query.filter_by(user_id=u.id).order_by(ConfigSet.id.asc()).first()
-                if first:
-                    first.is_default = True
-                else:
-                    s = ConfigSet(user_id=u.id, name='默认配置套', is_default=True)
-                    s.set_config({})
-                    db.session.add(s)
+                for task_type, label in (('dorm', '寝室默认配置套'), ('activity', '活动默认配置套')):
+                    default = ConfigSet.query.filter_by(user_id=u.id, is_default=True,
+                                                        task_type=task_type).first()
+                    if default:
+                        continue
+                    first = (ConfigSet.query.filter_by(user_id=u.id, task_type=task_type)
+                             .order_by(ConfigSet.id.asc()).first())
+                    if first:
+                        first.is_default = True
+                    else:
+                        s = ConfigSet(user_id=u.id, name=label, is_default=True, task_type=task_type)
+                        s.set_config({})
+                        db.session.add(s)
             db.session.commit()
     except Exception:
         app.logger.exception('播种用户默认配置套失败')

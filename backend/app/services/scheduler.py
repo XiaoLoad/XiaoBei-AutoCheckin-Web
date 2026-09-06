@@ -21,7 +21,7 @@ from apscheduler.executors.pool import ThreadPoolExecutor
 from concurrent.futures import ThreadPoolExecutor as FuturesThreadPool, as_completed
 
 from app.extensions import db
-from app.models import BAccount, ConfigSet, Schedule, SignRecord, PushLog
+from app.models import ActivityWindow, BAccount, ConfigSet, JwAccount, Schedule, SignRecord, PushLog
 from app.models.pools import ImageGroup, PoolCredential, PoolLocation, PoolUa
 from app.models.system_config import get_setting
 from app.models.user import now_cst
@@ -31,8 +31,11 @@ from app.services.b_platform.base import BPlatformError
 from app.services.b_platform.real import generate_image_filename
 from app.services.crypto import decrypt
 from app.services.image_store import claim_image_for_submit, rollback_claim
+from app.services.jwxt.sync import expand_windows_daily, expand_windows_for_schedule
 from app.services.push_render import build_ctx, send_channel
-from app.utils.schedule_utils import compute_next_run, extract_jitter_minutes, extract_schedule_time
+from app.utils.schedule_utils import (compute_next_run, extract_jitter_minutes,
+                                      extract_schedule_time, resolve_activity_cfg,
+                                      resolve_config)
 
 log = logging.getLogger('scheduler')
 
@@ -149,6 +152,22 @@ def build_config_view(schedule, resolved, uid):
         'customUa': adv_cfg.get('customUa') or '',
     }
 
+    # 活动签到专属块快照（课表驱动调度参数）；fixed 策略或缺失时为 None
+    act_cfg = cfg.get('activity') or {}
+    activity_view = None
+    if act_cfg.get('strategy') == 'course':
+        course = act_cfg.get('course') or {}
+        fallback = act_cfg.get('fallback') or {}
+        activity_view = {
+            'strategy': 'course',
+            'leadMinutes': _snap_to_int(course.get('leadMinutes')),
+            'tailMinutes': _snap_to_int(course.get('tailMinutes')),
+            'pollIntervalSec': _snap_to_int(course.get('pollIntervalSec')),
+            'excludeCourses': course.get('excludeCourses') or [],
+            'weekdays': course.get('weekdays') or [],
+            'fallbackEnabled': bool(fallback.get('enabled', True)),
+        }
+
     # 配置套来源：follow 实时跟随、套用配置套后 mode=standalone 但 config_set_id 仍保留为来源标签；
     # 两者都要解析套名（用于「来自配置套 X」与快照来源展示），而非仅 follow 才解析。
     cs_name = None
@@ -175,6 +194,7 @@ def build_config_view(schedule, resolved, uid):
         'image': image_view,
         'push': push_view,
         'advanced': advanced_view,
+        'activity': activity_view,
     }
 
 
@@ -240,6 +260,11 @@ def init_scheduler(app):
         # 刚过去的触发会被静默丢失（无记录、无失败、无推送），此处按 DB 缓存的
         # next_run_at 找回并补跑（详见 _reconcile_missed_runs）
         _reconcile_missed_runs()
+        # 活动课表窗口：启动即重建当日窗口（进程重启不丢当日课表调度）
+        try:
+            expand_windows_daily()
+        except Exception:
+            log.exception('启动期活动窗口展开失败（不影响 cron 注册）')
     sched.add_job(reconcile, 'interval', seconds=_RECONCILE_SECONDS,
                   id=RECONCILE_JOB_ID, replace_existing=True)
     # 超期日志清理：每日独立 job（启动后 30s 先跑一次，此后 24h 周期）
@@ -247,6 +272,11 @@ def init_scheduler(app):
         _prune_old_sign_records, 'interval', hours=24,
         id='_prune_logs', replace_existing=True,
         next_run_time=now_cst() + timedelta(seconds=30),
+    )
+    # 活动窗口每日展开：00:10 重建当日窗口（跨零点清掉昨日，按新课表/新配置生成）
+    sched.add_job(
+        _expand_windows_job, 'cron', hour=0, minute=10,
+        id='_expand_windows', replace_existing=True, timezone=_scheduler_tz(),
     )
     sched.start()
     _started = True
@@ -309,12 +339,24 @@ def _reconcile_missed_runs():
 
 
 def sync_schedule(schedule):
-    """事件钩子：单个任务状态/参数变更后对齐 job 注册。
-    enabled → 注册/替换；停用 → 移除。不依赖调度器是否已 start。"""
+    """事件钩子：单个任务状态/参数变更后对齐 job 注册与课表窗口。
+    enabled → 注册/替换 cron（course 策略且关闭兜底时不注册）并展开当日窗口；
+    停用 → 移除 cron 并清空当日窗口。不依赖调度器是否已 start。"""
     if schedule.enabled:
         _register_job(schedule)
+        try:
+            if resolve_activity_cfg(schedule) is not None:
+                expand_windows_for_schedule(schedule)
+        except Exception:
+            log.exception('任务 %s 课表窗口展开失败（不影响 cron 注册）', schedule.id)
     else:
         remove_job(schedule.id)
+        try:
+            ActivityWindow.query.filter_by(schedule_id=schedule.id).delete(synchronize_session=False)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            log.exception('任务 %s 停用清空活动窗口失败', schedule.id)
 
 
 def remove_job(schedule_id):
@@ -330,6 +372,7 @@ def reconcile():
     """周期性对账：对齐 DB 启用态与调度器 job 注册。
     - 已注册但 DB 无启用任务（账号删除 / 任务禁用 / 参数变更）→ 移除 job（孤儿清理）
     - DB 启用但未注册（错过事件钩子的极端情况）→ 补注册
+    - 活动课表窗口轮询：命中窗口内且到间隔的活动任务发起 B 平台查询（见 _poll_activity_windows）
     超期签到日志清理已拆出为每日独立 job（_prune_logs），不再挂在 30s 对账上——
     按 created_at 范围 DELETE 的清理无需 30 秒级的执行频率。"""
     if _scheduler is None or _app is None:
@@ -349,6 +392,93 @@ def reconcile():
         for s in Schedule.query.filter_by(enabled=True).all():
             if _job_id(s.id) not in jobs:
                 _register_job(s)
+        try:
+            _poll_activity_windows()
+        except Exception:
+            db.session.rollback()
+            log.exception('活动窗口轮询异常（不影响 cron 对账）')
+
+
+def _expand_windows_job():
+    """活动窗口每日展开 job 包装（调度线程无 app context，自行进入）。"""
+    if _app is None:
+        return
+    with _app.app_context():
+        try:
+            expand_windows_daily()
+        except Exception:
+            db.session.rollback()
+            log.exception('活动窗口每日展开失败')
+
+
+def _poll_activity_windows():
+    """活动课表窗口轮询（30s 心跳内调用）：对"窗口内 + 到达轮询间隔 + 未完结"的
+    活动任务查询一次 B 平台；查到进行中活动 → 窗口完结并转完整签到链路
+    （定位/围栏/图片/提交/记录/推送全在链路内）；未查到 → 静默等待下一间隔
+    （不写签到记录，避免高频空转刷屏）。凭证失效直接转完整链路（内部自会重登重试）；
+    网络抖动保持窗口待下个周期再试。轮询时刻记在窗口行上，跨周期错峰。"""
+    now = now_cst()
+    windows = (ActivityWindow.query
+               .filter(ActivityWindow.date == now.date(),
+                       ActivityWindow.done.is_(False),
+                       ActivityWindow.start_at <= now,
+                       ActivityWindow.end_at >= now)
+               .all())
+    if not windows:
+        return
+    adapter = get_adapter()
+    for w in windows:
+        # 逐窗口重读时刻：链路内 commit 后时间推进，防止对已过窗口重复发起
+        now = now_cst()
+        if w.end_at < now:
+            continue
+        s = db.session.get(Schedule, w.schedule_id)
+        if s is None or not s.enabled:
+            w.done = True
+            db.session.commit()
+            continue
+        act = resolve_activity_cfg(s)
+        if act is None:
+            # 配置已改回 fixed / 非 course：窗口作废（cron 兜底已接管）
+            w.done = True
+            db.session.commit()
+            continue
+        acc = db.session.get(BAccount, s.account_id)
+        if acc is None or not acc.enabled:
+            w.done = True
+            db.session.commit()
+            continue
+        last = w.last_polled_at or w.start_at
+        if (now - last).total_seconds() < act['poll']:
+            continue
+        w.last_polled_at = now
+        resolved = _resolve(s)
+        session = {
+            'token': acc.get_token(),
+            'account': acc.account,
+            'profile': acc.profile,
+            'ua': _resolve_ua(resolved),
+        }
+        try:
+            ctx = adapter.find_active_task(session, 'activity')
+        except BPlatformError as e:
+            db.session.commit()
+            if e.kind == 'credential':
+                # 凭证失效：完整链路内部自会重登重试（本轮视为已消费，防重复转正）
+                w.done = True
+                db.session.commit()
+                log.info('窗口 %s 轮询遇凭证失效，转完整链路重登', w.id)
+                run_schedule(s.id, allow_retry=True, course_name=w.course_name)
+            else:
+                log.info('窗口 %s 轮询失败（%s），下个周期再试', w.id, e.message)
+            continue
+        if ctx is None:
+            db.session.commit()   # 该课程暂无活动发布：仅记录轮询时刻
+            continue
+        w.done = True
+        db.session.commit()
+        log.info('窗口 %s 命中活动任务（%s），转入签到流程', w.id, w.course_name)
+        run_schedule(s.id, allow_retry=True, course_name=w.course_name)
 
 
 def _prune_old_sign_records():
@@ -385,7 +515,13 @@ def _extract_jitter(schedule):
 def _register_job(schedule):
     """为单个 Schedule 注册/替换 cron job；无有效时刻则跳过（不应发生，enabled 已校验）。
     随机延迟通过 CronTrigger.jitter 实现：每次触发在 [0, randomDelayMax*60) 秒间随机漂移，
-    避免多账号在同一分钟整点集中打卡。"""
+    避免多账号在同一分钟整点集中打卡。
+    活动 course 策略且关闭每日兜底时**不注册 cron**——该任务的执行完全由课表窗口轮询接管，
+    全天零固定触发（无课日零查询）。"""
+    act = resolve_activity_cfg(schedule)
+    if act is not None and not act['fallbackEnabled']:
+        remove_job(schedule.id)
+        return
     sched = get_scheduler()
     hour, minute, weekdays = extract_schedule_time(schedule)
     if hour is None or minute is None or not weekdays:
@@ -404,46 +540,38 @@ def _register_job(schedule):
                   args=[schedule.id], replace_existing=True)
 
 
-def run_schedule(schedule_id, allow_retry=True):
+def run_schedule(schedule_id, allow_retry=True, course_name=None):
     """执行入口（被 APScheduler job 与测试直接调用）。全程异常隔离，不向上抛。
-    allow_retry=False：网络失败补跑 job 自身失败不再级联安排重试（每次失败至多补跑一次）。"""
+    allow_retry=False：网络失败补跑 job 自身失败不再级联安排重试（每次失败至多补跑一次）。
+    course_name：活动课表窗口轮询命中时传入，签到记录据此溯源到课程。"""
     if _app is None:
         return
     with _app.app_context():
-        _run(schedule_id, allow_retry=allow_retry)
+        _run(schedule_id, allow_retry=allow_retry, course_name=course_name)
 
 
-def _run(schedule_id, allow_retry=True):
+def _run(schedule_id, allow_retry=True, course_name=None):
     """执行入口（被 run_schedule 调用）。异常由 _execute 内部就地回写，
     此处仅兜底提交失败等极端情况。"""
     s = db.session.get(Schedule, schedule_id)
     if s is None or not s.enabled:
         return
     try:
-        _execute(s, allow_retry=allow_retry)
+        _execute(s, allow_retry=allow_retry, course_name=course_name)
     except Exception as e:
         log.exception('任务 %s 外层兜底异常', schedule_id)
         try:
-            _commit_result(s, None, 'fail', f'执行异常：{e}')
+            _commit_result(s, None, 'fail', f'执行异常：{e}', course_name=course_name)
         except Exception:
             pass
 
 
 def _resolve(schedule):
-    """解析任务真实执行配置。
-    standalone（config_json 非空）= 任务自持完整配置，权威来源；
-    follow = 配置套 + 字段级覆盖浅合并（overrides 顶层键替换套内同键，未覆盖键继续跟随配置套）；
-    custom = 内联 time-only。缺配置返回 None。"""
-    if schedule.has_own_config:
-        return schedule.config or {}
-    if schedule.mode == 'follow':
-        if not schedule.config_set_id:
-            return None
-        cs = db.session.get(ConfigSet, schedule.config_set_id)
-        if cs is None:
-            return None
-        return {**(cs.config or {}), **(schedule.overrides or {})}
-    return schedule.custom or {}
+    """解析任务真实执行配置（口径统一在 schedule_utils.resolve_config，
+    与课表窗口展开共用）。standalone（config_json 非空）= 任务自持完整配置，权威来源；
+    follow = 配置套 + 字段级覆盖浅合并（overrides 顶层键替换套内同键，未覆盖键继续跟随
+    配置套）；custom = 内联 time-only。缺配置返回 None。"""
+    return resolve_config(schedule)
 
 
 def _resolve_ua(resolved):
@@ -610,7 +738,7 @@ def _checkin_flow(schedule, acc, session, resolved, remark):
         raise
 
 
-def _execute(schedule, allow_retry=True):
+def _execute(schedule, allow_retry=True, course_name=None):
     acc = db.session.get(BAccount, schedule.account_id)
     if acc is None or not acc.enabled:
         log.info('任务 %s 跳过：账号不存在或已禁用', schedule.id)
@@ -626,7 +754,8 @@ def _execute(schedule, allow_retry=True):
                 res = get_adapter().verify_and_fetch(acc.account, acc.get_password())
             except BPlatformError as e:
                 log.warning('任务 %s 账号校验失败：%s', schedule.id, e.message)
-                _commit_result(schedule, acc, 'fail', f'账号校验失败：{e.message}', resolved=resolved)
+                _commit_result(schedule, acc, 'fail', f'账号校验失败：{e.message}',
+                               resolved=resolved, course_name=course_name)
                 return
             acc.set_token(res.token)
             acc.set_profile(res.profile)
@@ -637,7 +766,8 @@ def _execute(schedule, allow_retry=True):
 
         resolved = _resolve(schedule)
         if resolved is None:
-            _commit_result(schedule, acc, 'skip', '配置缺失（配置套未绑定或已删除）', resolved=resolved)
+            _commit_result(schedule, acc, 'skip', '配置缺失（配置套未绑定或已删除）',
+                           resolved=resolved, course_name=course_name)
             return
         # 本次实际提交的单条备注：多条随机选一、单条即用该条、无则占位；
         # 同时交给提交与推送展示，保证「提交什么就推送什么」。
@@ -666,13 +796,15 @@ def _execute(schedule, allow_retry=True):
             outcome, reason, extra = _checkin_flow(schedule, acc, session, resolved, submitted_remark)
         # 统一在此回写：成功/失败/跳过都落 SignRecord 并回写任务与账号状态；
         # 把本次提交参数快照一并传入，详情回显「提交参数」
-        rec = _commit_result(schedule, acc, outcome, reason, resolved=resolved, extra=extra)
+        rec = _commit_result(schedule, acc, outcome, reason, resolved=resolved, extra=extra,
+                             course_name=course_name)
     except BPlatformError as e:
         # acc 仍在作用域内，账号聚合与任务状态一同更新，杜绝两者不一致
         if e.kind == 'credential':
             acc.verify_status = 'fail'  # 凭证失效，下次执行触发 reverify
         log.warning('任务 %s 执行异常（B 平台）：%s', schedule.id, e.message)
-        _commit_result(schedule, acc, 'fail', f'B 平台错误：{e.message}', resolved=resolved)
+        _commit_result(schedule, acc, 'fail', f'B 平台错误：{e.message}', resolved=resolved,
+                       course_name=course_name)
         # 网络类失败：安排窗口内补跑（请求层已有 3 次指数退避，此处覆盖更长的平台抖动；
         # credential 已在上方就地重登重试过、业务失败重跑无意义，均不补跑）
         if e.kind == 'network' and allow_retry:
@@ -680,7 +812,8 @@ def _execute(schedule, allow_retry=True):
         return
     except Exception as e:
         log.exception('任务 %s 执行异常', schedule.id)
-        _commit_result(schedule, acc, 'fail', f'执行异常：{e}', resolved=resolved)
+        _commit_result(schedule, acc, 'fail', f'执行异常：{e}', resolved=resolved,
+                       course_name=course_name)
         return
 
     # 后置动作（推送）与「执行结果落库」解耦：失败仅记日志，
@@ -743,10 +876,12 @@ def _select_remark(resolved):
     return random.choice(remarks)
 
 
-def _commit_result(schedule, acc, status, fail_reason='', resolved=None, extra=None):
+def _commit_result(schedule, acc, status, fail_reason='', resolved=None, extra=None,
+                   course_name=None):
     """写签到记录 + 回写任务状态 + 刷新账号最近签到聚合；统一提交。
     resolved 非 None 时把执行时配置快照写入记录，供详情回显历史切片；
-    extra 非 None（调用方传回的提交参数快照）时一并写入 submit_params，供详情回显「提交参数」。"""
+    extra 非 None（调用方传回的提交参数快照）时一并写入 submit_params，供详情回显「提交参数」；
+    course_name 非 None（课表窗口轮询命中）时写入课程溯源。"""
     rec = SignRecord(
         user_id=schedule.user_id,
         account_id=schedule.account_id,
@@ -758,6 +893,7 @@ def _commit_result(schedule, acc, status, fail_reason='', resolved=None, extra=N
         status=status,
         fail_reason=fail_reason,
         initiator='system',
+        course_name=course_name or None,
     )
     # 执行时配置快照：忠实还原该条日志当时实际使用的配置（resolved 为 None 表示
     # 执行前配置缺失/校验失败，无快照可抓，落 NULL，详情端显示「无配置快照」）

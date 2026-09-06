@@ -5,16 +5,17 @@
 // 本实现：列分配（卡片归属哪一列、列内顺序）仅在「挂载 / 断点变化 / 区块数量变化 / 显式刷新」时计算一次并固定；
 // 日常内容高度变化（如凭证新增）只重算同一列内的纵向偏移以避免重叠，绝不让卡片跨列重排，从而稳定位置。
 //
-// 列高策略：自然错落（经典瀑布流）——卡片高度完全由内容决定，不做底边强制对齐。
-// 此前版本会把每列末卡用 min-height 拉伸到统一静止底边：内容短的卡被撑高出现
-// 大片卡内留白，且任一卡展开超出冻结底边时该列凸出、底边错落，观感不佳，故移除。
+// 列高策略：自然错落（经典瀑布流）——卡片高度完全由内容决定，不做底边强制对齐，
+// 也不在列内均摊落差间距（均摊会让卡片间距异常拉大，观感差，已回退）。
+// 顶部对齐是该布局的固有属性：所有列一律从容器顶部 0 起排，首行卡片上边缘严格对齐；
+// 底边随内容自然错落（容器高度 = 最高列高度）。
 //
 // GSAP 位移补间（FLIP）：布局重算前后各记录一次卡片位置，位置变化的卡片用
 // transform 从旧位平滑滑到新位（0.35s power2.out），不与 left/top 内联绑定冲突；
 // 配合 GCollapse 的高度折叠动画，展开/收起/重排时整列行云流水。
 // 首次布局后卡片轻错落淡入（仅一次，keep-alive 重激活不重复播）。
 // 全部动效尊重 prefers-reduced-motion。
-import { h, ref, onMounted, onActivated, onBeforeUnmount, nextTick, watch } from 'vue'
+import { h, ref, onMounted, onActivated, onBeforeUnmount, nextTick, watch, Comment, Text } from 'vue'
 import { gsap } from 'gsap'
 
 const GAP = 16
@@ -43,7 +44,12 @@ export default {
     let entranceDone = false
 
     function getSlotList() {
-      return (slots.default?.() || []).filter((v) => v && v.type)
+      // 关键过滤：开发模式下模板注释与 v-if=false 都会产生注释占位节点（Symbol(Comment)），
+      // 插值空串产生文本节点（Symbol(Text)）。它们是真值但渲染高度为 0，若不过滤会被当成
+      // "0 高度卡片"参与列分配，把同列真实卡片整体往下顶——表现为各列首卡顶部不对齐。
+      return (slots.default?.() || []).filter(
+        (v) => !!v && v.type !== Comment && v.type !== Text && v.type !== false
+      )
     }
     function getCols() {
       const w = rootRef.value?.clientWidth || 0

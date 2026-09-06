@@ -1,7 +1,7 @@
 # 定时任务入参校验层（零依赖，风格同 account_schema / config_schema）
 _WEEKDAYS = set(range(1, 8))
 # overrides 允许覆盖的顶层配置键（与配置套 config 顶层结构对应）；浅合并语义，键整体替换
-_OVERRIDE_KEYS = {'time', 'locationId', 'remarks', 'image', 'push', 'advanced', 'fence'}
+_OVERRIDE_KEYS = {'time', 'locationId', 'remarks', 'image', 'push', 'advanced', 'fence', 'activity'}
 
 
 def _as_bool(v):
@@ -63,8 +63,8 @@ def load_update(payload):
         ok_cfg, cfg = sanitize_config(payload['config'])
         if not ok_cfg:
             return False, None, ('任务配置结构不合法：顶层仅接受 '
-                                 'time/locationId/remarks/image/push/advanced/presetSetId，'
-                                 '且 time.weekdays 必填（1~7）'), 4415
+                                 'time/locationId/remarks/image/push/advanced/fence/'
+                                 'activity/presetSetId，且 time.weekdays 必填（1~7）'), 4415
         data['config'] = cfg
     if 'configSetId' in payload:
         v = payload['configSetId']

@@ -6,14 +6,24 @@ from flask import Blueprint, request
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
-from app.models import BAccount, ConfigSet, PoolLocation, PushLog, Schedule, SignRecord
+from app.models import BAccount, ConfigSet, JwAccount, PoolLocation, PushLog, Schedule, SignRecord
 from app.schemas.schedule_schema import load_create, load_update
 from app.utils.auth import token_required
 from app.utils.response import error, success
-from app.utils.schedule_utils import compute_next_run
+from app.utils.schedule_utils import compute_next_run, resolve_activity_cfg
 from app.services.scheduler import sync_schedule, remove_job
 
 bp = Blueprint('schedules', __name__, url_prefix='/api/schedules')
+
+
+def _activity_enable_issue(schedule):
+    """活动 course 策略任务的开启前置校验：必须已绑定教务账号。
+    needs_attention 允许开启（调度器自动回落每日兜底行为），但未绑定一律拦截。"""
+    if resolve_activity_cfg(schedule) is None:
+        return None
+    if JwAccount.query.filter_by(b_account_id=schedule.account_id).first() is None:
+        return '该账号未绑定教务系统，无法按课表调度活动签到（请在签到配置的活动签到节点绑定）'
+    return None
 
 
 @bp.route('', methods=['GET'])
@@ -115,6 +125,10 @@ def update_schedule(sched_id):
             cs = ConfigSet.query.filter_by(id=data['config_set_id'], user_id=request.current_user.id).first()
             if not cs:
                 return error(message='配置套不存在或不可用', code=4400, status=400)
+            # 类型校验：寝室套/活动套与任务一一对应，错配会让活动块成为不可消费的死配置
+            if cs.task_type != s.task_type:
+                label = '活动' if cs.task_type == 'activity' else '寝室'
+                return error(message=f'该配置套是{label}签到套，与当前任务类型不符', code=4404, status=400)
         # 套用配置套（带 config + configSetId）时同样写入来源标签；纯绑定（仅 configSetId）走 follow 逻辑
         s.config_set_id = data['config_set_id']
     # 应用配置套即跟随模式：仅传 config_set_id（无 config）时自动置 follow（前端"应用到此任务"只发 configSetId）
@@ -146,6 +160,10 @@ def update_schedule(sched_id):
             if (not isinstance(cfg.get('hour'), int) or not isinstance(cfg.get('minute'), int)
                     or not (0 <= cfg['hour'] <= 23) or not (0 <= cfg['minute'] <= 59)):
                 return error(message='自定义模式下开启任务必须设置合法的小时与分钟', code=4402, status=400)
+        # 活动 course 策略任务：未绑定教务账号一律拦截（needs_attention 允许开启、自动兜底）
+        issue = _activity_enable_issue(s)
+        if issue:
+            return error(message=issue, code=4403, status=400)
 
     # 维护下次执行时间缓存：开启即计算，停用清空
     s.next_run_at = compute_next_run(s) if s.enabled else None
@@ -199,7 +217,6 @@ def batch_manage():
         apply_set = ConfigSet.query.filter_by(id=config_set_id, user_id=request.current_user.id).first()
         if not apply_set:
             return error(message='配置套不存在或不可用', code=4400, status=400)
-
     user = request.current_user
     affected = skipped_count = 0
     skipped_reasons = []
@@ -249,6 +266,12 @@ def batch_manage():
             continue
 
         # ── 启用：可选套用配置套 ──
+        # 类型校验：所选统一配置套必须与任务类型一致（寝室套/活动套一一对应）
+        if action == 'enable' and apply_set is not None and apply_set.task_type != task_type:
+            set_label = '活动' if apply_set.task_type == 'activity' else '寝室'
+            skip(acc_id, task_type, name,
+                 f'所选配置套是{set_label}签到套，与该任务类型不符')
+            continue
         if apply_set:
             if sc:
                 sc.set_config(apply_set.config)
@@ -286,6 +309,8 @@ def batch_manage():
             elif (not isinstance(cfg.get('hour'), int) or not isinstance(cfg.get('minute'), int)
                   or not (0 <= cfg['hour'] <= 23) or not (0 <= cfg['minute'] <= 59)):
                 reason = '自定义模式下必须设置合法的小时与分钟'
+        if reason is None:
+            reason = _activity_enable_issue(sc)
 
         if reason:
             skip(acc_id, task_type, name, reason)

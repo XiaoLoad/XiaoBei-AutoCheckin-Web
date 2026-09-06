@@ -38,6 +38,21 @@ export function makeConfig() {
     advanced: {
       uaTemplateId: null, // 引用型：所选 UA 模板 id（系统级资源池）
       customUa: '' // 自定义 UA（自由文本）
+    },
+    activity: {
+      // 活动签到专属（寝室签到任务不消费此块）：fixed=沿用上方时间配置每天一次查询；
+      // course=按教务课表展开的当日时间窗内低频轮询（无课日零查询）
+      strategy: 'fixed',
+      course: {
+        leadMinutes: 15, // 上课时刻前 15 分钟开窗（活动一般课前发布）
+        tailMinutes: 30, // 课程结束后延续 30 分钟关窗（覆盖拖堂/课间发布）
+        pollIntervalSec: 120, // 窗口内查询 B 平台的间隔（秒）
+        excludeCourses: [], // 课程名黑名单（如毕业实习不参与轮询）
+        weekdays: [] // 限定星期（空 = 不限，1=周一…7=周日）
+      },
+      fallback: {
+        enabled: true // 每日按上方 signTime 兜底查询一次（覆盖无节次课程与临时活动）
+      }
     }
   }
 }
@@ -66,10 +81,13 @@ export async function fetchConfigMeta() {
 // config 垫上 makeConfig() 骨架（浅合并，已存字段优先）：启动种子/历史数据可能存在
 // 空配置或仅含部分块的配置套，直接裸传会让 sections 读 config.time.startHour 等深层
 // 字段时渲染崩溃（曾致整个签到配置 keep-alive 子树白屏，图库入口随之不可用）
+// 配置套已按适用类型分类（taskType: dorm 寝室 / activity 活动，创建后锁定）：
+// 寝室套编辑器不含活动调度卡片；绑定/批量应用按类型一一对应
 const mapSetIn = (s) => ({
   id: String(s.id),
   name: s.name,
   isDefault: !!s.isDefault,
+  taskType: s.taskType === 'activity' ? 'activity' : 'dorm',
   // locationId 后端返回整数，前端选项值均为字符串；统一转字符串，避免 === 比对失败导致刷新后位置显示为空
   config: { ...makeConfig(), ...(s.config || {}), locationId: s.locationId != null ? String(s.locationId) : null }
 })
@@ -86,9 +104,9 @@ async function refreshSets() {
 }
 
 export async function saveConfigSet(set) {
-  const payload = { name: set.name, config: set.config }
+  const payload = { name: set.name, config: set.config, taskType: set.taskType || 'dorm' }
   if (set.id) await request({ url: `/config-sets/${set.id}`, method: 'put', data: payload })
-  else await request({ url: '/config-sets', method: 'post', data: payload })
+  else await request({ url: `/config-sets`, method: 'post', data: payload })
   return refreshSets()
 }
 

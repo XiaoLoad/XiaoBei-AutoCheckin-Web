@@ -5,18 +5,32 @@
     <aside class="hidden w-56 shrink-0 flex-col overflow-hidden rounded-2xl dash-card lg:flex xl:w-60">
       <div class="flex shrink-0 items-center justify-between border-b border-ink/5 p-3">
         <span class="text-sm font-semibold text-ink">我的配置套</span>
-        <button
-          type="button"
-          class="inline-flex h-7 items-center gap-1 rounded-lg bg-brand px-2.5 text-xs font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
-          :disabled="store.saving"
-          @click="store.createConfigSet()"
-        >
-          <Icon name="plus" :size="13" />新建
-        </button>
+        <div class="flex gap-1">
+          <button
+            type="button"
+            class="inline-flex h-7 items-center gap-0.5 rounded-lg border border-brand/30 bg-brand/5 px-2 text-xs font-medium text-brand transition hover:bg-brand/10 disabled:opacity-50"
+            :disabled="store.saving"
+            title="新建寝室签到配置套"
+            @click="store.createConfigSet(null, 'dorm')"
+          >
+            <Icon name="plus" :size="12" />寝室
+          </button>
+          <button
+            type="button"
+            class="inline-flex h-7 items-center gap-0.5 rounded-lg border border-info/30 bg-info/5 px-2 text-xs font-medium text-info transition hover:bg-info/10 disabled:opacity-50"
+            :disabled="store.saving"
+            title="新建活动签到配置套"
+            @click="store.createConfigSet(null, 'activity')"
+          >
+            <Icon name="plus" :size="12" />活动
+          </button>
+        </div>
       </div>
       <div class="xb-scroll flex-1 min-h-0 overflow-auto p-2">
         <p v-if="store.userConfigSets.length === 0" class="px-1 py-8 text-center text-xs text-ink-muted">暂无配置套<br />点击右上角新建</p>
-        <div v-for="s in store.userConfigSets" :key="s.id" class="xb-set-item mb-1">
+        <template v-for="group in setGroups" :key="group.type">
+          <p class="px-2 pb-1 pt-2 text-[11px] font-medium text-ink-muted">{{ group.label }}</p>
+          <div v-for="s in group.items" :key="s.id" class="xb-set-item mb-1">
           <div
             class="flex items-center gap-1 rounded-lg px-2 py-1.5 transition"
             :class="store.activeSetId === s.id ? 'bg-brand/10 text-brand' : 'text-ink-soft hover:bg-cloud'"
@@ -77,24 +91,35 @@
             </button>
           </div>
         </div>
+        </template>
       </div>
     </aside>
 
     <!-- 右：选中配置套的六段编辑器 -->
     <!-- 右：工作台画布——编辑区整体收纳进一张大卡，头部/提示/瀑布流皆为画布内容 -->
     <div class="dash-card xb-scroll overflow-auto p-4 sm:p-5 lg:flex-1 lg:min-h-0">
-      <!-- 移动端配置套切换器（桌面端见左侧列表） -->
+      <!-- 移动端配置套切换器（桌面端见左侧列表）；带类型前缀防误选 -->
       <div class="mb-3 flex shrink-0 items-center gap-2 lg:hidden">
         <div class="min-w-0 flex-1">
           <BaseSelect v-model="store.activeSetId" :options="setOptions" :searchable="true" size="sm" placeholder="选择配置套" />
         </div>
         <button
           type="button"
-          class="inline-flex h-9 shrink-0 items-center gap-1 rounded-lg bg-brand px-3 text-sm font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
+          class="inline-flex h-9 shrink-0 items-center gap-1 rounded-lg border border-brand/30 bg-brand/5 px-2.5 text-xs font-medium text-brand transition hover:bg-brand/10 disabled:opacity-50"
           :disabled="store.saving"
-          @click="store.createConfigSet()"
+          title="新建寝室签到配置套"
+          @click="store.createConfigSet(null, 'dorm')"
         >
-          <Icon name="plus" :size="13" />新建
+          <Icon name="plus" :size="12" />寝室
+        </button>
+        <button
+          type="button"
+          class="inline-flex h-9 shrink-0 items-center gap-1 rounded-lg border border-info/30 bg-info/5 px-2.5 text-xs font-medium text-info transition hover:bg-info/10 disabled:opacity-50"
+          :disabled="store.saving"
+          title="新建活动签到配置套"
+          @click="store.createConfigSet(null, 'activity')"
+        >
+          <Icon name="plus" :size="12" />活动
         </button>
       </div>
       <div v-if="!store.activeSet" class="flex min-h-[300px] items-center justify-center text-ink-muted">请先在左侧创建配置套</div>
@@ -102,7 +127,11 @@
         <div class="xb-reveal mb-3 flex flex-wrap items-center justify-between gap-2">
           <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
-              <h3 class="text-sm font-semibold text-ink">正在编辑：{{ store.activeSet.name }}</h3>
+              <h3 class="min-w-0 max-w-full truncate text-sm font-semibold text-ink">正在编辑：{{ store.activeSet.name }}</h3>
+              <span
+                class="inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
+                :class="isActivitySet ? 'bg-info/10 text-info' : 'bg-success/10 text-success'"
+              >{{ isActivitySet ? '活动签到套' : '寝室签到套' }}</span>
               <button
                 type="button"
                 class="inline-flex shrink-0 items-center gap-1 rounded-full border border-brand/20 bg-brand/10 px-2.5 py-1 text-[11px] font-medium leading-none text-brand transition hover:border-brand/30 hover:bg-brand/20 active:scale-95"
@@ -112,12 +141,15 @@
                 {{ activeSetSummary.accountsCount }} 个账号使用 · {{ activeSetSummary.instancesCount }} 个任务实例
               </button>
             </div>
-            <p class="text-xs text-ink-muted">配置套是一份完整模板；在「账号任务配置」里可指定某任务回填此套。</p>
+            <p class="text-xs text-ink-muted">
+              配置套是一份完整模板；在「账号任务配置」里可指定某任务回填此套。{{ isActivitySet ? '活动套中「定时签到时间」用作每日兜底查询时刻。' : '' }}
+            </p>
           </div>
-          <div class="flex items-center gap-2">
+          <!-- 动作组：shrink-0 + nowrap 保证按钮永不内部折行；窄屏时整组换行到下一行 -->
+          <div class="flex shrink-0 flex-wrap items-center gap-2">
             <button
               type="button"
-              class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-brand/30 px-4 text-sm font-medium text-brand transition hover:bg-brand/10 disabled:opacity-50"
+              class="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-brand/30 px-4 text-sm font-medium text-brand transition hover:bg-brand/10 disabled:opacity-50"
               :disabled="store.saving"
               @click="showApplyDrawer = true"
             >
@@ -125,7 +157,7 @@
             </button>
             <button
               type="button"
-              class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-ink/10 px-4 text-sm font-medium text-ink-soft transition hover:bg-cloud disabled:opacity-50"
+              class="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-ink/10 px-4 text-sm font-medium text-ink-soft transition hover:bg-cloud disabled:opacity-50"
               :disabled="store.saving"
               @click="store.resetActiveSetConfig"
             >
@@ -133,7 +165,7 @@
             </button>
             <button
               type="button"
-              class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
+              class="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
               :disabled="store.saving || !store.activeSetDirty"
               :title="store.activeSetDirty ? '' : '未修改任何配置项，无需保存'"
               @click="store.saveActiveSet"
@@ -151,6 +183,8 @@
 
         <MasonryGrid class="mt-4">
           <TimeSection :config="store.activeSet.config" :required="true" :error="store.formErrors.time" />
+          <!-- 活动调度策略仅活动签到套可见：寝室套无此块，语义干净不误导 -->
+          <ActivitySection v-if="isActivitySet" :config="store.activeSet.config" />
           <LocationSection :config="store.activeSet.config" :required="true" :error="store.formErrors.location" />
           <RemarkSection :config="store.activeSet.config" :required="true" :error="store.formErrors.remarks" />
           <ImageSection :config="store.activeSet.config" />
@@ -176,6 +210,7 @@ import BaseSelect from '@/components/BaseSelect.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
 import { toast } from '@/utils/toast'
 import TimeSection from '@/components/signconfig/sections/TimeSection.vue'
+import ActivitySection from '@/components/signconfig/sections/ActivitySection.vue'
 import LocationSection from '@/components/signconfig/sections/LocationSection.vue'
 import RemarkSection from '@/components/signconfig/sections/RemarkSection.vue'
 import ImageSection from '@/components/signconfig/sections/ImageSection.vue'
@@ -187,8 +222,18 @@ import ConfigSetApplyDrawer from '@/components/signconfig/ConfigSetApplyDrawer.v
 
 const store = useSignConfigStore()
 
-// 移动端配置套切换器选项
-const setOptions = computed(() => store.userConfigSets.map((s) => ({ label: s.name, value: s.id })))
+// 移动端配置套切换器选项（带类型前缀防误选）
+const setOptions = computed(() => store.userConfigSets.map((s) => ({
+  label: `${s.taskType === 'activity' ? '活动' : '寝室'} · ${s.name}`,
+  value: s.id
+})))
+
+// 配置套分组（寝室签到 / 活动签到）：编辑器按类型渲染区块，寝室套不含活动调度卡片
+const isActivitySet = computed(() => store.activeSet?.taskType === 'activity')
+const setGroups = computed(() => ([
+  { type: 'dorm', label: '寝室签到', items: store.userConfigSets.filter((s) => s.taskType !== 'activity') },
+  { type: 'activity', label: '活动签到', items: store.userConfigSets.filter((s) => s.taskType === 'activity') },
+]).filter((g) => g.items.length))
 
 // 套用明细抽屉：点击徽标查看哪些账号的哪些任务套用了某配置套
 const usageSetId = ref('')

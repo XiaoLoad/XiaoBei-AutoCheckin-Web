@@ -252,7 +252,9 @@ const store = useSignConfigStore()
 
 const setName = computed(() => store.userConfigSets.find((s) => String(s.id) === String(props.setId))?.name || '未知配置套')
 const accounts = computed(() => store.accounts)
-const taskTypes = computed(() => store.taskTypes)
+// 配置套已类型化：本抽屉只允许勾选与配置套同类型的任务（寝室套→寝室任务，活动套→活动任务）
+const setType = computed(() => store.userConfigSets.find((s) => String(s.id) === String(props.setId))?.taskType || 'dorm')
+const taskTypes = computed(() => store.taskTypes.filter((t) => t.value === setType.value))
 
 const accEnabled = (acc) => acc.status === 'enabled'
 // 可参与批量操作的账号全集（已启用）；未启用账号不可勾选、也不参与全选/反选/类型刷选

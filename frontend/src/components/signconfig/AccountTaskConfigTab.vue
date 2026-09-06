@@ -66,6 +66,13 @@
             >
               <Icon name="box" :size="14" class="shrink-0" />
               <span class="truncate">{{ t.label }}</span>
+              <!-- 活动节点：教务课表绑定态徽标（未绑定不显示，提示走节点内绑定卡） -->
+              <span
+                v-if="t.type === 'activity' && jwxtStateOf(a.id)"
+                class="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                :class="jwxtStateOf(a.id) === 'needs_attention' ? 'bg-warning/10 text-warning' : 'bg-info/10 text-info'"
+                :title="jwxtStateOf(a.id) === 'needs_attention' ? '教务课表同步异常，请到活动签到节点重新同步' : '已绑定教务课表'"
+              >课表</span>
               <span
                 class="ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
                 :class="t.enabled ? 'bg-success/10 text-success' : 'bg-ink/10 text-ink-muted'"
@@ -86,16 +93,17 @@
               <h3 class="text-sm font-semibold text-ink">{{ accountName }} · {{ typeLabel }}</h3>
               <p class="mt-0.5 text-xs text-ink-muted">{{ headerHint }}</p>
             </div>
-            <div class="flex items-center gap-2">
-              <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" :class="store.taskStatus.cls">
+            <div class="flex shrink-0 flex-wrap items-center gap-2">
+              <span class="inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium" :class="store.taskStatus.cls">
                 <span class="h-1.5 w-1.5 rounded-full bg-current" />{{ store.taskStatus.text }}
               </span>
               <!-- 主按钮状态机：未启用→启用定时任务；运行中有改动→保存修改；运行中无改动→暂停调度 -->
               <button
                 v-if="!taskState.enabled"
                 type="button"
-                class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
-                :disabled="store.saving || !cfgComplete"
+                class="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
+                :disabled="store.saving || !cfgComplete || activityBindBlocked"
+                :title="activityBindBlocked ? '请先绑定教务账号' : ''"
                 @click="onEnable"
               >
                 <Icon name="clock" :size="14" />启用定时任务
@@ -103,7 +111,7 @@
               <button
                 v-else-if="store.isDirty"
                 type="button"
-                class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
+                class="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
                 :disabled="store.saving"
                 @click="onSaveConfig"
               >
@@ -112,7 +120,7 @@
               <button
                 v-else
                 type="button"
-                class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-ink/70 px-4 text-sm font-medium text-white transition hover:bg-ink disabled:opacity-50"
+                class="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-ink/70 px-4 text-sm font-medium text-white transition hover:bg-ink disabled:opacity-50"
                 :disabled="store.saving"
                 @click="onPause"
               >
@@ -127,11 +135,17 @@
             <span>启用前请先完善必填项：{{ blockHint }}。补全后保存，再点「启用定时任务」。</span>
           </div>
 
+          <!-- 启用前置提示：课表调度未绑定教务（后端同样拦截，此处提前给出可操作的指引） -->
+          <div v-if="activityBindBlocked" class="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-ink-soft">
+            <Icon name="alert" :size="14" class="mt-0.5 shrink-0 text-warning" />
+            <span>当前活动任务为「按课表自动」调度，但该账号尚未绑定教务账号。请在下方「活动调度策略」卡中绑定并同步课表后再启用；或切回「固定时刻」调度。</span>
+          </div>
+
           <!-- 配置套选择（仅本地选择/预览）+ 手动套用 + 次要编辑动作：内嵌件统一 bg-cloud 材质 -->
           <div class="flex flex-wrap items-center gap-2 rounded-lg bg-cloud px-3 py-2">
             <span class="shrink-0 text-xs text-ink-soft">配置套</span>
             <div class="w-48">
-              <BaseSelect v-model="bindPick" :options="store.setOptions" :searchable="true" size="sm" placeholder="选择配置套" />
+              <BaseSelect v-model="bindPick" :options="store.setOptionsFor(store.selectedTaskType)" :searchable="true" size="sm" placeholder="选择配置套" />
             </div>
             <button
               type="button"
@@ -166,6 +180,13 @@
 
         <MasonryGrid>
           <TimeSection :config="store.taskConfig" :required="true" :error="store.formErrors.time" />
+          <!-- 活动签到专属：课表驱动调度（寝室任务无此块，后端也不消费） -->
+          <ActivitySection
+            v-if="store.selectedTaskType === 'activity'"
+            :config="store.taskConfig"
+            :account-id="store.selectedAccountId"
+            :source="store.taskScheduleState.hasInstance ? 'task' : ''"
+          />
           <LocationSection :config="store.taskConfig" :required="true" :error="store.formErrors.location" />
           <RemarkSection :config="store.taskConfig" :required="true" :error="store.formErrors.remarks" />
           <ImageSection :config="store.taskConfig" />
@@ -225,6 +246,7 @@ import { useSignConfigStore } from '@/stores/signConfig'
 import { useSchedulesStore } from '@/stores/schedules'
 import { toast } from '@/utils/toast'
 import TimeSection from '@/components/signconfig/sections/TimeSection.vue'
+import ActivitySection from '@/components/signconfig/sections/ActivitySection.vue'
 import LocationSection from '@/components/signconfig/sections/LocationSection.vue'
 import RemarkSection from '@/components/signconfig/sections/RemarkSection.vue'
 import ImageSection from '@/components/signconfig/sections/ImageSection.vue'
@@ -232,8 +254,15 @@ import PushSection from '@/components/signconfig/sections/PushSection.vue'
 import AdvancedSection from '@/components/signconfig/sections/AdvancedSection.vue'
 import MasonryGrid from '@/components/signconfig/MasonryGrid.vue'
 import BatchManageDrawer from '@/components/signconfig/BatchManageDrawer.vue'
+import { useJwxtStore } from '@/stores/jwxt'
+import { onMounted } from 'vue'
 
 const store = useSignConfigStore()
+const jwxtStore = useJwxtStore()
+// 预热各账号教务绑定状态：树徽标（已绑定/同步异常/未绑定）与活动节点的绑定卡都依赖
+onMounted(() => {
+  jwxtStore.loadMany(store.accounts.map((a) => a.id))
+})
 // 配置套变更需同步刷新定时任务视图（卡片的「下一次执行」取自任务实例，而非配置套）
 const schedulesStore = useSchedulesStore()
 async function refreshSchedulesView() {
@@ -295,6 +324,18 @@ const enabled = computed(() => !!taskState.value.enabled)
 // 配置完整度：必填项是否都已填写（时间/位置/备注）
 const cfgComplete = computed(() => Object.keys(store.validateConfig(store.taskConfig || {})).length === 0)
 const blockHint = computed(() => Object.values(store.validateConfig(store.taskConfig || {})).join('；'))
+// 课表调度启用门槛：活动任务 + course 策略 + 未绑定教务 → 阻断启用按钮（与后端 4403 校验呼应）
+const activityBindBlocked = computed(() =>
+  store.selectedTaskType === 'activity' &&
+  store.taskConfig?.activity?.strategy === 'course' &&
+  !jwxtStore.isBound(store.selectedAccountId)
+)
+// 树徽标：返回 'ok' | 'needs_attention' | null（未绑定不显示徽标）
+function jwxtStateOf(accountId) {
+  const o = jwxtStore.overviewOf(accountId)
+  if (!o?.bound) return null
+  return o.account?.status === 'needs_attention' ? 'needs_attention' : 'ok'
+}
 const headerHint = computed(() =>
   enabled.value
     ? '任务运行中：保存修改立即生效，暂停后可随时再次启用'

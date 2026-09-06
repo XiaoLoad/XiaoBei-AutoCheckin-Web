@@ -40,9 +40,10 @@ def _delete_account(c, headers, acc_id):
     c.delete(f'/api/accounts/{acc_id}', headers=headers)
 
 
-def _default_set_id(c, headers):
+def _default_set_id(c, headers, task_type='dorm'):
+    """取指定类型的默认配置套（配置套已按 task_type 类型化，寝室/活动各一条默认）。"""
     items = c.get('/api/config-sets', headers=headers).get_json()['data']['items']
-    default = next((it for it in items if it['isDefault']), None)
+    default = next((it for it in items if it['isDefault'] and it.get('taskType') == task_type), None)
     return default['id'] if default else None
 
 

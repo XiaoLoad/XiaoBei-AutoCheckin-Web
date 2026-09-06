@@ -1,0 +1,857 @@
+
+  
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+
+<head id="headerid1">
+	<base target='_self'>
+	<title>学期理论课表</title>	
+	<meta http-equiv="pragma" content="no-cache">
+	<meta http-equiv="cache-control" content="no-cache">
+	<meta http-equiv="expires" content="0">
+	<meta http-equiv="keywords" content="湖南强智科技教务系统">
+	<meta http-equiv="description" content="湖南强智科技教务系统">
+	<meta http-equiv="X-UA-Compatible" content="IE=EmulateIE8" />
+<script type="text/javascript" src="/cqdxcskjxy_jsxsd/js/jquery-min.js" language="javascript" ></script>
+<script type="text/javascript" src="/cqdxcskjxy_jsxsd/js/common.js" language="javascript" ></script>
+<script type="text/javascript" src="/cqdxcskjxy_jsxsd/js/iepngfix_tilebg.js" language="javascript" ></script>
+<link href="/cqdxcskjxy_jsxsd/framework/images/common.css" rel="stylesheet" type="text/css" />
+<link href="/cqdxcskjxy_jsxsd/framework/images/blue.css" rel="stylesheet" type="text/css" id="link_theme" />
+<link href="/cqdxcskjxy_jsxsd/framework/images/workstation.css" rel="stylesheet" type="text/css" /> 
+</head>
+<iframe id="notSession" name="notSession" style="display: none;" src=""></iframe>
+<script type="text/javascript">
+jQuery(document).ready(function(){
+	window.setInterval(function(){
+		 document.getElementById("notSession").src = "/cqdxcskjxy_jsxsd/framework/blankPage.jsp";
+	 }, 1000 * 60 * 10);
+});
+</script>
+<body>
+
+
+
+
+
+
+
+
+<script>
+function opengld(){
+	if("1"!='2'){
+		alert("非教师不能进行切换");
+		return;
+	}
+	var height = $(window).height();
+	var width = $(window).width();
+	if(parseInt(height)<750){
+		document.getElementById("view").value = "1";
+	}else{
+		document.getElementById("view").value = "0";
+	}
+	//取得userid
+	var userid = '2025304262';
+	document.getElementById("useraccount").value = userid;
+    $.ajax({
+        cache: true,
+        type: "POST",
+        url:"/cqdxcskjxy_jsxsd/system/loginupdtoGld.do",
+        dataType: "json",
+        success: function(data) {
+            if(data.val=="1"){
+                document.getElementById("upd").value = data.upd;
+                document.getElementById("time").value = data.time;
+                document.getElementById("loginForm1").submit();
+
+            }else{
+                alert("异常导致不能进行切换");
+                return;
+            }
+        }
+    });
+}
+function LogoutGLD(){
+	var userid = '2025304262';
+	document.getElementById("loginForm1").action = "http://jw.cqcst.edu.cn/cqdxcskjxy/Logon.do?method=logoutFromJsxsd";
+	document.getElementById("useraccount").value = userid;
+	document.getElementById("loginForm1").submit();
+}	
+
+</script>	
+<div class="Nsb_pw">
+  <div class="Nsb_top">
+  	<form action = "http://jw.cqcst.edu.cn/cqdxcskjxy/Logon.do?method=logonFromJsxsd"  method="post" id="loginForm1" name="loginForm1">
+		<input type = "hidden" id="view" name="view" />
+		<input type = "hidden" id="useraccount" name="useraccount" />
+		<input type = "hidden" id="ticket" name="ticket" />
+
+        <input type="hidden" id="upd" name="upd" value="" />
+        <input type="hidden" id="time" name="time" value="" />
+	</form>
+    <div class="Nsb_top_logo"><table border="0" cellpadding="0" cellspacing="0"><tr><td height="75" valign="middle"><img style="display:;" id="imgLogo" src="/cqdxcskjxy_jsxsd/framework/images/index_logo.gif" /></td></tr></table></div>
+    <div class="Nsb_top_menu">        
+        <div id="Top1_divLoginName" class="Nsb_top_menu_nc" style="color: #000000;">肖街伟(2025304262)</div>
+       
+        <ul>
+            <li><a id="TopUserSetting" info="个人设置" href="#" class="Nsb_top_menu_id"><img src="/cqdxcskjxy_jsxsd/framework/images/Nsb_top_p1.jpg" id="Top1_imgTopSmallUserPhoto" /></a></li>
+            <span></span>
+                          
+            
+            <li><a id="TopTheme" info="切换主题" href="#" class="Nsb_top_menu_style" onclick="changeDisplay('divTopTheme')"></a></li>
+            <span id="Top1_LBackManageSpliter"></span>
+            <span id="Top1_LExitSpliter"></span>
+            <li id="Top1_LBackManage">
+            	<a info="个人设置" href="/cqdxcskjxy_jsxsd/grsz/grsz_xggrxx.do?Ves632DSdyV=NEW_XSD_WDZM" class="Nsb_top_menu_options"></a>
+            </li>
+             
+        	 	<li id="Top1_LExit"><a info="退出" href="javascript:Logout('/cqdxcskjxy_jsxsd');"   class="Nsb_top_menu_exit"></a></li>
+        	 
+            
+            
+        </ul>            
+     </div>   
+     <div id="divTopTheme" group="topDiv" style="display:none;z-index:10000">      
+        <div class="Nsb_top_c Nsb_top_c3">
+          <ul>
+            <li id="theme_blue" theme="blue" index="1" class="Nsb_top_c3_11" onclick="javascript:changeTheme('/cqdxcskjxy_jsxsd','blue',this);"></li>
+            <li id="theme_green" theme="green" index="2" class="Nsb_top_c3_2"  onclick="javascript:changeTheme('/cqdxcskjxy_jsxsd','green',this);"></li>
+            <li id="theme_orange" theme="orange" index="3" class="Nsb_top_c3_3" onclick="javascript:changeTheme('/cqdxcskjxy_jsxsd','orange',this);"></li>
+            <li id="theme_red" theme="red" index="4" class="Nsb_top_c3_4"  onclick="javascript:changeTheme('/cqdxcskjxy_jsxsd','red',this);"></li>
+            <li id="theme_purple" theme="purple" index="5" class="Nsb_top_c3_5" onclick="javascript:changeTheme('/cqdxcskjxy_jsxsd','purple',this);"></li>
+            <li id="theme_gray" theme="gray" index="6" class="Nsb_top_c3_6"  onclick="javascript:changeTheme('/cqdxcskjxy_jsxsd','gray',this);"></li>
+          </ul>
+        </div>
+     </div>
+   </div>
+</div>
+<div class="Nsb_menu_pw">
+  <div class="Nsb_pw">
+    <div id="divFirstMenuClass" class="Nsb_menu menu_cn">
+      <ul>         
+         <li class="Nsb_menu_li_now" title="首页">
+         	<a class="Nsb_menu_li_h" id="homepage" href="/cqdxcskjxy_jsxsd/framework/xsMain.jsp"><span></span></a>
+         </li>
+         
+         	<li title="我的桌面">
+         		<a id="calender_user_schedule" href="/cqdxcskjxy_jsxsd/jxzl/jxzl_query?Ves632DSdyV=NEW_XSD_WDZM">我的桌面</a>
+         	</li>
+         
+         	<li title="学籍成绩">
+         		<a id="calender_user_schedule" href="/cqdxcskjxy_jsxsd/xsxj/xjxxgl.do?Ves632DSdyV=NEW_XSD_XJCJ">学籍成绩</a>
+         	</li>
+         
+         	<li title="培养管理">
+         		<a id="calender_user_schedule" href="/cqdxcskjxy_jsxsd/pyfa/topyfamx?Ves632DSdyV=NEW_XSD_PYGL">培养管理</a>
+         	</li>
+         
+         	<li title="考试报名">
+         		<a id="calender_user_schedule" href="/cqdxcskjxy_jsxsd/xsks/xsksap_query?Ves632DSdyV=NEW_XSD_KSBM">考试报名</a>
+         	</li>
+         
+         	<li title="实践环节">
+         		<a id="calender_user_schedule" href="/cqdxcskjxy_jsxsd/view/syjx/syyy_find.jsp?Ves632DSdyV=NEW_XSD_SJHJ">实践环节</a>
+         	</li>
+         
+         	<li title="教学评价">
+         		<a id="calender_user_schedule" href="/cqdxcskjxy_jsxsd/xspj/xspj_find.do?Ves632DSdyV=NEW_XSD_JXPJ">教学评价</a>
+         	</li>
+         
+      </ul>
+    </div>
+  </div>
+</div>
+<div class="Nsb_pw">
+	
+
+
+
+
+
+
+  
+<div id="LeftMenu1_divChildMenu" class="Nsb_layout_l Nsb_l_list">
+	<div class="Nsb_l_list_top"></div>
+	
+			<h4 class="exam_user_exam">公告留言</h4>
+			<ul>			
+	
+				<li><a  href="/cqdxcskjxy_jsxsd/ggly/ysgg_query">已收公告</a></li>
+	
+				<li><a  href="/cqdxcskjxy_jsxsd/ggly/ysly_query">已收留言</a></li>
+	
+			</ul>
+	
+			<h4 class="exam_user_exam">个人信息</h4>
+			<ul>			
+	
+				<li><a  href="/cqdxcskjxy_jsxsd/grsz/grsz_xggrxx.do">修改个人信息</a></li>
+	
+				<li><a  href="/cqdxcskjxy_jsxsd/grsz/grsz_xgmm">修改密码</a></li>
+	
+			</ul>
+	
+			<h4 class="exam_user_exam">在线问答</h4>
+			<ul>			
+	
+				<li><a  href="/cqdxcskjxy_jsxsd/zxwd/zxwd_opt">在线问答</a></li>
+	
+			</ul>
+	
+			<h4 class="exam_user_exam">教学周历</h4>
+			<ul>			
+	
+				<li><a  href="/cqdxcskjxy_jsxsd/jxzl/jxzl_query">教学周历查看</a></li>
+	
+			</ul>
+	
+			<h4 class="exam_user_exam">监护人信息</h4>
+			<ul>			
+	
+				<li><a  href="/cqdxcskjxy_jsxsd/jhrxx/tojhrxx.do">监护人信息填写</a></li>
+	
+			</ul>
+	
+</div>
+<div class="Nsb_layout_r" style="width: 100%">
+<iframe style="display:none;" name="ifrmPrint" id="ifrmPrint"></iframe>
+<form action="" name="FormPrint" id="FormPrint" method="post" target="ifrmPrint">
+</form>
+ <form action="" name="Form1" id="Form1" method="post" target="_self">
+ 
+ <input type="hidden" name="cj0701id" id="cj0701id" value=""/>
+        <div class="Nsb_r_title"><a href="/cqdxcskjxy_jsxsd/framework/main.jsp"">首页</a> » 我的课表 » 学期理论课表</div>
+        <div>
+        	
+        	周次：<select name="zc" id="zc" onchange="javascript:document.getElementById('Form1').submit();" >
+         	
+		 <option value="">(全部)</option>	
+		 
+		
+		    <option value="1"  >第1周</option>
+		    
+		    <option value="2"  >第2周</option>
+		    
+		    <option value="3"  >第3周</option>
+		    
+		    <option value="4"  >第4周</option>
+		    
+		    <option value="5"  >第5周</option>
+		    
+		    <option value="6"  >第6周</option>
+		    
+		    <option value="7"  >第7周</option>
+		    
+		    <option value="8"  >第8周</option>
+		    
+		    <option value="9"  >第9周</option>
+		    
+		    <option value="10"  >第10周</option>
+		    
+		    <option value="11"  >第11周</option>
+		    
+		    <option value="12"  >第12周</option>
+		    
+		    <option value="13"  >第13周</option>
+		    
+		    <option value="14"  >第14周</option>
+		    
+		    <option value="15"  >第15周</option>
+		    
+		    <option value="16"  >第16周</option>
+		    
+		    <option value="17"  >第17周</option>
+		    
+		    <option value="18"  >第18周</option>
+		    
+		    <option value="19"  >第19周</option>
+		    
+		    <option value="20"  >第20周</option>
+		    
+		    <option value="21"  >第21周</option>
+		    
+		    <option value="22"  >第22周</option>
+		    
+		    <option value="23"  >第23周</option>
+		    
+		    <option value="24"  >第24周</option>
+		    
+		    <option value="25"  >第25周</option>
+		    
+		    <option value="26"  >第26周</option>
+		    
+		    <option value="27"  >第27周</option>
+		    
+		    <option value="28"  >第28周</option>
+		    
+		    <option value="29"  >第29周</option>
+		    
+		    <option value="30"  >第30周</option>
+		    
+		<input type="hidden" name="demo" id="demo" value="">
+		</select>学年学期：<select name="xnxq01id" id="xnxq01id" onchange="javascript:document.getElementById('Form1').submit();"　style="width:180px;">
+		
+		<option value="2027-2028-1"  >2027-2028-1</option>
+		
+		<option value="2026-2027-2"  >2026-2027-2</option>
+		
+		<option value="2026-2027-1"   selected="selected">2026-2027-1</option>
+		
+		<option value="2025-2026-2"  >2025-2026-2</option>
+		
+		<option value="2025-2026-1"  >2025-2026-1</option>
+		
+		<option value="2024-2025-2"  >2024-2025-2</option>
+		
+		<option value="2024-2025-1"  >2024-2025-1</option>
+		
+		<option value="2023-2024-2"  >2023-2024-2</option>
+		
+		<option value="2023-2024-1"  >2023-2024-1</option>
+		
+		<option value="2022-2023-2"  >2022-2023-2</option>
+		
+		<option value="2022-2023-1"  >2022-2023-1</option>
+		
+		<option value="2021-2022-2"  >2021-2022-2</option>
+		
+		<option value="2021-2022-1"  >2021-2022-1</option>
+		
+		<option value="2020-2021-2"  >2020-2021-2</option>
+		
+		<option value="2020-2021-1"  >2020-2021-1</option>
+		
+		<option value="2019-2020-2"  >2019-2020-2</option>
+		
+		<option value="2019-2020-1"  >2019-2020-1</option>
+		
+		<option value="2018-2019-2"  >2018-2019-2</option>
+		
+		<option value="2018-2019-1"  >2018-2019-1</option>
+		
+		<option value="2017-2018-2"  >2017-2018-2</option>
+		
+		<option value="2017-2018-1"  >2017-2018-1</option>
+		
+		<option value="2016-2017-2"  >2016-2017-2</option>
+		
+		<option value="2016-2017-1"  >2016-2017-1</option>
+		
+		<option value="2015-2016-2"  >2015-2016-2</option>
+		
+		<option value="2015-2016-1"  >2015-2016-1</option>
+		
+		<option value="2014-2015-2"  >2014-2015-2</option>
+		
+		<option value="2014-2015-1"  >2014-2015-1</option>
+		
+		<option value="2013-2014-2"  >2013-2014-2</option>
+		
+		<option value="2013-2014-1"  >2013-2014-1</option>
+		
+		<option value="2012-2013-2"  >2012-2013-2</option>
+		
+		<option value="2012-2013-1"  >2012-2013-1</option>
+		
+		<option value="2011-2012-2"  >2011-2012-2</option>
+		
+		<option value="2011-2012-1"  >2011-2012-1</option>
+		
+		<option value="2010-2011-2"  >2010-2011-2</option>
+		
+		<option value="2010-2011-1"  >2010-2011-1</option>
+		
+		<option value="2009-2010-2"  >2009-2010-2</option>
+		
+		<option value="2009-2010-1"  >2009-2010-1</option>
+		
+		<option value="2008-2009-2"  >2008-2009-2</option>
+		
+		<option value="2008-2009-1"  >2008-2009-1</option>
+		
+		<option value="2007-2008-2"  >2007-2008-2</option>
+		
+		<option value="2007-2008-1"  >2007-2008-1</option>
+		
+		<option value="2006-2007-2"  >2006-2007-2</option>
+		
+		<option value="2006-2007-1"  >2006-2007-1</option>
+		
+		</select>&nbsp;<input type="button" value="打 印" class="button"  onclick="print(this)"  >&nbsp;
+		
+		<!--  
+		<input type="button" class="button" id="btnShenshen" value="返 回" onclick="javascript:window.location.href='/cqdxcskjxy_jsxsd/framework/main.jsp';"/>
+		-->
+		
+		<input type="checkbox" name="sfFD" id="sfFD" value="1" onclick="funFD(this.checked)"  checked>放大
+        </div>
+        	
+        	
+		　<table id="kbtable" border="1" width="100%"   cellspacing="0" cellpadding="0"
+				    class="Nsb_r_list Nsb_table">
+				<tr>
+					<th width="70" height="28" align="center">
+						&nbsp;
+					</th>
+					<th width="123" height="28" align="center">星期一</th>
+					<th width="123" height="28" align="center">星期二</th>
+					<th width="123" height="28" align="center">星期三</th>
+					<th width="124" height="28" align="center">星期四</th>
+					<th width="124" height="28" align="center">星期五</th>
+					<th width="124" height="28" align="center">星期六</th>
+					<th width="124" height="28" align="center">星期日</th>
+				</tr> 
+				
+					<tr>
+							<th width="70" height="28" align="center">
+							第一节&nbsp;
+							</th>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="380CE0711EED4921AF974E40ED6DD055-1-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="380CE0711EED4921AF974E40ED6DD055-1-2">
+								<div id="380CE0711EED4921AF974E40ED6DD055-1-1" class="kbcontent1">Web开发技术课程设计<br/><font title='周次(节次)'>25计算机（专升本）[13-14]班1-2(全部)</font><br/><font title='教室'>厚德楼306</font><br/></div>
+								<div id="380CE0711EED4921AF974E40ED6DD055-1-2" style="display: none;" class="kbcontent" >Web开发技术课程设计[32][必修]<br/><font title='老师'>李路加</font><br/><font title='班级'>25计算机（专升本）[13-14]班<span title='选课人数'>(61)<br/>1-2(全部)[01-02-03-04-05-06-07-08节]</font><br/><font title='上课地点'>厚德楼306</font><br/></div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="380CE0711EED4921AF974E40ED6DD055-2-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="380CE0711EED4921AF974E40ED6DD055-2-2">
+								<div id="380CE0711EED4921AF974E40ED6DD055-2-1" class="kbcontent1">移动应用开发技术课程设计<br/><font title='周次(节次)'>25计算机（专升本）[13-14]班3(全部)</font><br/><font title='教室'>厚德楼407</font><br/>-----------------<br>Web开发技术课程设计<br/><font title='周次(节次)'>25计算机（专升本）[13-14]班1-2(全部)</font><br/><font title='教室'>厚德楼401</font><br/>-----------------<br>移动应用开发技术课程设计<br/><font title='周次(节次)'>25计算机（专升本）[13-14]班4(全部)</font><br/><font title='教室'>厚德楼407</font><br/></div>
+								<div id="380CE0711EED4921AF974E40ED6DD055-2-2"
+								style="display: none;" class="kbcontent">移动应用开发技术课程设计[32][必修]<br/><font title='老师'>左亚玲</font><br/><font title='班级'>25计算机（专升本）[13-14]班<span title='选课人数'>(61)<br/>3(全部)[01-02-03-04-05-06-07-08节]</font><br/><font title='上课地点'>厚德楼407</font><br/>---------------------<br>Web开发技术课程设计[32][必修]<br/><font title='老师'>李路加</font><br/><font title='班级'>25计算机（专升本）[13-14]班<span title='选课人数'>(61)<br/>1-2(全部)[01-02-03-04-05-06-07-08节]</font><br/><font title='上课地点'>厚德楼401</font><br/>---------------------<br>移动应用开发技术课程设计[32][必修]<br/><font title='老师'>左亚玲</font><br/><font title='班级'>25计算机（专升本）[13-14]班<span title='选课人数'>(61)<br/>4(全部)[01-02-03-04-05-06-07-08节]</font><br/><font title='上课地点'>厚德楼407</font><br/></div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="380CE0711EED4921AF974E40ED6DD055-3-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="380CE0711EED4921AF974E40ED6DD055-3-2">
+								<div id="380CE0711EED4921AF974E40ED6DD055-3-1"  class="kbcontent1">移动应用开发技术课程设计<br/><font title='周次(节次)'>25计算机（专升本）[13-14]班3(全部)</font><br/><font title='教室'>厚德楼403</font><br/>-----------------<br>移动应用开发技术课程设计<br/><font title='周次(节次)'>25计算机（专升本）[13-14]班4(全部)</font><br/><font title='教室'>厚德楼403</font><br/></div>
+								<div id="380CE0711EED4921AF974E40ED6DD055-3-2"  
+								style="display: none;" class="kbcontent">移动应用开发技术课程设计[32][必修]<br/><font title='老师'>左亚玲</font><br/><font title='班级'>25计算机（专升本）[13-14]班<span title='选课人数'>(61)<br/>3(全部)[01-02-03-04节]</font><br/><font title='上课地点'>厚德楼403</font><br/>---------------------<br>移动应用开发技术课程设计[32][必修]<br/><font title='老师'>左亚玲</font><br/><font title='班级'>25计算机（专升本）[13-14]班<span title='选课人数'>(61)<br/>4(全部)[01-02-03-04节]</font><br/><font title='上课地点'>厚德楼403</font><br/></div>
+							</td>
+							<td width="123" height="28" align="center" valign="top" >
+								<input type="hidden" name="jx0415zbdiv_1" value="380CE0711EED4921AF974E40ED6DD055-4-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="380CE0711EED4921AF974E40ED6DD055-4-2">
+								<div id="380CE0711EED4921AF974E40ED6DD055-4-1"  class="kbcontent1">&nbsp;</div>
+								<div id="380CE0711EED4921AF974E40ED6DD055-4-2"  
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top"> 
+								<input type="hidden" name="jx0415zbdiv_1" value="380CE0711EED4921AF974E40ED6DD055-5-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="380CE0711EED4921AF974E40ED6DD055-5-2">
+								<div id="380CE0711EED4921AF974E40ED6DD055-5-1"  class="kbcontent1" >&nbsp;</div>
+								<div id="380CE0711EED4921AF974E40ED6DD055-5-2"  
+								style="display: none;" class="kbcontent" >&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="380CE0711EED4921AF974E40ED6DD055-6-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="380CE0711EED4921AF974E40ED6DD055-6-2">
+								<div id="380CE0711EED4921AF974E40ED6DD055-6-1"  class="kbcontent1">&nbsp;</div>
+								<div id="380CE0711EED4921AF974E40ED6DD055-6-2"  
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="380CE0711EED4921AF974E40ED6DD055-7-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="380CE0711EED4921AF974E40ED6DD055-7-2">
+								<div id="380CE0711EED4921AF974E40ED6DD055-7-1"  class="kbcontent1" >毕业实习<br/><font title='周次(节次)'>25计算机（专升本）14班13-18(全部)</font><br/></div>
+								<div id="380CE0711EED4921AF974E40ED6DD055-7-2"  
+								style="display: none;" class="kbcontent">毕业实习[96][必修]<br/><font title='老师'>罗雯月</font><br/><font title='班级'>25计算机（专升本）14班<span title='选课人数'>(30)<br/>13-18(全部)[01-02节]</font><br/></div>
+							</td>
+							
+					</tr>
+				
+					<tr>
+							<th width="70" height="28" align="center">
+							第二节&nbsp;
+							</th>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="722480E2FE2848B28EBCB17564A2B2D3-1-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="722480E2FE2848B28EBCB17564A2B2D3-1-2">
+								<div id="722480E2FE2848B28EBCB17564A2B2D3-1-1" class="kbcontent1">Web开发技术课程设计<br/><font title='周次(节次)'>25计算机（专升本）[13-14]班1-2(全部)</font><br/><font title='教室'>厚德楼306</font><br/></div>
+								<div id="722480E2FE2848B28EBCB17564A2B2D3-1-2" style="display: none;" class="kbcontent" >Web开发技术课程设计[32][必修]<br/><font title='老师'>李路加</font><br/><font title='班级'>25计算机（专升本）[13-14]班<span title='选课人数'>(61)<br/>1-2(全部)[01-02-03-04-05-06-07-08节]</font><br/><font title='上课地点'>厚德楼306</font><br/></div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="722480E2FE2848B28EBCB17564A2B2D3-2-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="722480E2FE2848B28EBCB17564A2B2D3-2-2">
+								<div id="722480E2FE2848B28EBCB17564A2B2D3-2-1" class="kbcontent1">移动应用开发技术课程设计<br/><font title='周次(节次)'>25计算机（专升本）[13-14]班3(全部)</font><br/><font title='教室'>厚德楼407</font><br/>-----------------<br>Web开发技术课程设计<br/><font title='周次(节次)'>25计算机（专升本）[13-14]班1-2(全部)</font><br/><font title='教室'>厚德楼401</font><br/>-----------------<br>移动应用开发技术课程设计<br/><font title='周次(节次)'>25计算机（专升本）[13-14]班4(全部)</font><br/><font title='教室'>厚德楼407</font><br/></div>
+								<div id="722480E2FE2848B28EBCB17564A2B2D3-2-2"
+								style="display: none;" class="kbcontent">移动应用开发技术课程设计[32][必修]<br/><font title='老师'>左亚玲</font><br/><font title='班级'>25计算机（专升本）[13-14]班<span title='选课人数'>(61)<br/>3(全部)[01-02-03-04-05-06-07-08节]</font><br/><font title='上课地点'>厚德楼407</font><br/>---------------------<br>Web开发技术课程设计[32][必修]<br/><font title='老师'>李路加</font><br/><font title='班级'>25计算机（专升本）[13-14]班<span title='选课人数'>(61)<br/>1-2(全部)[01-02-03-04-05-06-07-08节]</font><br/><font title='上课地点'>厚德楼401</font><br/>---------------------<br>移动应用开发技术课程设计[32][必修]<br/><font title='老师'>左亚玲</font><br/><font title='班级'>25计算机（专升本）[13-14]班<span title='选课人数'>(61)<br/>4(全部)[01-02-03-04-05-06-07-08节]</font><br/><font title='上课地点'>厚德楼407</font><br/></div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="722480E2FE2848B28EBCB17564A2B2D3-3-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="722480E2FE2848B28EBCB17564A2B2D3-3-2">
+								<div id="722480E2FE2848B28EBCB17564A2B2D3-3-1"  class="kbcontent1">移动应用开发技术课程设计<br/><font title='周次(节次)'>25计算机（专升本）[13-14]班3(全部)</font><br/><font title='教室'>厚德楼403</font><br/>-----------------<br>移动应用开发技术课程设计<br/><font title='周次(节次)'>25计算机（专升本）[13-14]班4(全部)</font><br/><font title='教室'>厚德楼403</font><br/></div>
+								<div id="722480E2FE2848B28EBCB17564A2B2D3-3-2"  
+								style="display: none;" class="kbcontent">移动应用开发技术课程设计[32][必修]<br/><font title='老师'>左亚玲</font><br/><font title='班级'>25计算机（专升本）[13-14]班<span title='选课人数'>(61)<br/>3(全部)[01-02-03-04节]</font><br/><font title='上课地点'>厚德楼403</font><br/>---------------------<br>移动应用开发技术课程设计[32][必修]<br/><font title='老师'>左亚玲</font><br/><font title='班级'>25计算机（专升本）[13-14]班<span title='选课人数'>(61)<br/>4(全部)[01-02-03-04节]</font><br/><font title='上课地点'>厚德楼403</font><br/></div>
+							</td>
+							<td width="123" height="28" align="center" valign="top" >
+								<input type="hidden" name="jx0415zbdiv_1" value="722480E2FE2848B28EBCB17564A2B2D3-4-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="722480E2FE2848B28EBCB17564A2B2D3-4-2">
+								<div id="722480E2FE2848B28EBCB17564A2B2D3-4-1"  class="kbcontent1">&nbsp;</div>
+								<div id="722480E2FE2848B28EBCB17564A2B2D3-4-2"  
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top"> 
+								<input type="hidden" name="jx0415zbdiv_1" value="722480E2FE2848B28EBCB17564A2B2D3-5-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="722480E2FE2848B28EBCB17564A2B2D3-5-2">
+								<div id="722480E2FE2848B28EBCB17564A2B2D3-5-1"  class="kbcontent1" >&nbsp;</div>
+								<div id="722480E2FE2848B28EBCB17564A2B2D3-5-2"  
+								style="display: none;" class="kbcontent" >&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="722480E2FE2848B28EBCB17564A2B2D3-6-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="722480E2FE2848B28EBCB17564A2B2D3-6-2">
+								<div id="722480E2FE2848B28EBCB17564A2B2D3-6-1"  class="kbcontent1">&nbsp;</div>
+								<div id="722480E2FE2848B28EBCB17564A2B2D3-6-2"  
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="722480E2FE2848B28EBCB17564A2B2D3-7-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="722480E2FE2848B28EBCB17564A2B2D3-7-2">
+								<div id="722480E2FE2848B28EBCB17564A2B2D3-7-1"  class="kbcontent1" >形势与政策4<br/><font title='周次(节次)'>25区块链（专升本）1班，25计算机（专升本）[1-16]班，25建环（专升本）1班5-6(全部)</font><br/></div>
+								<div id="722480E2FE2848B28EBCB17564A2B2D3-7-2"  
+								style="display: none;" class="kbcontent">形势与政策4[16][必修]<br/><font title='老师'>肖和平</font><br/><font title='班级'>25区块链（专升本）1班，25计算机（专升本）[1-16]班，25建环（专升本）1班<span title='选课人数'>(526)<br/>5-6(全部)[03-04节]</font><br/></div>
+							</td>
+							
+					</tr>
+				
+					<tr>
+							<th width="70" height="28" align="center">
+							第三节&nbsp;
+							</th>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="A322B98399344D8ABEB0BFAAD1B57525-1-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="A322B98399344D8ABEB0BFAAD1B57525-1-2">
+								<div id="A322B98399344D8ABEB0BFAAD1B57525-1-1" class="kbcontent1">Web开发技术课程设计<br/><font title='周次(节次)'>25计算机（专升本）[13-14]班1-2(全部)</font><br/><font title='教室'>厚德楼306</font><br/></div>
+								<div id="A322B98399344D8ABEB0BFAAD1B57525-1-2" style="display: none;" class="kbcontent" >Web开发技术课程设计[32][必修]<br/><font title='老师'>李路加</font><br/><font title='班级'>25计算机（专升本）[13-14]班<span title='选课人数'>(61)<br/>1-2(全部)[01-02-03-04-05-06-07-08节]</font><br/><font title='上课地点'>厚德楼306</font><br/></div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="A322B98399344D8ABEB0BFAAD1B57525-2-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="A322B98399344D8ABEB0BFAAD1B57525-2-2">
+								<div id="A322B98399344D8ABEB0BFAAD1B57525-2-1" class="kbcontent1">移动应用开发技术课程设计<br/><font title='周次(节次)'>25计算机（专升本）[13-14]班3(全部)</font><br/><font title='教室'>厚德楼407</font><br/>-----------------<br>Web开发技术课程设计<br/><font title='周次(节次)'>25计算机（专升本）[13-14]班1-2(全部)</font><br/><font title='教室'>厚德楼401</font><br/>-----------------<br>移动应用开发技术课程设计<br/><font title='周次(节次)'>25计算机（专升本）[13-14]班4(全部)</font><br/><font title='教室'>厚德楼407</font><br/></div>
+								<div id="A322B98399344D8ABEB0BFAAD1B57525-2-2"
+								style="display: none;" class="kbcontent">移动应用开发技术课程设计[32][必修]<br/><font title='老师'>左亚玲</font><br/><font title='班级'>25计算机（专升本）[13-14]班<span title='选课人数'>(61)<br/>3(全部)[01-02-03-04-05-06-07-08节]</font><br/><font title='上课地点'>厚德楼407</font><br/>---------------------<br>Web开发技术课程设计[32][必修]<br/><font title='老师'>李路加</font><br/><font title='班级'>25计算机（专升本）[13-14]班<span title='选课人数'>(61)<br/>1-2(全部)[01-02-03-04-05-06-07-08节]</font><br/><font title='上课地点'>厚德楼401</font><br/>---------------------<br>移动应用开发技术课程设计[32][必修]<br/><font title='老师'>左亚玲</font><br/><font title='班级'>25计算机（专升本）[13-14]班<span title='选课人数'>(61)<br/>4(全部)[01-02-03-04-05-06-07-08节]</font><br/><font title='上课地点'>厚德楼407</font><br/></div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="A322B98399344D8ABEB0BFAAD1B57525-3-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="A322B98399344D8ABEB0BFAAD1B57525-3-2">
+								<div id="A322B98399344D8ABEB0BFAAD1B57525-3-1"  class="kbcontent1">&nbsp;</div>
+								<div id="A322B98399344D8ABEB0BFAAD1B57525-3-2"  
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top" >
+								<input type="hidden" name="jx0415zbdiv_1" value="A322B98399344D8ABEB0BFAAD1B57525-4-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="A322B98399344D8ABEB0BFAAD1B57525-4-2">
+								<div id="A322B98399344D8ABEB0BFAAD1B57525-4-1"  class="kbcontent1">移动应用开发技术课程设计<br/><font title='周次(节次)'>25计算机（专升本）[13-14]班3,5(全部)</font><br/><font title='教室'>厚德楼304</font><br/></div>
+								<div id="A322B98399344D8ABEB0BFAAD1B57525-4-2"  
+								style="display: none;" class="kbcontent">移动应用开发技术课程设计[32][必修]<br/><font title='老师'>左亚玲</font><br/><font title='班级'>25计算机（专升本）[13-14]班<span title='选课人数'>(61)<br/>3,5(全部)[05-06-07-08节]</font><br/><font title='上课地点'>厚德楼304</font><br/></div>
+							</td>
+							<td width="123" height="28" align="center" valign="top"> 
+								<input type="hidden" name="jx0415zbdiv_1" value="A322B98399344D8ABEB0BFAAD1B57525-5-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="A322B98399344D8ABEB0BFAAD1B57525-5-2">
+								<div id="A322B98399344D8ABEB0BFAAD1B57525-5-1"  class="kbcontent1" >&nbsp;</div>
+								<div id="A322B98399344D8ABEB0BFAAD1B57525-5-2"  
+								style="display: none;" class="kbcontent" >&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="A322B98399344D8ABEB0BFAAD1B57525-6-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="A322B98399344D8ABEB0BFAAD1B57525-6-2">
+								<div id="A322B98399344D8ABEB0BFAAD1B57525-6-1"  class="kbcontent1">&nbsp;</div>
+								<div id="A322B98399344D8ABEB0BFAAD1B57525-6-2"  
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="A322B98399344D8ABEB0BFAAD1B57525-7-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="A322B98399344D8ABEB0BFAAD1B57525-7-2">
+								<div id="A322B98399344D8ABEB0BFAAD1B57525-7-1"  class="kbcontent1" >&nbsp;</div>
+								<div id="A322B98399344D8ABEB0BFAAD1B57525-7-2"  
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							
+					</tr>
+				
+					<tr>
+							<th width="70" height="28" align="center">
+							第四节&nbsp;
+							</th>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="E9194FFE7A9B4EF1A839C4338E18E2D0-1-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="E9194FFE7A9B4EF1A839C4338E18E2D0-1-2">
+								<div id="E9194FFE7A9B4EF1A839C4338E18E2D0-1-1" class="kbcontent1">Web开发技术课程设计<br/><font title='周次(节次)'>25计算机（专升本）[13-14]班1-2(全部)</font><br/><font title='教室'>厚德楼306</font><br/></div>
+								<div id="E9194FFE7A9B4EF1A839C4338E18E2D0-1-2" style="display: none;" class="kbcontent" >Web开发技术课程设计[32][必修]<br/><font title='老师'>李路加</font><br/><font title='班级'>25计算机（专升本）[13-14]班<span title='选课人数'>(61)<br/>1-2(全部)[01-02-03-04-05-06-07-08节]</font><br/><font title='上课地点'>厚德楼306</font><br/></div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="E9194FFE7A9B4EF1A839C4338E18E2D0-2-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="E9194FFE7A9B4EF1A839C4338E18E2D0-2-2">
+								<div id="E9194FFE7A9B4EF1A839C4338E18E2D0-2-1" class="kbcontent1">移动应用开发技术课程设计<br/><font title='周次(节次)'>25计算机（专升本）[13-14]班3(全部)</font><br/><font title='教室'>厚德楼407</font><br/>-----------------<br>Web开发技术课程设计<br/><font title='周次(节次)'>25计算机（专升本）[13-14]班1-2(全部)</font><br/><font title='教室'>厚德楼401</font><br/>-----------------<br>移动应用开发技术课程设计<br/><font title='周次(节次)'>25计算机（专升本）[13-14]班4(全部)</font><br/><font title='教室'>厚德楼407</font><br/></div>
+								<div id="E9194FFE7A9B4EF1A839C4338E18E2D0-2-2"
+								style="display: none;" class="kbcontent">移动应用开发技术课程设计[32][必修]<br/><font title='老师'>左亚玲</font><br/><font title='班级'>25计算机（专升本）[13-14]班<span title='选课人数'>(61)<br/>3(全部)[01-02-03-04-05-06-07-08节]</font><br/><font title='上课地点'>厚德楼407</font><br/>---------------------<br>Web开发技术课程设计[32][必修]<br/><font title='老师'>李路加</font><br/><font title='班级'>25计算机（专升本）[13-14]班<span title='选课人数'>(61)<br/>1-2(全部)[01-02-03-04-05-06-07-08节]</font><br/><font title='上课地点'>厚德楼401</font><br/>---------------------<br>移动应用开发技术课程设计[32][必修]<br/><font title='老师'>左亚玲</font><br/><font title='班级'>25计算机（专升本）[13-14]班<span title='选课人数'>(61)<br/>4(全部)[01-02-03-04-05-06-07-08节]</font><br/><font title='上课地点'>厚德楼407</font><br/></div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="E9194FFE7A9B4EF1A839C4338E18E2D0-3-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="E9194FFE7A9B4EF1A839C4338E18E2D0-3-2">
+								<div id="E9194FFE7A9B4EF1A839C4338E18E2D0-3-1"  class="kbcontent1">&nbsp;</div>
+								<div id="E9194FFE7A9B4EF1A839C4338E18E2D0-3-2"  
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top" >
+								<input type="hidden" name="jx0415zbdiv_1" value="E9194FFE7A9B4EF1A839C4338E18E2D0-4-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="E9194FFE7A9B4EF1A839C4338E18E2D0-4-2">
+								<div id="E9194FFE7A9B4EF1A839C4338E18E2D0-4-1"  class="kbcontent1">移动应用开发技术课程设计<br/><font title='周次(节次)'>25计算机（专升本）[13-14]班3,5(全部)</font><br/><font title='教室'>厚德楼304</font><br/></div>
+								<div id="E9194FFE7A9B4EF1A839C4338E18E2D0-4-2"  
+								style="display: none;" class="kbcontent">移动应用开发技术课程设计[32][必修]<br/><font title='老师'>左亚玲</font><br/><font title='班级'>25计算机（专升本）[13-14]班<span title='选课人数'>(61)<br/>3,5(全部)[05-06-07-08节]</font><br/><font title='上课地点'>厚德楼304</font><br/></div>
+							</td>
+							<td width="123" height="28" align="center" valign="top"> 
+								<input type="hidden" name="jx0415zbdiv_1" value="E9194FFE7A9B4EF1A839C4338E18E2D0-5-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="E9194FFE7A9B4EF1A839C4338E18E2D0-5-2">
+								<div id="E9194FFE7A9B4EF1A839C4338E18E2D0-5-1"  class="kbcontent1" >&nbsp;</div>
+								<div id="E9194FFE7A9B4EF1A839C4338E18E2D0-5-2"  
+								style="display: none;" class="kbcontent" >&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="E9194FFE7A9B4EF1A839C4338E18E2D0-6-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="E9194FFE7A9B4EF1A839C4338E18E2D0-6-2">
+								<div id="E9194FFE7A9B4EF1A839C4338E18E2D0-6-1"  class="kbcontent1">&nbsp;</div>
+								<div id="E9194FFE7A9B4EF1A839C4338E18E2D0-6-2"  
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="E9194FFE7A9B4EF1A839C4338E18E2D0-7-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="E9194FFE7A9B4EF1A839C4338E18E2D0-7-2">
+								<div id="E9194FFE7A9B4EF1A839C4338E18E2D0-7-1"  class="kbcontent1" >&nbsp;</div>
+								<div id="E9194FFE7A9B4EF1A839C4338E18E2D0-7-2"  
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							
+					</tr>
+				
+					<tr>
+							<th width="70" height="28" align="center">
+							第五节&nbsp;
+							</th>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="A946E0E6ADBD4F8D8D58192D9DB537FE-1-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="A946E0E6ADBD4F8D8D58192D9DB537FE-1-2">
+								<div id="A946E0E6ADBD4F8D8D58192D9DB537FE-1-1" class="kbcontent1">&nbsp;</div>
+								<div id="A946E0E6ADBD4F8D8D58192D9DB537FE-1-2" style="display: none;" class="kbcontent" >&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="A946E0E6ADBD4F8D8D58192D9DB537FE-2-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="A946E0E6ADBD4F8D8D58192D9DB537FE-2-2">
+								<div id="A946E0E6ADBD4F8D8D58192D9DB537FE-2-1" class="kbcontent1">&nbsp;</div>
+								<div id="A946E0E6ADBD4F8D8D58192D9DB537FE-2-2"
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="A946E0E6ADBD4F8D8D58192D9DB537FE-3-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="A946E0E6ADBD4F8D8D58192D9DB537FE-3-2">
+								<div id="A946E0E6ADBD4F8D8D58192D9DB537FE-3-1"  class="kbcontent1">&nbsp;</div>
+								<div id="A946E0E6ADBD4F8D8D58192D9DB537FE-3-2"  
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top" >
+								<input type="hidden" name="jx0415zbdiv_1" value="A946E0E6ADBD4F8D8D58192D9DB537FE-4-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="A946E0E6ADBD4F8D8D58192D9DB537FE-4-2">
+								<div id="A946E0E6ADBD4F8D8D58192D9DB537FE-4-1"  class="kbcontent1">&nbsp;</div>
+								<div id="A946E0E6ADBD4F8D8D58192D9DB537FE-4-2"  
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top"> 
+								<input type="hidden" name="jx0415zbdiv_1" value="A946E0E6ADBD4F8D8D58192D9DB537FE-5-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="A946E0E6ADBD4F8D8D58192D9DB537FE-5-2">
+								<div id="A946E0E6ADBD4F8D8D58192D9DB537FE-5-1"  class="kbcontent1" >&nbsp;</div>
+								<div id="A946E0E6ADBD4F8D8D58192D9DB537FE-5-2"  
+								style="display: none;" class="kbcontent" >&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="A946E0E6ADBD4F8D8D58192D9DB537FE-6-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="A946E0E6ADBD4F8D8D58192D9DB537FE-6-2">
+								<div id="A946E0E6ADBD4F8D8D58192D9DB537FE-6-1"  class="kbcontent1">&nbsp;</div>
+								<div id="A946E0E6ADBD4F8D8D58192D9DB537FE-6-2"  
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="A946E0E6ADBD4F8D8D58192D9DB537FE-7-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="A946E0E6ADBD4F8D8D58192D9DB537FE-7-2">
+								<div id="A946E0E6ADBD4F8D8D58192D9DB537FE-7-1"  class="kbcontent1" >&nbsp;</div>
+								<div id="A946E0E6ADBD4F8D8D58192D9DB537FE-7-2"  
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							
+					</tr>
+				
+					<tr>
+							<th width="70" height="28" align="center">
+							第六节&nbsp;
+							</th>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="F69789F782914966930AF457E18F75BC-1-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="F69789F782914966930AF457E18F75BC-1-2">
+								<div id="F69789F782914966930AF457E18F75BC-1-1" class="kbcontent1">&nbsp;</div>
+								<div id="F69789F782914966930AF457E18F75BC-1-2" style="display: none;" class="kbcontent" >&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="F69789F782914966930AF457E18F75BC-2-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="F69789F782914966930AF457E18F75BC-2-2">
+								<div id="F69789F782914966930AF457E18F75BC-2-1" class="kbcontent1">&nbsp;</div>
+								<div id="F69789F782914966930AF457E18F75BC-2-2"
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="F69789F782914966930AF457E18F75BC-3-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="F69789F782914966930AF457E18F75BC-3-2">
+								<div id="F69789F782914966930AF457E18F75BC-3-1"  class="kbcontent1">&nbsp;</div>
+								<div id="F69789F782914966930AF457E18F75BC-3-2"  
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top" >
+								<input type="hidden" name="jx0415zbdiv_1" value="F69789F782914966930AF457E18F75BC-4-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="F69789F782914966930AF457E18F75BC-4-2">
+								<div id="F69789F782914966930AF457E18F75BC-4-1"  class="kbcontent1">&nbsp;</div>
+								<div id="F69789F782914966930AF457E18F75BC-4-2"  
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top"> 
+								<input type="hidden" name="jx0415zbdiv_1" value="F69789F782914966930AF457E18F75BC-5-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="F69789F782914966930AF457E18F75BC-5-2">
+								<div id="F69789F782914966930AF457E18F75BC-5-1"  class="kbcontent1" >&nbsp;</div>
+								<div id="F69789F782914966930AF457E18F75BC-5-2"  
+								style="display: none;" class="kbcontent" >&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="F69789F782914966930AF457E18F75BC-6-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="F69789F782914966930AF457E18F75BC-6-2">
+								<div id="F69789F782914966930AF457E18F75BC-6-1"  class="kbcontent1">&nbsp;</div>
+								<div id="F69789F782914966930AF457E18F75BC-6-2"  
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="F69789F782914966930AF457E18F75BC-7-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="F69789F782914966930AF457E18F75BC-7-2">
+								<div id="F69789F782914966930AF457E18F75BC-7-1"  class="kbcontent1" >&nbsp;</div>
+								<div id="F69789F782914966930AF457E18F75BC-7-2"  
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							
+					</tr>
+				
+					<tr>
+							<th width="70" height="28" align="center">
+							第七节&nbsp;
+							</th>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="217277FB9F0A4B0DAB22501579CC2173-1-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="217277FB9F0A4B0DAB22501579CC2173-1-2">
+								<div id="217277FB9F0A4B0DAB22501579CC2173-1-1" class="kbcontent1">&nbsp;</div>
+								<div id="217277FB9F0A4B0DAB22501579CC2173-1-2" style="display: none;" class="kbcontent" >&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="217277FB9F0A4B0DAB22501579CC2173-2-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="217277FB9F0A4B0DAB22501579CC2173-2-2">
+								<div id="217277FB9F0A4B0DAB22501579CC2173-2-1" class="kbcontent1">&nbsp;</div>
+								<div id="217277FB9F0A4B0DAB22501579CC2173-2-2"
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="217277FB9F0A4B0DAB22501579CC2173-3-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="217277FB9F0A4B0DAB22501579CC2173-3-2">
+								<div id="217277FB9F0A4B0DAB22501579CC2173-3-1"  class="kbcontent1">&nbsp;</div>
+								<div id="217277FB9F0A4B0DAB22501579CC2173-3-2"  
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top" >
+								<input type="hidden" name="jx0415zbdiv_1" value="217277FB9F0A4B0DAB22501579CC2173-4-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="217277FB9F0A4B0DAB22501579CC2173-4-2">
+								<div id="217277FB9F0A4B0DAB22501579CC2173-4-1"  class="kbcontent1">&nbsp;</div>
+								<div id="217277FB9F0A4B0DAB22501579CC2173-4-2"  
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top"> 
+								<input type="hidden" name="jx0415zbdiv_1" value="217277FB9F0A4B0DAB22501579CC2173-5-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="217277FB9F0A4B0DAB22501579CC2173-5-2">
+								<div id="217277FB9F0A4B0DAB22501579CC2173-5-1"  class="kbcontent1" >&nbsp;</div>
+								<div id="217277FB9F0A4B0DAB22501579CC2173-5-2"  
+								style="display: none;" class="kbcontent" >&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="217277FB9F0A4B0DAB22501579CC2173-6-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="217277FB9F0A4B0DAB22501579CC2173-6-2">
+								<div id="217277FB9F0A4B0DAB22501579CC2173-6-1"  class="kbcontent1">&nbsp;</div>
+								<div id="217277FB9F0A4B0DAB22501579CC2173-6-2"  
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							<td width="123" height="28" align="center" valign="top">
+								<input type="hidden" name="jx0415zbdiv_1" value="217277FB9F0A4B0DAB22501579CC2173-7-1">
+								<input type="hidden" name="jx0415zbdiv_2" value="217277FB9F0A4B0DAB22501579CC2173-7-2">
+								<div id="217277FB9F0A4B0DAB22501579CC2173-7-1"  class="kbcontent1" >&nbsp;</div>
+								<div id="217277FB9F0A4B0DAB22501579CC2173-7-2"  
+								style="display: none;" class="kbcontent">&nbsp;</div>
+							</td>
+							
+					</tr>
+				
+				<tr>
+					<th width="70" height="28" align="center">
+					备注:
+					</th> <td colspan="7" align="left">毕业实习 罗雯月 13-18周;企业项目实践 人工智能学院教师2 6-9周;Web开发技术课程设计 李路加 1-2周;移动应用开发技术课程设计 左亚玲 3,5周;</td>
+				</tr> 
+</table>
+</form>
+</div>
+</div>
+<br />
+
+<div id="Footer1_divCopyright" class="Nsb_pw" style="display:;">
+  <div class="Nsb_rights">Copyright (C) 湖南强智科技发展有限公司  All Rights Reserved 湘ICP 备12010071号</div>
+</div>
+<script language="javascript">
+loadjs();
+function loadjs(){
+if( ''!=''){
+alert('');
+}
+
+}
+
+//放大显示详细
+function funFD(flag){
+	if(flag){
+		var jx0415zbdiv_1 = document.getElementsByName("jx0415zbdiv_1");
+		for(var i = 0; i < jx0415zbdiv_1.length; i++){
+			document.getElementById(jx0415zbdiv_1[i].value).style.display="none";
+		}
+		var jx0415zbdiv_2 = document.getElementsByName("jx0415zbdiv_2");
+		for(var i = 0; i < jx0415zbdiv_2.length; i++){
+			document.getElementById(jx0415zbdiv_2[i].value).style.display="";
+		}
+	}else{
+		var jx0415zbdiv_1 = document.getElementsByName("jx0415zbdiv_1");
+		for(var i = 0; i < jx0415zbdiv_1.length; i++){
+			document.getElementById(jx0415zbdiv_1[i].value).style.display="";
+		}
+		var jx0415zbdiv_2 = document.getElementsByName("jx0415zbdiv_2");
+		for(var i = 0; i < jx0415zbdiv_2.length; i++){
+			document.getElementById(jx0415zbdiv_2[i].value).style.display="none";
+		}
+	}
+} 
+
+function search(obj){
+	if(obj != null){
+		obj.value = "查询中";
+		obj.disabled = true;
+	}
+	document.getElementById('Form1').submit();
+}
+function print(obj){
+	var url = "";
+	var xnxq01id = document.getElementById("xnxq01id").value ; 
+	var zc = document.getElementById("zc").value ;  
+	url += "?xnxq01id="+xnxq01id;
+	url += "&zc="+zc;
+	 
+	document.getElementById("FormPrint").action = "/cqdxcskjxy_jsxsd/xskb/xskb_print.do"+url;
+	document.getElementById("FormPrint").submit();
+}
+funFD(document.getElementById("sfFD").checked);
+
+</script>
+</body>
+</html>

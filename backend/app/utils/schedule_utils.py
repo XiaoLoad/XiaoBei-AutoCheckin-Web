@@ -6,6 +6,60 @@ from app.extensions import db
 from app.models.user import now_cst
 
 
+def resolve_config(schedule):
+    """解析任务真实执行配置（调度器与课表窗口展开共用同一口径）。
+    standalone（config_json 非空）= 任务自持完整配置，权威来源；
+    follow = 配置套 + 字段级覆盖浅合并（overrides 顶层键替换套内同键，未覆盖键继续跟随配置套）；
+    custom = 内联 time-only。缺配置返回 None。"""
+    if schedule.has_own_config:
+        return schedule.config or {}
+    if schedule.mode == 'follow':
+        if not schedule.config_set_id:
+            return None
+        from app.models.config_set import ConfigSet
+        cs = db.session.get(ConfigSet, schedule.config_set_id)
+        if cs is None:
+            return None
+        return {**(cs.config or {}), **(schedule.overrides or {})}
+    return schedule.custom or {}
+
+
+def resolve_activity_cfg(schedule):
+    """解析 activity 专属配置块（课表驱动调度）。返回归一化 dict 或 None：
+    None 表示非 activity 任务 / strategy=fixed（走原有固定 cron 语义）。
+    归一化字段：lead/tail（分钟）、poll（秒）、exclude（课程名列表）、
+    weekdays（None=不限，或 1..7 列表）、fallbackEnabled（每日兜底单次查询）。"""
+    if schedule.task_type != 'activity':
+        return None
+    act = (resolve_config(schedule) or {}).get('activity') or {}
+    if act.get('strategy') != 'course':
+        return None
+
+    def _clamp_int(v, lo, hi, default):
+        try:
+            v = int(v)
+        except (TypeError, ValueError):
+            return default
+        return max(lo, min(hi, v))
+
+    course = act.get('course') or {}
+    fallback = act.get('fallback') or {}
+    weekdays = course.get('weekdays')
+    if isinstance(weekdays, list) and weekdays:
+        weekdays = sorted({w for w in weekdays if isinstance(w, int) and 1 <= w <= 7}) or None
+    else:
+        weekdays = None
+    exclude = [str(x).strip() for x in (course.get('excludeCourses') or []) if str(x).strip()]
+    return {
+        'lead': _clamp_int(course.get('leadMinutes'), 0, 120, 15),
+        'tail': _clamp_int(course.get('tailMinutes'), 0, 120, 30),
+        'poll': _clamp_int(course.get('pollIntervalSec'), 30, 1800, 120),
+        'exclude': exclude,
+        'weekdays': weekdays,
+        'fallbackEnabled': bool(fallback.get('enabled', True)),
+    }
+
+
 def _extract_schedule_time(schedule):
     """返回 (hour, minute, weekdays[1..7])，缺失返回 (None, None, [])。
     standalone（config_json 非空）从任务自持配置取 time；follow 与调度器 _resolve 同口径：

@@ -134,12 +134,19 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     () => userConfigSets.value.find((s) => s.id === activeSetId.value) || userConfigSets.value[0] || null
   )
   const taskConfigKey = computed(() => `${selectedAccountId.value}:${selectedTaskType.value}`)
-  // 用户默认配置套（is_default 优先，否则取列表首个）：未绑定任务的下拉默认值与预览来源
-  const defaultSetId = computed(() => {
-    const d = userConfigSets.value.find((s) => s.isDefault)
+  // 按类型的默认配置套（寝室/活动各一条；is_default 优先，否则取该类型下首个）：
+  // 任务节点回填下拉的默认值与预览来源
+  function defaultSetIdFor(taskType) {
+    const t = taskType === 'activity' ? 'activity' : 'dorm'
+    const d = userConfigSets.value.find((s) => s.isDefault && s.taskType === t)
     if (d) return d.id
-    return userConfigSets.value[0]?.id || ''
-  })
+    return userConfigSets.value.find((s) => s.taskType === t)?.id || ''
+  }
+  // 按类型过滤的配置套下拉选项（寝室任务只列寝室套、活动任务只列活动套）
+  function setOptionsFor(taskType) {
+    const t = taskType === 'activity' ? 'activity' : 'dorm'
+    return userConfigSets.value.filter((s) => s.taskType === t).map((s) => ({ label: s.name, value: s.id }))
+  }
   // 任务自持配置草稿：账号任务配置界面编辑的是「本任务配置」的副本，
   // 保存时写回任务实例并解绑配置套（快照复制模型），绝不直接改共享配置套。
   const taskConfigDraft = ref(null)
@@ -168,17 +175,19 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     return norm(a) === norm(b)
   }
   // 找出与给定配置实质一致的配置套 id（用于定时任务页抽屉自定义修改后自动关联）。
-  // 优先返回任务当前来源套（若仍匹配），否则第一个匹配套；都不匹配返回 null。
-  function findMatchingConfigSetId(config) {
+  // 只在同类型套里找（寝室套/活动套与任务一一对应）。优先返回任务当前来源套（若仍匹配），
+  // 否则第一个匹配套；都不匹配返回 null。
+  function findMatchingConfigSetId(config, taskType) {
     if (!config) return null
+    const t = taskType === 'activity' ? 'activity' : 'dorm'
     const b = scheduleBindings.value[taskConfigKey.value]
     const ownSetId = b ? b.configSetId : null
     if (ownSetId) {
-      const ownSet = userConfigSets.value.find((s) => s.id === ownSetId)
+      const ownSet = userConfigSets.value.find((s) => s.id === ownSetId && s.taskType === t)
       if (ownSet && configsEqual(config, ownSet.config)) return ownSetId
     }
     for (const s of userConfigSets.value) {
-      if (s.id !== ownSetId && configsEqual(config, s.config)) return s.id
+      if (s.id !== ownSetId && s.taskType === t && configsEqual(config, s.config)) return s.id
     }
     return null
   }
@@ -230,6 +239,9 @@ export const useSignConfigStore = defineStore('signConfig', () => {
       const set = userConfigSets.value.find((s) => s.id === setId)
       src = set ? set.config : null          // 仍跟随：预览绑定/所选套（只读源）
     }
+    // 骨架垫底：历史任务快照可能缺 activity 等新增顶层块，直接克隆会让新 section
+    // 读深层字段时渲染崩溃（与配置套 mapSetIn 同款防护）。快照同步垫平，isDirty 比对一致。
+    if (src) src = { ...api.makeConfig(), ...src }
     taskConfigDraft.value = src ? JSON.parse(JSON.stringify(src)) : null
     draftSourceSnapshot.value = src ? JSON.parse(JSON.stringify(src)) : null
   }
@@ -307,7 +319,6 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     }
     return map
   })
-  const setOptions = computed(() => userConfigSets.value.map((s) => ({ label: s.name, value: s.id })))
 
   // 任务状态：自持配置且解绑 / 自持配置且保留源自标签 / 仍跟随配置套 / 未关联
   const taskStatus = computed(() => {
@@ -446,10 +457,10 @@ export const useSignConfigStore = defineStore('signConfig', () => {
       saving.value = false
     }
   }
-  async function createConfigSet(name) {
+  async function createConfigSet(name, taskType = 'dorm') {
     saving.value = true
     try {
-      const saved = await api.saveConfigSet({ name: name || `配置套 ${userConfigSets.value.length + 1}`, config: api.makeConfig() })
+      const saved = await api.saveConfigSet({ name: name || `配置套 ${userConfigSets.value.length + 1}`, config: api.makeConfig(), taskType })
       userConfigSets.value = saved
       activeSetId.value = saved[saved.length - 1].id
     } finally {
@@ -482,12 +493,13 @@ export const useSignConfigStore = defineStore('signConfig', () => {
   // ── 账号任务配置（A 方案语义）：选套编辑 / 启用 / 暂停 / 换绑 ──
   // 未绑定任务的本地选套：下拉选择即以该套为编辑目标；点「启用定时任务」时创建实例并绑定它
   const selectedBindSetId = ref('')
-  // 实际生效的编辑目标：优先下拉所选（所挑即所见，可预览其他套），其次已绑定套，再回退默认套
+  // 实际生效的编辑目标：优先下拉所选（所挑即所见，可预览其他套），其次已绑定套，
+  // 再回退当前任务类型的默认套（寝室任务回寝室默认套、活动任务回活动默认套）
   const effectiveBindSetId = computed(() => {
     return (
       selectedBindSetId.value ||
       (scheduleBindings.value[taskConfigKey.value] || {}).configSetId ||
-      defaultSetId.value
+      defaultSetIdFor(selectedTaskType.value)
     )
   })
   function selectBindSet(id) {
@@ -551,7 +563,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
   // 若草稿与某配置套实质一致则保留该套为来源标签（关联），否则与配置套解绑。
   // 与 saveTaskConfig 的「一律解绑」语义不同——用于定时任务页抽屉，贴合需求 G 的关联要求。
   // scheduleId 优先用调用方传入的权威任务 id（抽屉从卡片拿到），避免依赖 scheduleBindings 键匹配。
-  async function saveTaskConfigLinked(scheduleId) {
+  async function saveTaskConfigLinked(scheduleId, taskType) {
     const draft = taskConfigDraft.value
     if (!draft) {
       toast('暂无可保存的配置', 'error')
@@ -579,7 +591,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
         toast('任务实例不存在', 'error')
         return false
       }
-      const matchId = findMatchingConfigSetId(draft)
+      const matchId = findMatchingConfigSetId(draft, taskType)
       await api.updateSchedule({
         id,
         config: JSON.parse(JSON.stringify(draft)),
@@ -1010,7 +1022,8 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     userConfigSets,
     activeSetId,
     scheduleBindings,
-    defaultSetId,
+    defaultSetIdFor,
+    setOptionsFor,
     systemLocations,
     userLocations,
     imageLibrary,
@@ -1036,7 +1049,6 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     credentialOptionsByChannel,
     uaOptions,
     channelOptions,
-    setOptions,
     load,
     refreshBindings,
     saveActiveSet,

@@ -42,7 +42,7 @@
             <div class="flex flex-wrap items-center gap-2 rounded-lg bg-cloud/50 px-3 py-2.5">
               <span class="shrink-0 text-xs text-ink-soft">关联套</span>
               <div class="w-48">
-                <BaseSelect v-model="bindPick" :options="signConfigStore.setOptions" :searchable="true" size="sm" placeholder="选择配置套" />
+                <BaseSelect v-model="bindPick" :options="signConfigStore.setOptionsFor(props.schedule.taskType)" :searchable="true" size="sm" placeholder="选择配置套" />
               </div>
               <button
                 type="button"
@@ -76,6 +76,12 @@
             </div>
             <MasonryGrid>
               <TimeSection :config="signConfigStore.taskConfig" :required="true" :error="signConfigStore.formErrors.time" />
+              <!-- 活动签到专属：课表驱动调度（按任务类型显示，寝室任务无此块） -->
+              <ActivitySection
+                v-if="props.schedule.taskType === 'activity'"
+                :config="signConfigStore.taskConfig"
+                :account-id="String(props.schedule.accountId || '')"
+              />
               <LocationSection :config="signConfigStore.taskConfig" :required="true" :error="signConfigStore.formErrors.location" />
               <RemarkSection :config="signConfigStore.taskConfig" :required="true" :error="signConfigStore.formErrors.remarks" />
               <ImageSection :config="signConfigStore.taskConfig" />
@@ -147,6 +153,7 @@ import { useSchedulesStore } from '@/stores/schedules'
 import { useRefreshBusStore } from '@/stores/refreshBus'
 import { toast } from '@/utils/toast'
 import TimeSection from '@/components/signconfig/sections/TimeSection.vue'
+import ActivitySection from '@/components/signconfig/sections/ActivitySection.vue'
 import LocationSection from '@/components/signconfig/sections/LocationSection.vue'
 import RemarkSection from '@/components/signconfig/sections/RemarkSection.vue'
 import ImageSection from '@/components/signconfig/sections/ImageSection.vue'
@@ -250,7 +257,7 @@ async function confirmSave() {
   await doSave()
 }
 async function doSave() {
-  const ok = await signConfigStore.saveTaskConfigLinked(props.schedule.id)
+  const ok = await signConfigStore.saveTaskConfigLinked(props.schedule.id, props.schedule.taskType)
   if (ok) await refreshSchedulesView()
 }
 

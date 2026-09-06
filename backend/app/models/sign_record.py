@@ -26,6 +26,9 @@ class SignRecord(db.Model):
     # 实际单条备注/平台任务 ID/图片策略与回退提示等），供详情回显「提交参数」。
     # 未进入提交阶段（如被跳过或提交前已失败）则为 NULL。
     submit_params = db.Column(db.Text)
+    # 课程溯源（活动签到课表驱动调度）：窗口轮询命中活动时记录所属课程名；
+    # 寝室签到与固定策略活动为 NULL
+    course_name = db.Column(db.String(64))
     # 索引：保留策略清理 job 按 created_at 做范围 DELETE，无索引时退化为全表扫描
     created_at = db.Column(db.DateTime, default=now_cst, index=True)
 

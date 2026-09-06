@@ -511,11 +511,15 @@ const confirmText = computed(() =>
     : `将关闭所选 ${selectedCount.value} 个任务，关闭后不再自动签到（配置保留）。`
 )
 
-// 可选配置套：前置一个「不设置」空选项（值 ''），默认不套用、用各自现有配置
+// 可选配置套：前置一个「不设置」空选项（值 ''），默认不套用、用各自现有配置。
+// 配置套已类型化（寝室/活动），带前缀标签防误选；类型不符的目标由后端跳过并在结果中给原因
 const pickSetId = ref('')
 const setPickOptions = computed(() => [
   { label: '不设置（用各自现有配置）', value: '' },
-  ...store.setOptions,
+  ...store.userConfigSets.map((s) => ({
+    label: `${s.taskType === 'activity' ? '活动' : '寝室'} · ${s.name}`,
+    value: s.id
+  })),
 ])
 
 const accEnabled = (acc) => acc.status === 'enabled'

@@ -108,6 +108,8 @@ def task_logs():
         'taskName': r.task_name or '',
         'taskType': r.task_type or '',
         'taskLabel': '寝室签到' if r.task_type == 'dorm' else '活动签到',
+        # 课程溯源（活动课表窗口轮询命中时记录；寝室/固定策略为空）
+        'courseName': r.course_name or '',
         'signDate': r.sign_date.strftime('%Y-%m-%d') if r.sign_date else '',
         'signedAt': r.signed_at.strftime('%Y-%m-%d %H:%M:%S') if r.signed_at else '',
         'createdAt': r.created_at.strftime('%Y-%m-%d %H:%M:%S') if r.created_at else '',

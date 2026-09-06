@@ -9,10 +9,12 @@ from app.models.pools import PoolLocation, PoolCredential, PoolUa, PoolImage, Im
 from app.models.schedule import Schedule
 from app.models.sign_record import SignRecord
 from app.models.push_log import PushLog
+from app.models.jwxt import JwAccount, JwSemester, JwTimetable, ActivityWindow
 
 __all__ = [
     'db', 'User', 'TokenBlacklist', 'SystemConfig',
     'BAccount', 'ConfigSet',
     'PoolLocation', 'PoolCredential', 'PoolUa', 'PoolImage', 'ImageGroup',
     'Schedule', 'SignRecord', 'PushLog',
+    'JwAccount', 'JwSemester', 'JwTimetable', 'ActivityWindow',
 ]

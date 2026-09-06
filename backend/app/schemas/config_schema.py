@@ -54,6 +54,13 @@ def _clean_activity(act):
         if not isinstance(exclude, list) or any(not isinstance(x, str) for x in exclude):
             return False, None
         cleaned['excludeCourses'] = exclude
+        # 块级排除（"周|课程|小节段"键）：同一门课可按上课时段单独排除（如只签第一节课）
+        exclude_blocks = course.get('excludeBlocks')
+        if exclude_blocks is None:
+            exclude_blocks = []
+        if not isinstance(exclude_blocks, list) or any(not isinstance(x, str) for x in exclude_blocks):
+            return False, None
+        cleaned['excludeBlocks'] = exclude_blocks
         weekdays = course.get('weekdays')
         if weekdays is None:
             weekdays = []

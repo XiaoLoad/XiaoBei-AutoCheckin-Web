@@ -24,8 +24,20 @@ def test_activity_block_normalized_with_defaults():
     assert act['course']['tailMinutes'] == 30
     assert act['course']['pollIntervalSec'] == 120
     assert act['course']['excludeCourses'] == []
+    assert act['course']['excludeBlocks'] == []     # 块级排除默认为空
     assert act['course']['weekdays'] == []          # 空 = 不限星期
     assert act['fallback'] == {'enabled': True}     # 兜底默认开
+
+
+def test_activity_block_exclude_blocks_accepted():
+    base = _base_config()
+    ok, cfg = sanitize_config({**base, 'activity': {
+        'strategy': 'course',
+        'course': {'excludeBlocks': ['4|移动应用开发技术课程设计|5-8', '7|毕业实习|1-2']},
+    }})
+    assert ok
+    assert cfg['activity']['course']['excludeBlocks'] == [
+        '4|移动应用开发技术课程设计|5-8', '7|毕业实习|1-2']
 
 
 def test_activity_block_rejects_bad_values():

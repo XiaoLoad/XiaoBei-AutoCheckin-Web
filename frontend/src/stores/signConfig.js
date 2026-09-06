@@ -241,7 +241,10 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     }
     // 骨架垫底：历史任务快照可能缺 activity 等新增顶层块，直接克隆会让新 section
     // 读深层字段时渲染崩溃（与配置套 mapSetIn 同款防护）。快照同步垫平，isDirty 比对一致。
-    if (src) src = { ...api.makeConfig(), ...src }
+    if (src) {
+      src = { ...api.makeConfig(), ...src }
+      api.ensureActivityConfig(src.activity)
+    }
     taskConfigDraft.value = src ? JSON.parse(JSON.stringify(src)) : null
     draftSourceSnapshot.value = src ? JSON.parse(JSON.stringify(src)) : null
   }

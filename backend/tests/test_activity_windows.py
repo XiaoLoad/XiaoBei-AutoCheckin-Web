@@ -60,7 +60,7 @@ def jw_env(app_ctx):
         'fence': {'intercept': True},
         'activity': {'strategy': 'course', 'course': {'leadMinutes': 15, 'tailMinutes': 30,
                                                       'pollIntervalSec': 120,
-                                                      'excludeCourses': ['企业项目实践']},
+                                                      'excludeBlocks': ['7|形势与政策4|3-4']},
                      'fallback': {'enabled': False}},
     })
     db.session.add(cs)
@@ -94,7 +94,8 @@ def test_resolve_activity_cfg_normalization(jw_env):
     sched = jw_env['schedule']
     act = resolve_activity_cfg(sched)
     assert act is not None
-    assert act == {'lead': 15, 'tail': 30, 'poll': 120, 'exclude': ['企业项目实践'],
+    assert act == {'lead': 15, 'tail': 30, 'poll': 120, 'exclude': [],
+                   'excludeBlocks': ['7|形势与政策4|3-4'],
                    'weekdays': None, 'fallbackEnabled': False}
 
 
@@ -118,19 +119,18 @@ def test_expand_windows_monday_week1(jw_env):
     assert w.done is False
 
 
-def test_expand_windows_sunday_and_exclude(jw_env):
-    # 第 5 周周日：形势与政策4 有窗口；第 6 周周三的企业项目实践被 excludeCourses 排除
+def test_expand_windows_sunday_block_excluded(jw_env):
+    # 块级排除："7|形势与政策4|3-4" 只干掉周日该时段；其他块照常展开
     sched = jw_env['schedule']
-    expand_windows_for_schedule(sched, today=date(2026, 10, 11))   # 第 5 周周日（教务口径）
-    rows = ActivityWindow.query.filter_by(schedule_id=sched.id).all()
-    assert [w.course_name for w in rows] == ['形势与政策4']
-    assert rows[0].start_at == datetime(2026, 10, 11, 10, 10)   # 10:25 - 15
-    assert rows[0].end_at == datetime(2026, 10, 11, 12, 35)     # 12:05 + 30
+    expand_windows_for_schedule(sched, today=date(2026, 10, 11))   # 第 5 周周日
+    rows = ActivityWindow.query.filter_by(schedule_id=sched.id, date=date(2026, 10, 11)).all()
+    assert rows == []   # 形势与政策4 被块级排除
 
     expand_windows_for_schedule(sched, today=date(2026, 10, 14))   # 第 6 周周三
-    # 展开按日期替换：仅当日窗口应为空（企业项目实践被排除，周三无其余课程）
     rows = ActivityWindow.query.filter_by(schedule_id=sched.id, date=date(2026, 10, 14)).all()
-    assert rows == []
+    # 企业项目实践（6-9 周，周三 1-2 节）未被排除，照常展开
+    assert [w.course_name for w in rows] == ['企业项目实践']
+    assert rows[0].start_at == datetime(2026, 10, 14, 8, 5)
 
 
 def test_expand_windows_holiday_clears(jw_env):

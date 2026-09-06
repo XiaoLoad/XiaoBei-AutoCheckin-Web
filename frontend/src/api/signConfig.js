@@ -57,6 +57,20 @@ export function makeConfig() {
   }
 }
 
+// activity 块骨架兜底：历史/脏数据可能只有 {strategy:...} 甚至空对象，模板深绑定
+// config.activity.course.* 会直接崩。无条件补齐 course/fallback 内层对象与默认值，
+// 返回同一引用（就地修复，保持响应式）。
+export function ensureActivityConfig(activity) {
+  if (!activity || typeof activity !== 'object') return activity
+  const full = makeConfig().activity
+  const course = activity.course && typeof activity.course === 'object' ? activity.course : {}
+  activity.course = { ...full.course, ...course }
+  const fallback = activity.fallback && typeof activity.fallback === 'object' ? activity.fallback : {}
+  activity.fallback = { ...full.fallback, ...fallback }
+  if (!activity.strategy) activity.strategy = 'fixed'
+  return activity
+}
+
 // ── 元信息：账号来自真实 /api/accounts ──
 export async function fetchConfigMeta() {
   const accounts = await fetchAccounts()
@@ -83,14 +97,18 @@ export async function fetchConfigMeta() {
 // 字段时渲染崩溃（曾致整个签到配置 keep-alive 子树白屏，图库入口随之不可用）
 // 配置套已按适用类型分类（taskType: dorm 寝室 / activity 活动，创建后锁定）：
 // 寝室套编辑器不含活动调度卡片；绑定/批量应用按类型一一对应
-const mapSetIn = (s) => ({
-  id: String(s.id),
-  name: s.name,
-  isDefault: !!s.isDefault,
-  taskType: s.taskType === 'activity' ? 'activity' : 'dorm',
-  // locationId 后端返回整数，前端选项值均为字符串；统一转字符串，避免 === 比对失败导致刷新后位置显示为空
-  config: { ...makeConfig(), ...(s.config || {}), locationId: s.locationId != null ? String(s.locationId) : null }
-})
+const mapSetIn = (s) => {
+  const config = { ...makeConfig(), ...(s.config || {}) }
+  ensureActivityConfig(config.activity)
+  return {
+    id: String(s.id),
+    name: s.name,
+    isDefault: !!s.isDefault,
+    taskType: s.taskType === 'activity' ? 'activity' : 'dorm',
+    // locationId 后端返回整数，前端选项值均为字符串；统一转字符串，避免 === 比对失败导致刷新后位置显示为空
+    config: { ...config, locationId: s.locationId != null ? String(s.locationId) : null }
+  }
+}
 
 export async function fetchConfigSets() {
   const data = await request({ url: '/config-sets', method: 'get' })

@@ -11,7 +11,7 @@
             type="button"
             class="rounded-lg px-3 py-1.5 text-sm font-medium transition"
             :class="config.activity.strategy === m.value ? 'bg-white text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
-            @click="config.activity.strategy = m.value"
+            @click="onStrategy(m.value)"
           >
             {{ m.label }}
           </button>
@@ -105,76 +105,84 @@
           </div>
         </div>
 
-        <!-- 窗口参数 -->
+        <!-- 自动签到时机：用户语言描述，替代"开窗/关窗"术语 -->
         <div>
-          <label class="mb-1.5 block text-xs font-medium text-ink-muted">轮询窗口参数</label>
-          <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <div class="flex items-center gap-1.5">
-              <span class="text-xs text-ink-muted">课前提前</span>
+          <label class="mb-1.5 block text-xs font-medium text-ink-muted">自动签到时机</label>
+          <div class="space-y-2.5">
+            <div class="flex items-center gap-2">
+              <span class="shrink-0 text-xs text-ink-muted">上课前</span>
               <input
                 v-model.number="config.activity.course.leadMinutes"
                 type="number" min="0" max="120"
                 class="w-20 rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
               />
-              <span class="text-xs text-ink-muted">分开窗</span>
+              <span class="text-xs text-ink-muted">分钟开始留意签到</span>
             </div>
-            <div class="flex items-center gap-1.5">
-              <span class="text-xs text-ink-muted">课后延续</span>
+            <div class="flex items-center gap-2">
+              <span class="shrink-0 text-xs text-ink-muted">下课后继续留意</span>
               <input
                 v-model.number="config.activity.course.tailMinutes"
                 type="number" min="0" max="120"
                 class="w-20 rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
               />
-              <span class="text-xs text-ink-muted">分关窗</span>
-            </div>
-            <div class="flex items-center gap-1.5">
-              <span class="text-xs text-ink-muted">每</span>
-              <input
-                v-model.number="config.activity.course.pollIntervalSec"
-                type="number" min="30" max="1800" step="30"
-                class="w-20 rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
-              />
-              <span class="text-xs text-ink-muted">秒查询一次</span>
+              <span class="text-xs text-ink-muted">分钟</span>
             </div>
           </div>
-          <p class="mt-1.5 text-xs text-ink-muted">窗口内按间隔查询活动发布情况，查到即自动签到；未查到不产生任何记录。</p>
+          <p class="mt-1.5 text-xs leading-relaxed text-ink-muted">
+            有课的日子，从上课前到下课后这段时间里，系统会自动留意老师发布的签到并代签；没课的日子完全不打扰。
+          </p>
+        </div>
+
+        <!-- 高级：查询频率（渐进披露，默认收起） -->
+        <div>
+          <button
+            type="button"
+            class="flex items-center gap-1 text-xs text-ink-muted transition hover:text-ink-soft"
+            @click="showAdvanced = !showAdvanced"
+          >
+            <Icon name="chevron" :size="13" :class="showAdvanced ? 'rotate-90 transition' : 'transition'" />高级 · 查询频率
+          </button>
+          <div v-if="showAdvanced" class="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-cloud px-3 py-2">
+            <span class="text-xs text-ink-muted">留意时段内每</span>
+            <input
+              v-model.number="config.activity.course.pollIntervalSec"
+              type="number" min="30" max="1800" step="30"
+              class="w-20 rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
+            />
+            <span class="text-xs text-ink-muted">秒检查一次（默认 120 秒，一般无需修改）</span>
+          </div>
         </div>
 
         <!-- 每日兜底 -->
         <div>
           <label class="flex cursor-pointer items-center gap-2">
             <input v-model="config.activity.fallback.enabled" type="checkbox" class="h-4 w-4 accent-brand" />
-            <span class="text-sm text-ink">每日兜底查询</span>
+            <span class="text-sm text-ink">每天固定时刻也查一次临时活动</span>
           </label>
           <p class="mt-1 text-xs leading-relaxed text-ink-muted">
-            开启后仍按上方「时间配置」的时刻每天查询一次，覆盖无固定节次的实践课与临时活动；关闭则完全依赖课表窗口（无课日零查询）。
+            按上方「时间配置」的时刻，每天额外查询一次——覆盖不按课表上的实践课与临时活动；关闭则只跟课表走。
           </p>
         </div>
 
-        <!-- 课程排除 + 当日窗口预览（需账号与课表数据） -->
+        <!-- 课表与调度入口 + 当日窗口预览（需账号与课表数据） -->
         <template v-if="accountId">
           <div>
-            <label class="mb-1.5 block text-xs font-medium text-ink-muted">不参与调度的课程</label>
-            <div v-if="courseNames.length" class="flex flex-wrap gap-1.5">
+            <div class="flex items-center justify-between gap-2 rounded-lg bg-cloud px-3 py-2.5">
+              <span class="min-w-0 truncate text-xs text-ink-soft">{{ scheduleSummary }}</span>
               <button
-                v-for="c in courseNames"
-                :key="c"
                 type="button"
-                class="rounded-lg border px-3 py-1.5 text-sm transition"
-                :class="isExcluded(c) ? 'border-ink/10 bg-ink/5 text-ink-muted line-through' : 'border-brand/40 bg-brand/5 text-ink-soft hover:bg-brand/10'"
-                :title="isExcluded(c) ? '点击恢复该课程的课表调度' : '点击排除该课程（不展开轮询窗口）'"
-                @click="toggleExclude(c)"
+                class="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-brand/30 bg-brand/5 px-3 text-xs font-medium text-brand transition hover:bg-brand/10 disabled:opacity-40"
+                :disabled="!overview?.bound"
+                @click="showTimetable = true"
               >
-                {{ c }}
+                <Icon name="calendar" :size="13" />查看课表与调度
               </button>
             </div>
-            <p v-else class="rounded-lg bg-cloud px-3 py-2 text-xs text-ink-muted">
-              {{ overview?.bound ? '课表暂无课程数据，可尝试「立即同步」。' : '绑定教务账号并同步课表后，可在此排除不需要调度的课程（如毕业实习）。' }}
-            </p>
+            <p class="mt-1.5 text-xs text-ink-muted">在课表上点亮要自动签到的课、熄灭不参与的时段；改动随任务保存生效。</p>
           </div>
 
           <div v-if="todayWindows.length">
-            <label class="mb-1.5 block text-xs font-medium text-ink-muted">今日轮询窗口</label>
+            <label class="mb-1.5 block text-xs font-medium text-ink-muted">今日安排</label>
             <ul class="space-y-1">
               <li
                 v-for="w in todayWindows"
@@ -185,22 +193,32 @@
                 <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="w.done ? 'bg-ink/20' : 'bg-success'" />
                 <span class="min-w-0 flex-1 truncate">{{ w.courseName || '未命名课程' }}</span>
                 <span class="shrink-0 font-mono">{{ shortTime(w.startAt) }} ~ {{ shortTime(w.endAt) }}</span>
-                <span class="shrink-0">{{ w.done ? '已结束' : '待轮询' }}</span>
+                <span class="shrink-0">{{ w.done ? '已结束' : '留意中' }}</span>
               </li>
             </ul>
           </div>
         </template>
       </template>
     </div>
+
+    <!-- 课表与调度抽屉（块级开关，写入 excludeBlocks 草稿） -->
+    <ActivityTimetableDrawer
+      v-if="showTimetable && accountId"
+      :account-id="accountId"
+      :config="config"
+      @close="showTimetable = false"
+    />
   </ConfigSection>
 </template>
 
 <script setup>
-import { computed, reactive, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import ConfigSection from '@/components/signconfig/ConfigSection.vue'
 import Icon from '@/components/Icon.vue'
+import ActivityTimetableDrawer from '@/components/signconfig/ActivityTimetableDrawer.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
 import { useJwxtStore } from '@/stores/jwxt'
+import { ensureActivityConfig } from '@/api/signConfig'
 
 const props = defineProps({
   config: { type: Object, required: true },
@@ -218,6 +236,19 @@ const strategies = [
   { value: 'course', label: '按课表自动' }
 ]
 
+// 骨架兜底：历史/脏数据的 activity 可能是 {} 或缺 course/fallback 内层，模板深绑定
+// course.leadMinutes 会崩；挂载/换配置时就地补齐。
+watch(
+  () => props.config,
+  (cfg) => ensureActivityConfig(cfg?.activity),
+  { immediate: true }
+)
+// 切换策略前强制补齐一次：无论 activity 处于什么残缺形状，深绑定都不至于踩空
+function onStrategy(v) {
+  ensureActivityConfig(props.config.activity)
+  props.config.activity.strategy = v
+}
+
 const overview = computed(() => (props.accountId ? jwxtStore.overviewOf(props.accountId) : null))
 // 同步进行中：本会话已提交（syncing）或后端队列仍在执行（syncRunning，跨页面/刷新后仍可见）
 const isSyncing = computed(() => {
@@ -226,11 +257,20 @@ const isSyncing = computed(() => {
 })
 const className = computed(() => overview.value?.className || '')
 const todayWindows = computed(() => overview.value?.windows || [])
-// 去重后的课程名清单（同一课程不同周次/节次只出现一次）
-const courseNames = computed(() => {
-  const set = new Set()
-  for (const c of overview.value?.courses || []) set.add(c.course)
-  return Array.from(set)
+
+// 课表抽屉与调度摘要
+const showTimetable = ref(false)
+const showAdvanced = ref(false)
+const scheduleSummary = computed(() => {
+  if (!overview.value?.bound) return '绑定教务账号并同步课表后，可按课程安排自动签到'
+  const blocks = overview.value.courses || []
+  const excluded = props.config.activity?.course?.excludeBlocks || []
+  const legacyNames = props.config.activity?.course?.excludeCourses || []
+  const excludedCount = blocks.filter((b) => excluded.includes(b.blockKey) || legacyNames.includes(b.course)).length
+  const active = blocks.length - excludedCount
+  return excludedCount
+    ? `${active} 个时段参与调度 · ${excludedCount} 个已排除`
+    : `${blocks.length} 个时段全部参与调度`
 })
 
 // 绑定表单：学号默认取 B 平台档案回填的学号（与教务学号一致，设计文档 §4.4）
@@ -254,16 +294,6 @@ watch(
   },
   { immediate: true }
 )
-
-function isExcluded(name) {
-  return (props.config.activity.course.excludeCourses || []).includes(name)
-}
-function toggleExclude(name) {
-  const list = props.config.activity.course.excludeCourses
-  const i = list.indexOf(name)
-  if (i === -1) list.push(name)
-  else list.splice(i, 1)
-}
 
 async function onBind() {
   const ok = await jwxtStore.bind(props.accountId, {

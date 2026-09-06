@@ -50,11 +50,13 @@ def resolve_activity_cfg(schedule):
     else:
         weekdays = None
     exclude = [str(x).strip() for x in (course.get('excludeCourses') or []) if str(x).strip()]
+    exclude_blocks = [str(x).strip() for x in (course.get('excludeBlocks') or []) if str(x).strip()]
     return {
         'lead': _clamp_int(course.get('leadMinutes'), 0, 120, 15),
         'tail': _clamp_int(course.get('tailMinutes'), 0, 120, 30),
         'poll': _clamp_int(course.get('pollIntervalSec'), 30, 1800, 120),
         'exclude': exclude,
+        'excludeBlocks': exclude_blocks,
         'weekdays': weekdays,
         'fallbackEnabled': bool(fallback.get('enabled', True)),
     }

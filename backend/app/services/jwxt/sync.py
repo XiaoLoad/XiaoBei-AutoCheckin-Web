@@ -208,6 +208,16 @@ def unbind_b_account(b_account_id):
 
 # ===== 当日活动签到窗口展开 =====
 
+def block_key(entry):
+    """课表时段块的稳定键："星期|课程名|小节段"（小节段为 min-max 紧凑形式）。
+    块级排除（excludeBlocks）以此为粒度：同一门课的不同上课时段可单独排除。"""
+    secs = entry.sections or []
+    if not secs:
+        return ''
+    seg = f'{min(secs)}-{max(secs)}' if len(secs) > 1 else f'{min(secs)}'
+    return f'{entry.weekday}|{entry.course}|{seg}'
+
+
 def current_week_of(today, sem_row):
     """教学周次：第 1 周周一为基准；周历之外（寒暑假）返回 0。"""
     if today < sem_row.week1_monday:
@@ -251,12 +261,15 @@ def expand_windows_for_schedule(schedule, today=None):
                 times = get_period_times()
                 max_idx = max(times) if times else 0
                 weekday = today.isoweekday()
+                exclude_block_set = set(act['excludeBlocks'])
                 for e in tt.entries:
                     if e.weekday != weekday or week not in e.weeks:
                         continue
                     if act['weekdays'] is not None and weekday not in act['weekdays']:
                         continue
                     if e.course in act['exclude']:
+                        continue
+                    if exclude_block_set and block_key(e) in exclude_block_set:
                         continue
                     if not e.sections:
                         continue
@@ -321,20 +334,31 @@ def jwxt_overview(b_account_id):
     if tt is not None:
         seen = {}
         for e in tt.entries:
-            key = (e.course, tuple(sorted(e.weeks)))
-            if key in seen:
+            # 按块+周次去重：同一时段块的不同周次是独立条目（如第 3、4 周各上一次的课
+            # 都要出现在课表视图）；blockKey 不含周次——块级排除按"时段"语义，同一
+            # 块的所有周次联动排除
+            key = block_key(e)
+            if not key:
                 continue
-            seen[key] = {
+            weeks_tag = ','.join(str(w) for w in sorted(e.weeks))
+            full_key = f'{key}|{weeks_tag}'
+            if full_key in seen:
+                continue
+            seen[full_key] = {
                 'course': e.course, 'weeks': sorted(e.weeks), 'weekday': e.weekday,
+                'sections': sorted(e.sections), 'blockKey': key,
                 'teacher': e.teacher, 'room': e.room,
             }
-        courses = sorted(seen.values(), key=lambda x: x['course'])
+        courses = sorted(seen.values(), key=lambda x: (x['weekday'], min(x['sections'])))
     acc = db.session.get(BAccount, b_account_id)
     return {
         'bound': True,
         'account': jw.to_dict(),
         'semester': sem_row.to_dict() if sem_row else None,
         'courses': courses,
+        # 生效作息表（小节 → 钟点），供前端课表视图渲染时间段；键为字符串化小节号
+        'periodTimes': {str(k): [v[0].strftime('%H:%M'), v[1].strftime('%H:%M')]
+                        for k, v in sorted(get_period_times().items())},
         'timetableSyncedAt': tt.synced_at.strftime('%Y-%m-%d %H:%M') if tt and tt.synced_at else '',
         'className': (acc.profile.get('className') or '') if acc else '',
         'syncRunning': is_sync_running(b_account_id),

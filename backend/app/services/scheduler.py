@@ -661,6 +661,9 @@ def _checkin_flow(schedule, acc, session, resolved, remark):
         attempt['task_start'] = task.get('startTime') or ''
         attempt['task_end'] = task.get('endTime') or ''
         attempt['need_photo'] = bool(task.get('needPhoto'))
+        # 任务发起人为 B 平台任务字段（sendName · sendRole），透传给推送与详情，
+        # 替换此前硬编码的「系统自动」占位。无 task（如跳过无进行中任务）时为空。
+        attempt['initiator'] = task.get('initiator') or ''
 
         # ② 平台任务时间窗（know 'HH:mm:ss' / sign 'HH:mm'）
         ts = _parse_platform_time(task.get('startTime'))
@@ -1039,7 +1042,8 @@ def dispatch_push(resolved, schedule, acc, status='success', reason='', image_ur
                     image_url=image_url, remark=submitted_remark or None,
                     task_name=extra.get('task_name') or '',
                     task_window=f'{start}~{end}' if (start or end) else '',
-                    need_photo=extra.get('need_photo'))
+                    need_photo=extra.get('need_photo'),
+                    initiator=extra.get('initiator') or '')
 
     if len(creds) == 1:
         ch, key = next(iter(creds.items()))

@@ -60,7 +60,7 @@ def _lookup_location(location_id):
 
 
 def build_ctx(acc, schedule, resolved, status, reason='', signed_at=None, image_url='', remark=None,
-              task_name='', task_window='', need_photo=None):
+              task_name='', task_window='', need_photo=None, initiator=''):
     """组装推送上下文：账号信息来自 acc.profile，任务/时间/位置来自 schedule 与 resolved。
     remark 显式传入时（调度器按本次实际提交选取的单条）优先使用；为 None 时回退到
     合并全部备注（凭证测试推送预览用，便于一眼看全已配置备注）。
@@ -125,7 +125,9 @@ def build_ctx(acc, schedule, resolved, status, reason='', signed_at=None, image_
         'config_source': config_source,
         'status': status,
         'status_label': STATUS_LABEL.get(status, status),
-        'initiator': '系统自动',
+        # 任务发起人：来自 B 平台任务字段（sendName · sendRole），由调度器经 extra 透传；
+        # 无 task（如跳过无进行中任务）时为 ''，回退为「—」，不再写死「系统自动」。
+        'initiator': initiator or '—',
         'time_window': time_window,
         'sign_time': sign_time,
         'location_name': loc['name'] if loc else '',

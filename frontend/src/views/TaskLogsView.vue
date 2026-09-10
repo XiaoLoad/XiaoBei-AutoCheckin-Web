@@ -534,14 +534,25 @@
                         </dd>
                       </div>
                       <div class="rounded-lg bg-cloud/50 px-2.5 py-1.5">
+                        <dt class="text-[11px] text-ink-muted">任务标题</dt>
+                        <dd class="mt-0.5 truncate text-xs font-medium text-ink">
+                          {{ submitParamsOf(row).task_name || "—" }}
+                        </dd>
+                      </div>
+                      <div class="rounded-lg bg-cloud/50 px-2.5 py-1.5">
                         <dt class="text-[11px] text-ink-muted">需图</dt>
                         <dd class="mt-0.5 truncate text-xs font-medium text-ink">
                           {{ submitParamsOf(row).need_photo ? "是" : "否" }}
                         </dd>
                       </div>
-                      <div class="col-span-2 rounded-lg bg-cloud/50 px-2.5 py-1.5">
+                      <div class="rounded-lg bg-cloud/50 px-2.5 py-1.5">
                         <dt class="text-[11px] text-ink-muted">提交坐标（含 10m 抖动）</dt>
-                        <dd class="mt-0.5 truncate text-xs font-medium text-ink tabular-nums">
+                        <dd
+                          class="mt-0.5 truncate text-xs font-medium text-ink tabular-nums"
+                          :title="submitParamsOf(row).lng && submitParamsOf(row).lat
+                            ? `${submitParamsOf(row).lng}, ${submitParamsOf(row).lat}`
+                            : ''"
+                        >
                           <template
                             v-if="submitParamsOf(row).lng && submitParamsOf(row).lat"
                             >{{ submitParamsOf(row).lng }}, {{ submitParamsOf(row).lat }}</template
@@ -563,12 +574,11 @@
                       </div>
                       <div class="col-span-2 rounded-lg bg-cloud/50 px-2.5 py-1.5">
                         <dt class="text-[11px] text-ink-muted">图片 / 策略</dt>
-                        <dd class="mt-0.5 truncate text-xs font-medium text-ink">
-                          <template v-if="submitParamsOf(row).image_id"
-                            >图片 ID {{ submitParamsOf(row).image_id }} · 策略
-                            {{ strategyLabelOf(submitParamsOf(row).strategy) }}</template
-                          >
-                          <span v-else>无图（未启用图库或任务无需图）</span>
+                        <dd class="mt-0.5 text-xs font-medium text-ink">
+                          <SubmitImageThumb
+                            :image-id="submitParamsOf(row).image_id"
+                            :strategy="submitParamsOf(row).strategy"
+                          />
                         </dd>
                       </div>
                       <div
@@ -626,6 +636,7 @@ import Icon from "@/components/Icon.vue";
 import BaseSelect from "@/components/BaseSelect.vue";
 import StatCard from "@/components/StatCard.vue";
 import BasePagination from "@/components/BasePagination.vue";
+import SubmitImageThumb from "@/components/tasklogs/SubmitImageThumb.vue";
 
 const store = useTaskLogsStore();
 const route = useRoute();
@@ -791,15 +802,6 @@ function submitParamsOf(row) {
   const d = configOf(row);
   return (d && d.submitParams) || null;
 }
-const STRATEGY_LABELS = {
-  recycle: "循环复用",
-  trash: "用后入回收站",
-  delete: "用后删除",
-};
-function strategyLabelOf(s) {
-  return STRATEGY_LABELS[s] || s || "—";
-}
-
 function detailSections(d) {
   if (!d) return [];
   const t = d.time || {};

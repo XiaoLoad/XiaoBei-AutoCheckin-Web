@@ -188,6 +188,16 @@ def test_send_channel_non_json_response_is_failure(monkeypatch):
     assert '502' in err
 
 
+def test_build_ctx_initiator_passthrough():
+    """发起人须用 B 平台真实字段透传，而非写死的「系统自动」；缺省回退「—」。"""
+    from app.services.push_render import build_ctx
+    ctx = build_ctx(_FakeAcc(), _FakeSchedule(1), {}, 'success', initiator='张三 · 辅导员')
+    assert ctx['initiator'] == '张三 · 辅导员'
+    # 无 task（如跳过无进行中任务）时不应再出现旧的硬编码占位
+    ctx_default = build_ctx(_FakeAcc(), _FakeSchedule(1), {}, 'skip')
+    assert ctx_default['initiator'] == '—'
+
+
 def _resolved_multi(uid=None):
     return {'push': {
         'channels': ['pushplus', 'email'],

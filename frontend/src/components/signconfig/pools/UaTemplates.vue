@@ -1,11 +1,11 @@
 <template>
-  <div class="space-y-3">
+  <div class="flex min-h-0 flex-1 flex-col gap-3">
     <p class="text-xs text-ink-muted">
       系统级 UA 模板（机型默认值），由管理员维护；普通用户在「高级设置」中下拉选择，亦可自定义填写。
     </p>
 
     <!-- 顶部工具栏：搜索 + 添加 -->
-    <div class="flex flex-wrap items-center gap-2">
+    <div class="shrink-0 flex flex-wrap items-center gap-2">
       <div class="relative min-w-[200px] flex-1">
         <Icon name="search" :size="15" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
         <input
@@ -28,7 +28,7 @@
     </div>
 
     <!-- 批量操作条（仅管理员，有选中时显示） -->
-    <div v-if="isAdmin && selectedIds.length" class="flex items-center justify-between rounded-xl bg-brand/5 px-3 py-2 text-sm">
+    <div v-if="isAdmin && selectedIds.length" class="shrink-0 flex items-center justify-between rounded-xl bg-brand/5 px-3 py-2 text-sm">
       <span class="text-ink-soft">已选 {{ selectedIds.length }} 项</span>
       <div class="flex items-center gap-2">
         <button class="rounded-lg border border-ink/10 px-3 py-1 text-ink-soft transition hover:bg-cloud" @click="clearSelection">取消选择</button>
@@ -43,12 +43,12 @@
     </div>
 
     <!-- 空态 -->
-    <div v-if="paged.length === 0" class="py-10 text-center text-sm text-ink-muted">
+    <div v-if="paged.length === 0" class="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-ink/10 py-10 text-center text-sm text-ink-muted">
       {{ query ? '未找到匹配的机型模板' : '暂无模板' }}
     </div>
 
-    <!-- 列表 -->
-    <div v-else class="overflow-hidden rounded-xl border border-ink/10">
+    <!-- 列表：flex-1 min-h-0 吸收剩余高度，溢出时内部滚动，避免撑破宿主卡片背景 -->
+    <div v-else class="min-h-0 flex-1 overflow-auto rounded-xl border border-ink/10">
       <table class="w-full text-left text-sm">
         <thead class="bg-cloud/60 text-ink-muted">
           <tr>
@@ -96,6 +96,7 @@
     <!-- 分页（复用 BasePagination） -->
     <BasePagination
       v-if="filtered.length"
+      class="shrink-0"
       :page="page"
       :page-size="pageSize"
       :total="filtered.length"

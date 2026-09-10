@@ -70,44 +70,67 @@
       class="divide-y divide-ink/5 border-t border-ink/10 transition-opacity duration-300"
       :class="refreshingActive && 'opacity-60'"
     >
-      <li
-        v-for="r in rows"
-        :key="`${r.kind}-${r.id}`"
-        data-active-row
-        class="flex items-center gap-3 px-4 py-2.5 sm:px-5"
-      >
-        <span class="h-8 w-1 shrink-0 rounded-full" :class="typeRail(r.type)" />
+      <li v-for="r in rows" :key="`${r.kind}-${r.id}`" data-active-row>
+        <button
+          type="button"
+          class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-cloud/40 sm:px-5"
+          :aria-expanded="detailOpen(r.id)"
+          @click="store.toggleExpand(r)"
+        >
+          <span class="h-8 w-1 shrink-0 rounded-full" :class="typeRail(r.type)" />
 
-        <div class="min-w-0 flex-1">
-          <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span class="truncate text-sm font-semibold text-ink" :title="r.taskName">{{ r.taskName }}</span>
-            <span class="shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium" :class="typeBadge(r.type).cls">
-              {{ typeBadge(r.type).label }}
-            </span>
-            <span v-if="r.needPhoto" class="shrink-0 whitespace-nowrap rounded-full bg-amber/10 px-2 py-0.5 text-[11px] font-medium text-amber">需拍照</span>
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span class="truncate text-sm font-semibold text-ink" :title="r.taskName">{{ r.taskName }}</span>
+              <span class="shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium" :class="typeBadge(r.type).cls">
+                {{ typeBadge(r.type).label }}
+              </span>
+              <span v-if="r.needPhoto" class="shrink-0 whitespace-nowrap rounded-full bg-amber/10 px-2 py-0.5 text-[11px] font-medium text-amber">需拍照</span>
+            </div>
+            <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-muted">
+              <span class="inline-flex items-center gap-1 tabular-nums">
+                <Icon name="clock" :size="12" />{{ r._window }}
+              </span>
+              <span class="truncate">发起人 {{ r.initiator || '—' }}</span>
+            </div>
+            <div v-if="r._progress !== null" class="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-ink/10">
+              <div
+                class="h-full rounded-full transition-[width] duration-700 ease-out"
+                :class="typeRail(r.type)"
+                :style="{ width: r._progress + '%' }"
+              />
+            </div>
           </div>
-          <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-muted">
-            <span class="inline-flex items-center gap-1 tabular-nums">
-              <Icon name="clock" :size="12" />{{ r._window }}
-            </span>
-            <span class="truncate">发起人 {{ r.initiator || '—' }}</span>
-          </div>
-          <div v-if="r._progress !== null" class="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-ink/10">
-            <div
-              class="h-full rounded-full transition-[width] duration-700 ease-out"
-              :class="typeRail(r.type)"
-              :style="{ width: r._progress + '%' }"
+
+          <!-- 状态：已签到 → 绿色状态胶囊；待签到 → 剩余时间（紧迫度分档） -->
+          <span
+            class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums"
+            :class="statusInfo(r).cls"
+          >
+            <Icon :name="r.finished ? 'check-circle' : 'clock'" :size="12" />
+            {{ statusInfo(r).text }}
+          </span>
+
+          <Icon
+            name="chevron-right"
+            :size="18"
+            class="shrink-0 text-ink-muted transition-transform"
+            :class="detailOpen(r.id) ? 'rotate-90' : ''"
+          />
+        </button>
+
+        <!-- 展开：地理围栏 + 签到凭证（与历史列表详情共用面板） -->
+        <Transition :css="false" @enter="onDetailEnter" @leave="onDetailLeave">
+          <div v-if="detailOpen(r.id)" class="overflow-hidden border-t border-ink/5 bg-cloud/30 px-3 py-3 sm:px-5">
+            <TaskDetailPanel
+              :detail="store.getDetail(r.id)"
+              :row="r"
+              :show-facts="false"
+              unsigned-text="尚未签到，可在任务时段内完成"
+              @preview="emit('preview', $event)"
             />
           </div>
-        </div>
-
-        <span
-          class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums"
-          :class="r._remain.cls"
-        >
-          <Icon name="clock" :size="12" />
-          {{ r._remain.text }}
-        </span>
+        </Transition>
       </li>
     </ul>
   </section>
@@ -119,6 +142,10 @@ import { storeToRefs } from 'pinia'
 import { gsap } from 'gsap'
 import { useSignRecordsStore } from '@/stores/signRecords'
 import Icon from '@/components/Icon.vue'
+import TaskDetailPanel from '@/components/signrecords/TaskDetailPanel.vue'
+import { useCollapseTransition } from '@/composables/useCollapseTransition'
+
+const emit = defineEmits(['preview'])
 
 const store = useSignRecordsStore()
 const { activeTasks, loadingActive, refreshingActive, activeError, activeUpdatedAt } = storeToRefs(store)
@@ -215,6 +242,21 @@ function typeBadge(t) {
 function typeRail(t) {
   return t === 'activity' ? 'bg-info' : 'bg-brand'
 }
+
+// 展开状态与状态胶囊：已签到固定展示绿色状态，未签到展示剩余时间（紧迫度分档）
+function detailOpen(id) {
+  const d = store.getDetail(id)
+  return !!(d && d.open)
+}
+function statusInfo(r) {
+  return r.finished ? { text: '已签到', cls: 'bg-success/10 text-success' } : r._remain
+}
+
+// 详情折叠补间（与历史列表详情共用组合式）
+const { onEnter: onDetailEnter, onLeave: onDetailLeave } = useCollapseTransition(
+  () => reduceMotion.value,
+  { pad: 12 } // 与卡片详情 py-3 对齐
+)
 
 // 富化一次：窗口文案 / 进度 / 剩余时间，随 nowRef 每 30s 重算，模板不再重复调用
 const rows = computed(() =>

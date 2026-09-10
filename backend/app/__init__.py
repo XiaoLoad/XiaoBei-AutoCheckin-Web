@@ -34,7 +34,6 @@ def create_app(env_name=None):
     app = Flask(__name__)
     app.config.from_object(get_config(env_name))
     _assert_production_secrets(app)
-    _setup_logging(app)
 
     # 跨域：开发环境允许前端 5173 端口访问，并放行 Authorization 头
     CORS(
@@ -87,6 +86,11 @@ def create_app(env_name=None):
     except Exception:
         app.logger.exception('启动初始化失败：数据库结构/种子数据未就绪（应用继续启动，相关接口将在调用时报错）')
 
+    # 日志装配必须晚于 _init_database：Alembic 的 migrations/env.py 会 fileConfig(alembic.ini)，
+    # 该调用会清掉 root 上已有的处理器并把级别改回 WARNING（[logger_root] level=WARN），
+    # 装在前面会被当场销毁，logs/app.log 永远是空文件。
+    _setup_logging(app)
+
     # 启动调度器主链路（事件钩子 + 对账兜底）；失败不阻断应用启动。
     try:
         init_scheduler(app)
@@ -137,6 +141,7 @@ def _setup_logging(app):
     - 控制台保留 WARNING+（根级别提到 INFO 后需把 werkzeug 压回 WARNING，
       避免每个 HTTP 请求刷屏落盘；开发时请求日志仍由 werkzeug 自己的 stdout 承担）；
     - 进程级幂等：create_app 可能被测试多次调用，模块级标志保证只装配一次。
+      调用时机必须在 _init_database 之后（Alembic fileConfig 会清掉已有处理器）。
       RotatingFileHandler 严格多进程安全需队列方案，本项目为单实例部署（见 README
       部署约束），直接轮转可接受。"""
     global _logging_configured

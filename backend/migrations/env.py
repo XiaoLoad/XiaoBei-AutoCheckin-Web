@@ -11,7 +11,10 @@ config = context.config
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
-fileConfig(config.config_file_name)
+# disable_existing_loggers 必须显式关掉：应用内建启动时 create_app → _init_database → upgrade
+# 会先 import 各业务模块，app.* 的 logger 早已存在；fileConfig 默认 True 会把它们统统 disabled=True，
+# 之后即便 root 重新挂上 handler，签到日志也一条都写不出来。
+fileConfig(config.config_file_name, disable_existing_loggers=False)
 logger = logging.getLogger('alembic.env')
 
 

@@ -42,15 +42,18 @@ class StubAdapter:
         }]
 
     def fetch_active_tasks(self, token, task_type):
-        """联调桩：返回一条「覆盖全天」的进行中任务，便于前端卡片在无网环境下可见"""
+        """联调桩：寝/活各返回一条覆盖全天的进行中任务——寝室待签到、活动已签到，
+        便于前端卡片在无网环境下同时看到两种状态与展开详情"""
         from datetime import datetime
         today = datetime.now().strftime('%Y-%m-%d')
         kind = 'know' if task_type == 'dorm' else 'sign'
+        signed = kind == 'sign'
         return [{
             'id': 58088 if kind == 'know' else 58089, 'kind': kind, 'type': task_type,
-            'taskName': '桩进行中任务', 'startDate': today, 'endDate': today,
+            'taskName': '桩已签到任务' if signed else '桩待签到任务',
+            'startDate': today, 'endDate': today,
             'startTime': '00:00:00', 'endTime': '23:59:59',
-            'initiator': '桩发起人 · 辅导员', 'needPhoto': False, 'finished': False,
+            'initiator': '桩发起人 · 辅导员', 'needPhoto': kind == 'know', 'finished': signed,
         }]
 
     def fetch_task_detail(self, token, kind, task_id):

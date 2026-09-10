@@ -213,18 +213,19 @@ class RealAdapter:
         return {'task': self._unify_task(task, mod['kind']), 'fence': detail['geoFence']}
 
     def fetch_active_tasks(self, token, task_type):
-        """进行中任务列表（/list 中本人未完成的行，可能多条），供前端「正在进行」卡片展示。
+        """进行中任务列表（/list 中平台判定为「进行中」的全部行，含本人已签到的），
+        供前端「正在进行」卡片展示。
 
-        与 find_active_task 的区别：后者只取首条用于提交，这里返回全部未完成项。
-        仅读取，不做详情补查——列表行不带围栏，卡片不需要围栏。
+        不过滤 finished：任务未结束即属进行中，本人可能已签到（isFinishKnowing/
+        isFinishSign == 1），此时仍需展示并标注状态——否则「已签但未结束」的任务
+        会在卡片与 overlist 历史之间整段消失。与只取首条未完成项用于提交的
+        find_active_task 区分。列表行不带围栏，详情由前端按需懒加载。
         """
         mod = _module(task_type)
         data = self._request('GET', mod['list'].lstrip('/'), token=token,
                              params={'pageNum': 1, 'pageSize': 50})
         rows = data.get('rows') or []
-        finish_field = mod['finish_field']
-        return [self._unify_task(r, mod['kind']) for r in rows
-                if str(r.get(finish_field)) == '0']
+        return [self._unify_task(r, mod['kind']) for r in rows]
 
     def submit_checkin(self, session, task_type, platform_task_id, location, address, remark, image=None):
         """提交签到。image=None → 无图 JSON（photo:[]，size:"0"）；否则有图 multipart
@@ -248,7 +249,8 @@ class RealAdapter:
                                  fail_reason='演练：已构造提交未发送（CHECKIN_DRYRUN）',
                                  detail={'payload': safe_payload})
 
-        url = f"{BASE_URL}{mod['submit'] if image else mod['submit_no_file']}"
+        # 前缀不可省：漏了会被 nginx 兜底成 SPA 的 HTML 页（HTTP 200），报「非 JSON 内容」
+        url = f"{BASE_URL}/xiaobei-api{mod['submit'] if image else mod['submit_no_file']}"
         last_err = None
         for attempt in range(_MAX_NET_RETRIES):
             try:

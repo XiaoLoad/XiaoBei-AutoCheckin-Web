@@ -722,6 +722,15 @@ def _checkin_flow(schedule, acc, session, resolved, remark):
             claimed = None
             raise
 
+        # 每次尝试都留一条 INFO：成功也必须有痕，否则事后只剩库记录，
+        # 拿不到当时的请求上下文（坐标/备注/图片/平台原始响应）就无从判断是哪种失败。
+        rsp = (result.detail or {}).get('rsp') or {}
+        log.info('任务 %s 签到提交结果：status=%s｜任务=%s(%s)｜坐标=%s｜地址=%s｜备注=%s｜图片=%s｜原因=%s｜平台响应=%s',
+                 schedule.id, result.status, task.get('id'), task.get('taskName') or '—',
+                 location_str or '空', address or '空', submit_remark or '—',
+                 image['filename'] if image else '无',
+                 result.fail_reason or '—', rsp or '—')
+
         # 提交后重新同步图片 id（失败回滚后 claimed 已置空），连同前述坐标/备注/任务信息
         # 一并作为本次「提交参数」快照落库，供详情回显——成功与平台返回失败都带完整参数。
         attempt['image_id'] = claimed['id'] if claimed else None

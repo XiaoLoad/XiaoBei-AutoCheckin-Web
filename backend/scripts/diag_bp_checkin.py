@@ -38,8 +38,12 @@ def main():
     print(f'[1] 登录成功 bp_uid={res.bp_uid} profile={json.dumps(res.profile, ensure_ascii=False)}')
 
     ctx = adapter.find_active_task(session, args.type)
-    if ctx is None:
-        print('[2] 当前无进行中的签到任务（list 无 isFinish==0 的行）')
+    if not ctx.get('task'):
+        done = ctx.get('finished_task')
+        if done:
+            print(f"[2] 无待签任务：本人已签到进行中任务 id={done.get('id')} name={done.get('taskName')}")
+        else:
+            print('[2] 当前无进行中的签到任务（list 无 isFinish==0 的行）')
         return
     task, fence = ctx['task'], ctx['fence']
     print(f"[2] 进行中任务：id={task['id']} name={task['taskName']} needPhoto={task['needPhoto']} "

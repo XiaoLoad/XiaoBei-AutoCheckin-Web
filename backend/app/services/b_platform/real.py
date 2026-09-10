@@ -197,9 +197,12 @@ class RealAdapter:
         return headers
 
     def find_active_task(self, session, task_type):
-        """查询进行中的签到任务（提交只能使用 /list 进行中任务的 id，overlist 的 id 不可用）。
-        返回 {'task': 归一任务(含 needPhoto/startTime/endTime), 'fence': 围栏列表}；
-        无未完成任务返回 None。会话 token 失效由 _check 抛 credential。"""
+        """查询可提交的进行中签到任务（提交只能使用 /list 进行中任务的 id，overlist 的 id 不可用）。
+        返回 {'task': 归一任务(含 needPhoto/startTime/endTime) 或 None,
+              'fence': 围栏列表, 'finished_task': 本人已签到的进行中任务 或 None}
+        ——不返回 None：`/list` 会同时给出本人已签到的行，据此区分「本来就没任务」与
+        「已签到无需重复提交」，否则两者都只能报「无进行中任务」，会被误当漏签排查。
+        会话 token 失效由 _check 抛 credential。"""
         mod = _module(task_type)
         data = self._request('GET', mod['list'].lstrip('/'), token=session.get('token'),
                              params={'pageNum': 1, 'pageSize': 50}, ua=session.get('ua'))
@@ -207,10 +210,13 @@ class RealAdapter:
         finish_field = mod['finish_field']
         task = next((r for r in rows if str(r.get(finish_field)) == '0'), None)
         if task is None:
-            return None
+            done = next((r for r in rows if str(r.get(finish_field)) == '1'), None)
+            return {'task': None, 'fence': [],
+                    'finished_task': self._unify_task(done, mod['kind']) if done else None}
         # 围栏：列表行通常不带 location，补查详情（fetch_task_detail 复用既有解析）
         detail = self.fetch_task_detail(session.get('token'), mod['kind'], task.get('id'))
-        return {'task': self._unify_task(task, mod['kind']), 'fence': detail['geoFence']}
+        return {'task': self._unify_task(task, mod['kind']), 'fence': detail['geoFence'],
+                'finished_task': None}
 
     def fetch_active_tasks(self, token, task_type):
         """进行中任务列表（/list 中平台判定为「进行中」的全部行，含本人已签到的），

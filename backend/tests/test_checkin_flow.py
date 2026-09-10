@@ -52,6 +52,17 @@ class NoTaskAdapter:
         raise AssertionError('无任务时不应提交')
 
 
+class SignedTaskAdapter:
+    """进行中任务存在但本人已签到（/list 中 finish 字段为 1 的行）"""
+
+    def find_active_task(self, session, task_type):
+        return {'task': None, 'fence': [],
+                'finished_task': {'id': 59141, 'taskName': '大4，1.1查寝'}}
+
+    def submit_checkin(self, *a, **k):
+        raise AssertionError('已签到时不应提交')
+
+
 @pytest.fixture()
 def flow_env(app_ctx):
     """唯一用户 + 账号 + 独立配置的任务实例；返回 (user, acc, schedule, session)"""
@@ -119,6 +130,17 @@ def test_no_active_task_skips(flow_env, monkeypatch):
     outcome, reason, _ = sch._checkin_flow(s, env['acc'], env['session'], _cfg(), '签到')
     assert outcome == 'skip'
     assert '无进行中' in reason
+
+
+def test_already_signed_skips_with_distinct_reason(flow_env, monkeypatch):
+    """已签到与「本来就没任务」必须落成两种文案——同报「无进行中任务」会把
+    已签误判成漏签（该歧义来自真机实测），且两种情况都不应发起提交。"""
+    env = flow_env
+    s = env['make_schedule'](_cfg())
+    monkeypatch.setattr(sch, 'get_adapter', lambda: SignedTaskAdapter())
+    outcome, reason, _ = sch._checkin_flow(s, env['acc'], env['session'], _cfg(), '签到')
+    assert outcome == 'skip'
+    assert '已完成签到' in reason and '大4，1.1查寝' in reason
 
 
 def test_fence_intercept_blocks_when_out_of_radius(flow_env, monkeypatch):

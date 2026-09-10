@@ -460,7 +460,7 @@ def _poll_activity_windows():
             'ua': _resolve_ua(resolved),
         }
         try:
-            ctx = adapter.find_active_task(session, 'activity')
+            ctx = adapter.find_active_task(session, 'activity') or {}
         except BPlatformError as e:
             db.session.commit()
             if e.kind == 'credential':
@@ -472,8 +472,10 @@ def _poll_activity_windows():
             else:
                 log.info('窗口 %s 轮询失败（%s），下个周期再试', w.id, e.message)
             continue
-        if ctx is None:
-            db.session.commit()   # 该课程暂无活动发布：仅记录轮询时刻
+        if not ctx.get('task'):
+            # 该课程暂无待签活动：未发布或本人已签（后者保持轮询到期，与历史行为一致，
+            # 避免误关掉同时段可能二次发布的活动窗口），仅记录轮询时刻
+            db.session.commit()
             continue
         w.done = True
         db.session.commit()
@@ -555,6 +557,9 @@ def _run(schedule_id, allow_retry=True, course_name=None):
     此处仅兜底提交失败等极端情况。"""
     s = db.session.get(Schedule, schedule_id)
     if s is None or not s.enabled:
+        # 此处静默 return 会让「任务到点为什么没执行」彻底无从查起。能走到这里只可能是
+        # 删任务/禁用后残留的 job（正常禁用会一并撤销 job），量极小，INFO 不会刷屏。
+        log.info('任务 %s 未执行：任务不存在或已禁用', schedule_id)
         return
     try:
         _execute(s, allow_retry=allow_retry, course_name=course_name)
@@ -641,8 +646,14 @@ def _checkin_flow(schedule, acc, session, resolved, remark):
     claimed = None
     try:
         # ① 进行中任务（提交只能用 /list 的任务 id）
-        ctx = adapter.find_active_task(session, schedule.task_type)
-        if ctx is None:
+        ctx = adapter.find_active_task(session, schedule.task_type) or {}
+        if not ctx.get('task'):
+            # 无待签项有两种成因，文案必须分开：本人已签到的进行中任务同样列在 /list 里，
+            # 若一并报「无进行中任务」，事后排查会误判成漏签（用户实测就踩过这个歧义）。
+            done = ctx.get('finished_task') or {}
+            if done:
+                return 'skip', (f'本时段任务已完成签到（{done.get("taskName") or "进行中任务"}），'
+                                f'无需重复签到'), {}
             return 'skip', '当前无进行中的签到任务', {}
         task = ctx['task']
         attempt['task_id'] = task.get('id')
@@ -890,7 +901,8 @@ def _commit_result(schedule, acc, status, fail_reason='', resolved=None, extra=N
     """写签到记录 + 回写任务状态 + 刷新账号最近签到聚合；统一提交。
     resolved 非 None 时把执行时配置快照写入记录，供详情回显历史切片；
     extra 非 None（调用方传回的提交参数快照）时一并写入 submit_params，供详情回显「提交参数」；
-    course_name 非 None（课表窗口轮询命中）时写入课程溯源。"""
+    course_name 非 None（课表窗口轮询命中）时写入课程溯源。
+    函数本身即「执行出口」：无论哪种结局都在此落库并写一条 INFO 日志。"""
     rec = SignRecord(
         user_id=schedule.user_id,
         account_id=schedule.account_id,
@@ -921,6 +933,18 @@ def _commit_result(schedule, acc, status, fail_reason='', resolved=None, extra=N
         acc.last_sign_at = now_cst()
         acc.last_sign_status = status
     db.session.commit()
+
+    # 统一出口日志：_commit_result 是全部执行路径（成功/失败/跳过，含提交前的各早退分支、
+    # 甚至外层兜底）唯一的落库点，只有在这里留一条 INFO 才能保证「任何一种结局都有痕」。
+    # 此前仅走到提交的路径打日志，skip 类原因（无进行中任务/已完成签到/配置缺失/图库无图）
+    # 在库外完全查不到，事后只能翻 sign_records 反推。
+    who = '—'
+    if acc is not None:
+        name = (acc.profile or {}).get('name')
+        who = f'{acc.account}({name})' if name else str(acc.account)
+    log.info('任务 %s 执行落库：账号=%s｜类型=%s｜状态=%s｜平台任务=%s｜原因=%s',
+             schedule.id, who, schedule.task_type, status,
+             (extra or {}).get('task_name') or '—', fail_reason or '—')
     return rec
 
 

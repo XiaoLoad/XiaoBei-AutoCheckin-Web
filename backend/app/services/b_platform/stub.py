@@ -16,13 +16,14 @@ class StubAdapter:
         )
 
     def find_active_task(self, session, task_type):
-        """联调桩：返回一个假的进行中任务，使调度链路测试可走通成功分支（无围栏、无需图）"""
+        """联调桩：返回一个假的待签进行中任务，使调度链路测试可走通成功分支（无围栏、无需图）"""
         kind = 'know' if task_type == 'dorm' else 'sign'
         return {
             'task': {'id': 58088, 'kind': kind, 'type': task_type, 'taskName': '桩签到任务',
                      'startTime': '00:00:00', 'endTime': '23:59:59',
                      'needPhoto': False, 'finished': False},
             'fence': [],
+            'finished_task': None,
         }
 
     def submit_checkin(self, session, task_type, platform_task_id, location, address, remark, image=None):

@@ -59,10 +59,23 @@ def test_find_active_task_picks_unfinished_and_loads_fence(monkeypatch):
     assert calls[0].endswith('/student/know/list')  # 提交只能取自 /list
 
 
-def test_find_active_task_none_when_all_finished(monkeypatch):
+def test_find_active_task_reports_finished_when_all_signed(monkeypatch):
+    """/list 有行但全部已签：不返回 None，而是带出 finished_task——
+    None 会让上层把「已签到」误报成「当前无进行中的签到任务」，事后排查误判漏签。"""
     monkeypatch.setattr(real.requests, 'request',
                         lambda m, u, **kw: FakeResp(_list_rows(finished=1)))
-    assert real.RealAdapter().find_active_task(SESSION, 'dorm') is None
+    ctx = real.RealAdapter().find_active_task(SESSION, 'dorm')
+    assert ctx['task'] is None
+    assert ctx['finished_task']['id'] == 58088
+
+
+def test_find_active_task_both_none_when_no_rows(monkeypatch):
+    """/list 无任何行 = 真的没有进行中任务，两个字段都为 None"""
+    monkeypatch.setattr(real.requests, 'request',
+                        lambda m, u, **kw: FakeResp({'code': 200, 'rows': []}))
+    ctx = real.RealAdapter().find_active_task(SESSION, 'dorm')
+    assert ctx['task'] is None
+    assert ctx['finished_task'] is None
 
 
 def test_find_active_task_sign_module_paths(monkeypatch):

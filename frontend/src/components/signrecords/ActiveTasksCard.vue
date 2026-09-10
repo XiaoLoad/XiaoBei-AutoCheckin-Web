@@ -8,11 +8,23 @@
       </span>
       <h3 id="active-tasks-heading" class="shrink-0 text-sm font-semibold text-ink">正在进行</h3>
 
-      <!-- 有任务：计数胶囊；无任务：安静的说明文字（不额外占高）；加载中：提示 -->
-      <span
-        v-if="!loadingActive && !activeError && activeTasks.length"
-        class="shrink-0 rounded-full bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand tabular-nums"
-      >{{ activeTasks.length }} 项</span>
+      <!-- 有任务：分桶计数（当前类型筛选命中者高亮），胶囊本身即类型筛选开关——
+           点一下只看该类，再点一下取消回全部；计数为 0 时不可点（点了也是空列表）。
+           它同时是筛选后列表为空时唯一的兜底信息来源 -->
+      <template v-if="!loadingActive && !activeError && activeTasks.length">
+        <button
+          v-for="b in buckets"
+          :key="`bk-${b.type}`"
+          type="button"
+          class="shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium tabular-nums transition disabled:cursor-default"
+          :class="bucketCls(b)"
+          :disabled="!b.count"
+          :aria-pressed="typeFilter === b.type"
+          :title="bucketTitle(b)"
+          @click="toggleBucket(b)"
+        >{{ b.label }} {{ b.count }}</button>
+      </template>
+      <!-- 无任务：安静的说明文字，不额外占高 -->
       <span
         v-else-if="!loadingActive && !activeError"
         class="min-w-0 flex-1 truncate text-xs text-ink-muted"
@@ -61,6 +73,21 @@
       <button type="button" class="shrink-0 rounded-md px-2 py-0.5 font-medium text-brand hover:bg-brand/10" @click="refresh">
         重试
       </button>
+    </div>
+
+    <!-- 筛选后为空、但另一类型还有任务：必须把这条兜出来，否则用户切到空类型会
+         误以为「完全没任务」而漏签——这正是这张卡片存在的意义 -->
+    <div
+      v-else-if="!rows.length && otherBucket"
+      class="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-ink/10 px-4 py-3 text-xs text-ink-muted sm:px-5"
+    >
+      <Icon name="info" :size="14" class="shrink-0 text-ink-muted" />
+      <span class="min-w-0 flex-1">当前没有进行中的{{ shortLabel(typeFilter) }}签到任务</span>
+      <button
+        type="button"
+        class="shrink-0 rounded-md px-2 py-0.5 font-medium text-brand transition hover:bg-brand/10"
+        @click="store.setType(otherBucket.type)"
+      >切到{{ otherBucket.label }}（{{ otherBucket.count }} 项）</button>
     </div>
 
     <!-- 进行中任务：类型色条区分寝/活，窗口进度条编码剩余时间 -->
@@ -148,7 +175,7 @@ import { useCollapseTransition } from '@/composables/useCollapseTransition'
 const emit = defineEmits(['preview'])
 
 const store = useSignRecordsStore()
-const { activeTasks, loadingActive, refreshingActive, activeError, activeUpdatedAt } = storeToRefs(store)
+const { activeTasks, loadingActive, refreshingActive, activeError, activeUpdatedAt, typeFilter } = storeToRefs(store)
 
 const listRef = ref(null)
 const reduceMotion = ref(false)
@@ -242,6 +269,51 @@ function typeBadge(t) {
 function typeRail(t) {
   return t === 'activity' ? 'bg-info' : 'bg-brand'
 }
+function shortLabel(t) {
+  return t === 'activity' ? '活动' : '寝室'
+}
+
+// 分桶计数：头部始终给出寝/活各自的数量（而非单一总数），
+// 这样即便当前筛选把某一类隐藏了，用户仍知道另一类有没有待签任务
+const buckets = computed(() =>
+  ['dorm', 'activity'].map((t) => ({
+    type: t,
+    label: shortLabel(t),
+    count: activeTasks.value.filter((r) => r.type === t).length,
+  }))
+)
+// 当前筛选未命中、但确实有任务的另一类：仅在「筛选后列表为空」时用于提示
+const otherBucket = computed(() =>
+  buckets.value.find((b) => b.type !== typeFilter.value && b.count > 0) || null
+)
+function bucketCls(b) {
+  if (!b.count) return 'bg-cloud text-ink-muted'
+  // 未筛选（两类都在看）或命中当前筛选 → 用自身类型色；被筛选排除的那一类退为中性，
+  // 用颜色差异表达「列表已按类型收窄」，避免用户以为另一类的任务消失了
+  const shown = typeFilter.value === 'all' || typeFilter.value === b.type
+  return shown ? typeBadge(b.type).cls : 'bg-cloud text-ink-soft'
+}
+function bucketTitle(b) {
+  if (!b.count) return `${b.label}签到：当前没有进行中的任务`
+  return typeFilter.value === b.type
+    ? `${b.label}签到 ${b.count} 项 · 点击取消筛选，回到全部`
+    : `${b.label}签到 ${b.count} 项 · 点击只看${b.label}`
+}
+// 胶囊即筛选开关：命中者再点一下回「全部」，与上方筛选栏共用 store.typeFilter 这一个状态，
+// 两处不会不同步。计数为 0 时按钮 disabled，避免点进一个必然为空的列表。
+function toggleBucket(b) {
+  if (!b.count) return
+  store.setType(typeFilter.value === b.type ? 'all' : b.type)
+}
+
+// 卡片只跟随「签到类型」筛选：数据仍是全量（寝+活），在本地按 typeFilter 过滤，
+// 切换零请求、零延迟。status/日期/视图模式明确不作用于卡片——卡片的价值是
+// 「本时段签没签完」，按未签到去筛会把已签到的行筛掉，反而丢掉「已完成」这个信号。
+const visibleTasks = computed(() =>
+  typeFilter.value === 'all'
+    ? activeTasks.value
+    : activeTasks.value.filter((r) => r.type === typeFilter.value)
+)
 
 // 展开状态与状态胶囊：已签到固定展示绿色状态，未签到展示剩余时间（紧迫度分档）
 function detailOpen(id) {
@@ -260,7 +332,7 @@ const { onEnter: onDetailEnter, onLeave: onDetailLeave } = useCollapseTransition
 
 // 富化一次：窗口文案 / 进度 / 剩余时间，随 nowRef 每 30s 重算，模板不再重复调用
 const rows = computed(() =>
-  activeTasks.value.map((t) => {
+  visibleTasks.value.map((t) => {
     const se = startEnd(t)
     const now = nowRef.value
     let progress = null
@@ -283,7 +355,8 @@ function sigOf(list) {
   return list.map((t) => `${t.kind}-${t.id}`).join('|')
 }
 
-// 仅在任务集合真正变化时重放错落入场，后台静默刷新（数据未变）不触发，避免反复闪烁
+// 签名取自「可见行」而非全量数据：切换类型筛选后可见集合变了，理应重放一次入场；
+// 而后台静默刷新若数据未变（签名不变）不触发，避免每 2 分钟闪一次。
 async function animateRows() {
   await nextTick()
   const root = listRef.value
@@ -298,7 +371,7 @@ async function animateRows() {
 }
 
 watch(
-  () => sigOf(activeTasks.value),
+  () => sigOf(rows.value),
   (sig) => {
     if (sig === lastSig) return
     lastSig = sig
@@ -316,7 +389,7 @@ onMounted(() => {
   })
   timer = setInterval(onTick, TICK_MS)
   document.addEventListener('visibilitychange', onVisibility)
-  lastSig = sigOf(activeTasks.value)
+  lastSig = sigOf(rows.value)
   animateRows()
 })
 

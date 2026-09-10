@@ -14,8 +14,11 @@
 // 日历着色直接用任务列表自带的 finished（isFinishKnowing / isFinishSign）——2026-08-29
 // 抓包实证该字段会取 0 表示漏签，无需逐任务查 listLog；listLog 仅用于展开详情按需拉取。
 //
-// [进行中任务] activeTasks 独立于历史筛选（type/status/日期），只随账号变化重新拉取：
-// 它回答的是「现在能签什么」，与「历史记录怎么筛」是两个维度，故不随筛选条件刷新。
+// [进行中任务] activeTasks 只随账号变化重新拉取，不随筛选重新请求：
+// 它回答的是「现在能签什么」，与「历史记录怎么筛」是两个维度，重复请求没有意义。
+// 展示口径：卡片在组件内按 typeFilter 本地过滤（all / dorm / activity）——零请求、切换零延迟。
+// ⚠️ status / 日期 / 视图模式**明确不作用于卡片**（勿当 bug 修）：卡片的价值恰恰是
+// 「本时段签没签完」，按「未签到」去筛会把已签到的行筛掉，反而丢掉「已完成」这个信号。
 import { defineStore } from 'pinia'
 import { useRefreshBusStore } from '@/stores/refreshBus'
 import { ref, computed } from 'vue'

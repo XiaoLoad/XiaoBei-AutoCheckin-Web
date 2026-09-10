@@ -51,5 +51,17 @@ export async function fetchTaskDetail(accountId, taskId, kind = 'know') {
   return { geoFence: data.geoFence || [], logs: data.logs || [] }
 }
 
+// 拉取指定账号在 B 平台「进行中」的签到任务（寝室 + 活动，仅本人未完成）。
+// silent：错误由卡片内联呈现，不走全局 toast（后台静默自动刷新时尤需避免刷屏提示）。
+export async function fetchActiveTasks(accountId) {
+  if (!accountId) return { items: [] }
+  const data = await request({
+    url: `/accounts/${accountId}/active-tasks`,
+    method: 'get',
+    silent: true,
+  })
+  return { items: data.items || [] }
+}
+
 // 暴露给 store 用于默认选中第一个账号
 export { fetchAccounts }

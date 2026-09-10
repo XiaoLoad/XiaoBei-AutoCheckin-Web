@@ -13,10 +13,13 @@
 //
 // 日历着色直接用任务列表自带的 finished（isFinishKnowing / isFinishSign）——2026-08-29
 // 抓包实证该字段会取 0 表示漏签，无需逐任务查 listLog；listLog 仅用于展开详情按需拉取。
+//
+// [进行中任务] activeTasks 独立于历史筛选（type/status/日期），只随账号变化重新拉取：
+// 它回答的是「现在能签什么」，与「历史记录怎么筛」是两个维度，故不随筛选条件刷新。
 import { defineStore } from 'pinia'
 import { useRefreshBusStore } from '@/stores/refreshBus'
 import { ref, computed } from 'vue'
-import { fetchAccounts, fetchSignRecords, fetchTaskDetail } from '@/api/signRecords'
+import { fetchAccounts, fetchSignRecords, fetchTaskDetail, fetchActiveTasks } from '@/api/signRecords'
 
 // 本地日期格式（避开 toISOString 的 UTC 时区偏移，否则 GMT+8 会差一天）
 function fmt(d) {
@@ -76,6 +79,17 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
   const overview = ref({ ...EMPTY_OVERVIEW })
   // 全历史口径最近有任务的日期（'YYYY-MM-DD'，驱动日历「最近有数据月份」）
   const dataLatest = ref(null)
+
+  // 进行中任务（B 平台 /list 的本人未完成行，寝/活合并）：独立的「正在进行」卡片数据源。
+  // 不登记全局 refreshBus——每 2 分钟一次的静默自动刷新若触发顶部进度条会造成视觉噪音，
+  // 改由卡片自持更新指示（刷新按钮自旋 + 「更新于」）。
+  const activeTasks = ref([])
+  const loadingActive = ref(false)
+  const refreshingActive = ref(false)
+  const activeLoaded = ref(false)
+  const activeError = ref('')
+  // 最近一次成功拉取时刻（毫秒）：供「更新于 HH:MM」与回到前台时的陈旧判定
+  const activeUpdatedAt = ref(0)
 
   // 类型筛选：all（全部）| dorm（寝室签到）| activity（活动签到）
   const typeFilter = ref('all')
@@ -207,8 +221,47 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     } finally {
       loadingAccounts.value = false
     }
-    // 选中态就绪后再拉记录（初始加载与后续切换都走这里，不再依赖 watch）
-    await loadRecords()
+    // 选中态就绪后再拉记录与进行中任务（初始加载与后续切换都走这里，不再依赖 watch）
+    await Promise.all([loadRecords(), loadActiveTasks()])
+  }
+
+  // 拉取「进行中」任务（寝/活合并，仅本人未完成）。仅随账号变化调用，与历史筛选无关。
+  // silent=true（后台自动刷新）时保留旧数据原地换新，避免卡片闪骨架。
+  let activeSeq = 0
+  async function loadActiveTasks({ silent = false } = {}) {
+    if (!selectedAccountId.value) {
+      activeTasks.value = []
+      activeError.value = ''
+      activeLoaded.value = false
+      return
+    }
+    const seq = ++activeSeq
+    const silentLoad = silent && activeLoaded.value
+    if (silentLoad) {
+      refreshingActive.value = true
+    } else {
+      // 非静默 = 首次加载或切换账号：立即清掉上一账号的数据，
+      // 否则新账号请求失败时会残留旧账号的任务，造成串号展示
+      loadingActive.value = true
+      activeTasks.value = []
+      activeLoaded.value = false
+    }
+    try {
+      const res = await fetchActiveTasks(selectedAccountId.value)
+      if (seq !== activeSeq) return // 竞态守卫：快速切账号只采纳最新结果
+      activeTasks.value = res.items
+      activeError.value = ''
+      activeLoaded.value = true
+      activeUpdatedAt.value = Date.now()
+    } catch (e) {
+      if (seq !== activeSeq) return
+      activeError.value = e?.message || '获取进行中任务失败'
+    } finally {
+      if (seq === activeSeq) {
+        loadingActive.value = false
+        refreshingActive.value = false
+      }
+    }
   }
 
   // 拉取列表页（服务端分页）。dayFilter 点选时窗口收窄为当天，统计卡仍为全历史口径
@@ -427,6 +480,7 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     dayFilter.value = null
     page.value = 1
     void loadRecords()
+    void loadActiveTasks()
   }
 
   // 当前月无数据则自动跳到最近有数据的月份（后端 meta.latest_date，全历史口径）
@@ -470,6 +524,12 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     details,
     logsCache,
     dayStats,
+    activeTasks,
+    loadingActive,
+    refreshingActive,
+    activeLoaded,
+    activeError,
+    activeUpdatedAt,
     accountOptions,
     selectedAccount,
     stats,
@@ -483,6 +543,7 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     monthSummary,
     loadAccounts,
     loadRecords,
+    loadActiveTasks,
     selectAccount,
     setType,
     setStatus,

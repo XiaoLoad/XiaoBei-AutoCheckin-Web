@@ -393,3 +393,26 @@ def sign_record_detail(account_id, task_id):
     if err:
         return err
     return success(data)
+
+
+@bp.route('/<int:account_id>/active-tasks', methods=['GET'])
+@token_required
+def list_active_tasks(account_id):
+    """账号在 B 平台「进行中」（本人未完成）的签到任务：寝室(know) + 活动(sign) 各查一次后合并。
+
+    供签到记录页「正在进行」卡片展示，仅读取、不提交；token 失效经 _call_with_refresh 自动重登重试。
+    返回 { items }，item 字段与历史任务统一口径（id/kind/type/taskName/日期/时段/发起人/needPhoto）。
+    """
+    acc = _load_owned(account_id)
+    if not acc:
+        return error(message='账号不存在', code=4040, status=404)
+
+    def _fetch(ad, tk):
+        items = ad.fetch_active_tasks(tk, 'dorm') + ad.fetch_active_tasks(tk, 'activity')
+        items.sort(key=lambda t: (t.get('startDate') or '', t.get('startTime') or ''), reverse=True)
+        return {'items': items}
+
+    data, err = _call_with_refresh(acc, _fetch)
+    if err:
+        return err
+    return success(data)

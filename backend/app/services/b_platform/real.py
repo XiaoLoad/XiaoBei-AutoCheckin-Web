@@ -212,6 +212,20 @@ class RealAdapter:
         detail = self.fetch_task_detail(session.get('token'), mod['kind'], task.get('id'))
         return {'task': self._unify_task(task, mod['kind']), 'fence': detail['geoFence']}
 
+    def fetch_active_tasks(self, token, task_type):
+        """进行中任务列表（/list 中本人未完成的行，可能多条），供前端「正在进行」卡片展示。
+
+        与 find_active_task 的区别：后者只取首条用于提交，这里返回全部未完成项。
+        仅读取，不做详情补查——列表行不带围栏，卡片不需要围栏。
+        """
+        mod = _module(task_type)
+        data = self._request('GET', mod['list'].lstrip('/'), token=token,
+                             params={'pageNum': 1, 'pageSize': 50})
+        rows = data.get('rows') or []
+        finish_field = mod['finish_field']
+        return [self._unify_task(r, mod['kind']) for r in rows
+                if str(r.get(finish_field)) == '0']
+
     def submit_checkin(self, session, task_type, platform_task_id, location, address, remark, image=None):
         """提交签到。image=None → 无图 JSON（photo:[]，size:"0"）；否则有图 multipart
         （photo+file0 同图双文件部分，size:"1"，文件名 {毫秒}{随机小写字母}.jpeg）。

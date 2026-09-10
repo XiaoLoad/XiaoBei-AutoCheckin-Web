@@ -63,6 +63,9 @@
     </div>
 
     <template v-else>
+      <!-- 正在进行：当前账号此刻可签的任务（寝/活合并），置于统计与历史之前——「现在」优先于「回顾」 -->
+      <ActiveTasksCard />
+
       <!-- 统计卡片：总任务 / 已签 / 未签 / 满勤率。满勤率用环形进度作视觉锚点，其余保持数字卡 -->
       <div class="grid shrink-0 grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="签到总任务" :value="stats.total" unit="项" icon="records" tone="brand" :loading="loadingRecords" :delay="1" count-up />
@@ -548,6 +551,7 @@ import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import StatCard from '@/components/StatCard.vue'
 import BasePagination from '@/components/BasePagination.vue'
+import ActiveTasksCard from '@/components/signrecords/ActiveTasksCard.vue'
 
 const store = useSignRecordsStore()
 const {

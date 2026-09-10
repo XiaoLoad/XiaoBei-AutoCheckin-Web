@@ -41,6 +41,18 @@ class StubAdapter:
             'initiator': '马一鸣 · 辅导员', 'needPhoto': True, 'finished': True,
         }]
 
+    def fetch_active_tasks(self, token, task_type):
+        """联调桩：返回一条「覆盖全天」的进行中任务，便于前端卡片在无网环境下可见"""
+        from datetime import datetime
+        today = datetime.now().strftime('%Y-%m-%d')
+        kind = 'know' if task_type == 'dorm' else 'sign'
+        return [{
+            'id': 58088 if kind == 'know' else 58089, 'kind': kind, 'type': task_type,
+            'taskName': '桩进行中任务', 'startDate': today, 'endDate': today,
+            'startTime': '00:00:00', 'endTime': '23:59:59',
+            'initiator': '桩发起人 · 辅导员', 'needPhoto': False, 'finished': False,
+        }]
+
     def fetch_task_detail(self, token, kind, task_id):
         return {
             'geoFence': [{

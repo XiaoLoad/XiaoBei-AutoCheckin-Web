@@ -14,12 +14,12 @@ class FakeResp:
 def test_login_success_shape(monkeypatch):
     captured = {}
 
-    def fake_get(url, headers=None, timeout=None):
+    def fake_get(url, headers=None, timeout=None, verify=None):
         captured['captcha_url'] = url
         return FakeResp({'code': 200, 'msg': '操作成功', 'img': 'xx',
                          'showCode': 'VKD6', 'uuid': 'u-123'})
 
-    def fake_post(url, json=None, headers=None, timeout=None):
+    def fake_post(url, json=None, headers=None, timeout=None, verify=None):
         captured['login_url'] = url
         captured['login_body'] = json
         return FakeResp({'msg': '操作成功', 'code': 200,
@@ -45,13 +45,14 @@ def test_login_success_shape(monkeypatch):
 def test_login_wrong_password(monkeypatch):
     monkeypatch.setattr(
         'app.services.b_platform.real.requests.get',
-        lambda url, headers=None, timeout=None: FakeResp(
+        lambda url, headers=None, timeout=None, verify=None: FakeResp(
             {'code': 200, 'showCode': 'ABCD', 'uuid': 'u'})
     )
     monkeypatch.setattr(
         'app.services.b_platform.real.requests.post',
-        lambda url, json=None, headers=None, timeout=None: FakeResp(
-            {'code': 500, 'msg': '密码错误'})
+        # 错误密码在 B 平台侧为 401，real.py 据此归类 credential（404/500 等归 unknown）
+        lambda url, json=None, headers=None, timeout=None, verify=None: FakeResp(
+            {'code': 401, 'msg': '密码错误'})
     )
     import pytest
     with pytest.raises(BPlatformError) as ei:

@@ -2,18 +2,21 @@
 # 原则：聚合全部 SQL 下推（GROUP BY + 子查询 + LIMIT，命中既有索引），响应体恒定几 KB，
 # 用户量增长不影响仪表盘；列表类只出 Top-N，全量明细归属用户管理页。
 import os
+import re
 import time
 from datetime import timedelta
 
 from flask import Blueprint, request
 from sqlalchemy import case, func
+from sqlalchemy.orm import joinedload
 
 from app.extensions import db
 from app.models import BAccount, Schedule, SignRecord, User
 from app.models.system_config import get_setting
 from app.models.user import now_cst
+from app.services.b_platform.history import fetch_history_tasks, fetch_task_detail
 from app.utils.auth import admin_required
-from app.utils.response import success
+from app.utils.response import error, success
 
 bp = Blueprint('admin', __name__, url_prefix='/api/admin')
 
@@ -356,3 +359,91 @@ def overview():
         'recentLogs': _recent_logs(),
         'schedulesEnabled': schedule_enabled,
     })
+
+
+# ============ 全站签到记录（管理员巡检：账号树 + B 平台历史代理读取） ============
+# 记录数据与用户端「签到记录页」同源同口径（services/b_platform/history.py 共用实现），
+# 管理员可读任意账号，但不输出任何密码/token 类字段。
+
+@bp.route('/site-records/tree', methods=['GET'])
+@admin_required
+def site_records_tree():
+    """全站用户 → B 平台账号 两级树。
+    账号复用 BAccount.to_dict 序列化（profile/lastSignIn/verifyStatus/signTasks 均为
+    现网契约字段），树节点状态点据此派生；schedules joinedload 预载避免 N+1。"""
+    users = User.query.order_by(User.id.asc()).all()
+    accs = (BAccount.query.options(joinedload(BAccount.schedules))
+            .order_by(BAccount.id.desc()).all())
+    by_user = {}
+    for a in accs:
+        by_user.setdefault(a.user_id, []).append(a)
+    items = []
+    for u in users:
+        items.append({
+            'id': u.id,
+            'username': u.username,
+            'role': u.role,
+            'enabled': bool(u.enabled),
+            'accounts': [a.to_dict() for a in by_user.get(u.id, [])],
+        })
+    return success({'items': items, 'total': len(items)})
+
+
+def _load_any_account(account_id):
+    """管理员巡检按 id 直取账号（admin_required 已鉴权）；查无即 404"""
+    return db.session.get(BAccount, account_id)
+
+
+@bp.route('/site-records/accounts/<int:account_id>/records', methods=['GET'])
+@admin_required
+def site_account_records(account_id):
+    """指定账号的 B 平台历史签到任务分页（契约对齐用户端 accounts.list_sign_records）。
+
+    查询参数：type(all|dorm|activity) / status(all|signed|unsigned|needPhoto) /
+    date_from / date_to(YYYY-MM-DD) / page / page_size。
+    响应：{ items, total, page, page_size, overview, meta }。
+    """
+    acc = _load_any_account(account_id)
+    if not acc:
+        return error(message='账号不存在', code=4040, status=404)
+    try:
+        page = max(1, int(request.args.get('page', 1)))
+        page_size = min(200, max(1, int(request.args.get('page_size', 10))))
+    except (TypeError, ValueError):
+        page, page_size = 1, 10
+    type_filter = (request.args.get('type') or 'all').strip()
+    status_filter = (request.args.get('status') or 'all').strip()
+    date_from = (request.args.get('date_from') or '').strip() or None
+    date_to = (request.args.get('date_to') or '').strip() or None
+    # 日期窗口合法性兜底：非法格式视为参数错误（避免 500）
+    for raw in (date_from, date_to):
+        if raw and not re.match(r'^\d{4}-\d{2}-\d{2}$', raw):
+            return error(message='date_from/date_to 格式应为 YYYY-MM-DD', code=4304, status=400)
+    if status_filter not in ('all', 'signed', 'unsigned', 'needPhoto'):
+        return error(message='status 仅支持 all/signed/unsigned/needPhoto', code=4305, status=400)
+
+    result, err = fetch_history_tasks(acc, type_filter, status_filter, date_from, date_to)
+    if err:
+        return err
+    merged, overview, meta = result['merged'], result['overview'], result['meta']
+    total = len(merged)
+    start = (page - 1) * page_size
+    items = merged[start:start + page_size]
+    return success({'items': items, 'total': total, 'page': page, 'page_size': page_size,
+                    'overview': overview, 'meta': meta})
+
+
+@bp.route('/site-records/accounts/<int:account_id>/records/<int:task_id>/detail', methods=['GET'])
+@admin_required
+def site_account_record_detail(account_id, task_id):
+    """任务地理围栏 + 签到记录列表（listLog），kind=know|sign，契约对齐用户端。"""
+    acc = _load_any_account(account_id)
+    if not acc:
+        return error(message='账号不存在', code=4040, status=404)
+    kind = (request.args.get('kind') or 'know').strip()
+    if kind not in ('know', 'sign'):
+        return error(message='未知的任务类型', code=4001, status=400)
+    data, err = fetch_task_detail(acc, kind, task_id)
+    if err:
+        return err
+    return success(data)

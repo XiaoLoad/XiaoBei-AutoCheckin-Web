@@ -3,6 +3,8 @@
 # 并通过 _execute 全链路验证提交备注确实带上了对应账号的 B 平台姓名。
 import uuid
 
+import pytest
+
 from app.extensions import db
 from app.models import BAccount, ConfigSet, Schedule, User
 from app.services import scheduler as sch
@@ -58,7 +60,11 @@ class _OkAdapter:
         return self.result
 
 
-def test_execute_renders_username_into_submitted_remark(app_ctx, monkeypatch):
+@pytest.fixture
+def remark_scenario(app_ctx, monkeypatch):
+    """构造一个 follow 模式、绑定配置套的测试任务；无论测试成功或失败，
+    都在 finalizer 按外键顺序清掉本用户全部关联数据，杜绝污染开发库
+    （原实现把清理内联在断言之后，断言失败即泄漏，正是 2182 残留的成因）。"""
     uname = f'tc_remark_{uuid.uuid4().hex[:10]}'
     u = User(username=uname, role='user', enabled=True, quota=100, used_quota=0)
     u.set_password('pw')
@@ -87,15 +93,20 @@ def test_execute_renders_username_into_submitted_remark(app_ctx, monkeypatch):
 
     _OkAdapter.captured = None
     monkeypatch.setattr(sch, 'get_adapter', lambda: _OkAdapter())
-    sch._execute(s)
+    yield s
 
-    assert _OkAdapter.captured == '贺鑫已完成签到'
-
-    # teardown：清理本用户关联数据，杜绝跨测试残留（注意外键顺序：先删子表再删父表）
+    # finalizer：清理（外键顺序：先删子表再删父表），测试失败也执行
     from app.models import SignRecord
     SignRecord.query.filter_by(user_id=u.id).delete()
     Schedule.query.filter_by(user_id=u.id).delete()
     ConfigSet.query.filter_by(user_id=u.id).delete()
     BAccount.query.filter_by(user_id=u.id).delete()
-    db.session.delete(db.session.get(User, u.id))
+    uu = db.session.get(User, u.id)
+    if uu is not None:
+        db.session.delete(uu)
     db.session.commit()
+
+
+def test_execute_renders_username_into_submitted_remark(remark_scenario):
+    sch._execute(remark_scenario)
+    assert _OkAdapter.captured == '贺鑫已完成签到'

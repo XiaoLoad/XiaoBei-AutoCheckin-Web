@@ -12,6 +12,7 @@ from app.models.user import now_cst
 from app.schemas.account_schema import load_create, load_update, load_preflight
 from app.services.b_platform import get_adapter
 from app.services.b_platform.base import BPlatformError
+from app.services.b_platform.history import call_with_refresh, fetch_history_tasks, fetch_task_detail
 from app.services.scheduler import remove_job
 from app.utils.auth import token_required
 from app.utils.response import error, success
@@ -249,33 +250,8 @@ def list_records(account_id):
 
 
 def _call_with_refresh(account, call):
-    """调用 B 平台读取函数；token 失效（credential 类错误）自动重登并刷新一次。
-    返回 (result, err_resp)：成功时 err_resp 为 None，失败时 result 为 None。"""
-    adapter = get_adapter()
-    token = account.get_token()
-    if not token:
-        result, err = _run_verify(account.account, account.get_password())
-        if err:
-            return None, err
-        account.set_token(result.token)
-        db.session.commit()
-        token = result.token
-    try:
-        return call(adapter, token), None
-    except BPlatformError as e:
-        if e.kind != 'credential':
-            return None, error(message=f'B 平台读取失败：{e.message}', code=4302, status=502)
-        # token 失效：重登刷新后重试一次
-        try:
-            new_token = adapter.login(account.account, account.get_password())
-        except BPlatformError as le:
-            return None, error(message=f'B 平台重登失败：{le.message}', code=4303, status=502)
-        account.set_token(new_token)
-        db.session.commit()
-        try:
-            return call(adapter, new_token), None
-        except BPlatformError as e2:
-            return None, error(message=f'B 平台读取失败：{e2.message}', code=4302, status=502)
+    """兼容别名：实现已抽到 services/b_platform/history.py，与 admin 全站巡检共用。"""
+    return call_with_refresh(account, call)
 
 
 @bp.route('/<int:account_id>/sign-records', methods=['GET'])
@@ -313,56 +289,8 @@ def list_sign_records(account_id):
     if status_filter not in ('all', 'signed', 'unsigned', 'needPhoto'):
         return error(message='status 仅支持 all/signed/unsigned/needPhoto', code=4305, status=400)
 
-    def _fetch(ad, tk):
-        merged = ad.fetch_history_tasks(tk, 'know') + ad.fetch_history_tasks(tk, 'sign')
-        if type_filter in ('dorm', 'activity'):
-            merged = [t for t in merged if t['type'] == type_filter]
-
-        def _range_of(t):
-            s = (t.get('startDate') or '')[:10]
-            e = (t.get('endDate') or s)[:10]
-            return s, e
-
-        # 全历史统计与最近数据月份：type 过滤后、status/日期过滤前计算（原前端口径：
-        # 统计卡跟随状态筛选、不受日历点选影响；日历跳转看的是全部数据的最近月份）
-        finished = sum(1 for t in merged if t.get('finished'))
-        need_photo = sum(1 for t in merged if t.get('needPhoto'))
-        total_all = len(merged)
-        dates = [d for t in merged for d in _range_of(t) if d]
-        overview = {
-            'total': total_all,
-            'finished': finished,
-            'unsigned': total_all - finished,
-            'needPhoto': need_photo,
-            'rate': round(finished / total_all * 100) if total_all else 0,
-        }
-        meta = {'earliest_date': min(dates) if dates else None,
-                'latest_date': max(dates) if dates else None}
-
-        if status_filter == 'signed':
-            merged = [t for t in merged if t.get('finished')]
-        elif status_filter == 'unsigned':
-            merged = [t for t in merged if not t.get('finished')]
-        elif status_filter == 'needPhoto':
-            merged = [t for t in merged if t.get('needPhoto')]
-
-        # 日期窗口：任务区间与窗口有重叠即入选（覆盖长任务跨月/跨日的日历语义）
-        if date_from or date_to:
-            def _overlap(t):
-                s, e = _range_of(t)
-                if not s:
-                    return False
-                if date_from and e < date_from:
-                    return False
-                if date_to and s > date_to:
-                    return False
-                return True
-            merged = [t for t in merged if _overlap(t)]
-
-        merged.sort(key=lambda t: (t['startDate'], t['startTime']), reverse=True)
-        return {'merged': merged, 'overview': overview, 'meta': meta}
-
-    result, err = _call_with_refresh(acc, _fetch)
+    # 筛选/统计口径已抽到服务层，与 admin 全站巡检共用同一实现
+    result, err = fetch_history_tasks(acc, type_filter, status_filter, date_from, date_to)
     if err:
         return err
     merged, overview, meta = result['merged'], result['overview'], result['meta']
@@ -384,12 +312,7 @@ def sign_record_detail(account_id, task_id):
     if kind not in ('know', 'sign'):
         return error(message='未知的任务类型', code=4001, status=400)
 
-    def _fetch(ad, tk):
-        detail = ad.fetch_task_detail(tk, kind, task_id)
-        logs = ad.fetch_task_logs(tk, kind, task_id)
-        return {'geoFence': detail['geoFence'], 'logs': logs}
-
-    data, err = _call_with_refresh(acc, _fetch)
+    data, err = fetch_task_detail(acc, kind, task_id)
     if err:
         return err
     return success(data)

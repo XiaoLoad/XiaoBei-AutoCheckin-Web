@@ -57,6 +57,13 @@ const dynamicRoutes = [
     meta: { title: '用户管理', requiresAuth: true, roles: ['admin'], group: '运营管理', icon: 'users', order: 0 }
   },
   {
+    path: '/site-records',
+    name: 'site-records',
+    component: () => import('@/views/SiteRecordsView.vue'),
+    // [权限判断] 全站签到记录仅管理员可访问：账号树巡检所有站点用户的 B 平台账号及其历史签到
+    meta: { title: '全站签到记录', requiresAuth: true, roles: ['admin'], group: '运营管理', icon: 'records', order: 1 }
+  },
+  {
     path: '/settings',
     name: 'settings',
     component: () => import('@/views/SystemSettingsView.vue'),

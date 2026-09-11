@@ -183,7 +183,7 @@ let mm = null
 let lastSig = ''
 
 // 走时：30s 一跳，驱动「剩余时间 / 窗口进度」；每 4 跳（120s）且页面可见时静默补一次数据。
-// 后台刷新不登记全局 refreshBus——顶部进度条每 2 分钟闪一次是噪音，改由卡片自持指示。
+// 后台自动刷新不亮全局进度条（每 2 分钟闪一次是噪音），由卡片自持指示（刷新键自旋 + 「更新于」）。
 const TICK_MS = 30000
 const TICKS_PER_REFRESH = 4
 const nowRef = ref(new Date())
@@ -193,19 +193,24 @@ let ticks = 0
 function onTick() {
   nowRef.value = new Date()
   ticks += 1
-  if (ticks % TICKS_PER_REFRESH === 0 && document.visibilityState === 'visible') refresh()
+  if (ticks % TICKS_PER_REFRESH === 0 && document.visibilityState === 'visible') refreshInBackground()
 }
 
 // 回到前台时数据若已陈旧（>60s）立即补一次，避免长时间隐藏后卡片停在旧快照
 function onVisibility() {
   if (document.visibilityState !== 'visible') return
   nowRef.value = new Date()
-  if (Date.now() - (activeUpdatedAt.value || 0) > 60000) refresh()
+  if (Date.now() - (activeUpdatedAt.value || 0) > 60000) refreshInBackground()
 }
 
-// 手动/自动刷新统一走静默：已有数据时保留列表原地换新（刷新按钮自旋 + 轻微降透明）
+// 手动刷新：静默换新（列表原地保留、刷新键自旋），并照常亮全局进度条
 function refresh() {
   store.loadActiveTasks({ silent: true })
+}
+
+// 后台自动刷新：同样静默，但向请求层声明 skipLoadingBar，不参与全局加载条
+function refreshInBackground() {
+  store.loadActiveTasks({ silent: true, background: true })
 }
 
 function pad(n) {

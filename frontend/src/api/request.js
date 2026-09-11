@@ -2,9 +2,12 @@
 // [错误提示约定] 失败默认由本模块统一 toast（store/视图无需各自 catch+toast）；
 // 调用方若自行处理错误（如批量操作逐条汇总、表单内联提示），在请求配置传
 // { silent: true } 关闭全局提示，避免双重 toast。
+// [顶部进度条约定] 请求默认计入全局加载条（见 utils/loadingBar.js）；
+// 周期性的后台轮询传 { skipLoadingBar: true } 豁免，避免长期噪音。
 import axios from 'axios'
 import { bus, EVENTS } from '@/utils/eventBus'
 import { toast } from '@/utils/toast'
+import { beginLoad, endLoad, resetLoads } from '@/utils/loadingBar'
 
 const service = axios.create({
   // 开发环境通过 Vite 代理转发到后端（见 vite.config.js）
@@ -21,11 +24,22 @@ function trackRequest(config) {
   config.signal = controller.signal
   config.__controller = controller
   pendingControllers.add(controller)
+  // 顶部加载条按请求计数：默认所有请求都亮条，后台轮询类请求显式豁免
+  if (config.skipLoadingBar !== true) {
+    config.__lbCounted = true
+    beginLoad()
+  }
 }
 
+// 配对释放：__controller 置空后重复调用不会二次递减，保证计数不泄漏
 function untrackRequest(config) {
   if (config && config.__controller) {
     pendingControllers.delete(config.__controller)
+    config.__controller = null
+    if (config.__lbCounted) {
+      config.__lbCounted = false
+      endLoad()
+    }
   }
 }
 
@@ -33,6 +47,8 @@ function untrackRequest(config) {
 export function cancelPendingRequests() {
   pendingControllers.forEach((c) => c.abort('logout'))
   pendingControllers.clear()
+  // 中止后的请求各自会走响应错误分支递减，这里再兜底清零，杜绝计数泄漏
+  resetLoads()
 }
 
 // 请求拦截：统一附加 Bearer token

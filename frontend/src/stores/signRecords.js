@@ -230,8 +230,9 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
 
   // 拉取「进行中」任务（寝/活合并，仅本人未完成）。仅随账号变化调用，与历史筛选无关。
   // silent=true（后台自动刷新）时保留旧数据原地换新，避免卡片闪骨架。
+  // background=true（周期轮询/回前台补拉）额外豁免全局顶部加载条，避免长期噪音。
   let activeSeq = 0
-  async function loadActiveTasks({ silent = false } = {}) {
+  async function loadActiveTasks({ silent = false, background = false } = {}) {
     if (!selectedAccountId.value) {
       activeTasks.value = []
       activeError.value = ''
@@ -250,7 +251,7 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
       activeLoaded.value = false
     }
     try {
-      const res = await fetchActiveTasks(selectedAccountId.value)
+      const res = await fetchActiveTasks(selectedAccountId.value, { skipLoadingBar: background })
       if (seq !== activeSeq) return // 竞态守卫：快速切账号只采纳最新结果
       activeTasks.value = res.items
       activeError.value = ''

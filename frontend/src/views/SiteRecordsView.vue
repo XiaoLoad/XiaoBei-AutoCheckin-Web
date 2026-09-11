@@ -1,10 +1,10 @@
 <template>
   <div class="flex flex-col gap-4 sm:gap-5 lg:flex-1 lg:min-h-0">
-    <!-- 页首导语：仅此一行解释性文案，左侧品牌色短竖线作为页面起的"引子" -->
-    <div class="flex shrink-0 items-start gap-2.5 text-[13px] leading-relaxed text-ink-muted">
-      <span class="mt-[7px] h-3 w-[3px] shrink-0 rounded-full bg-brand/60" aria-hidden="true" />
-      <p>左侧账号树定位「哪个用户的哪个 B 平台账号」，右侧核对该账号在 B 平台的历史签到记录，行可展开看围栏与凭证。</p>
-    </div>
+    <!-- 页首导语：仅此一行解释性文案。短竖线改由 p 的 border-left 承担——由盒模型保证与文字
+         同行对齐；原先用 flex + mt-[7px] 手调偏移，字号或行高一变就失准，且文案换行时竖线只停在首行 -->
+    <p class="shrink-0 border-l-[3px] border-brand/60 pl-2.5 text-[13px] leading-relaxed text-ink-muted">
+      左侧账号树定位「哪个用户的哪个 B 平台账号」，右侧核对该账号在 B 平台的历史签到记录，行可展开看围栏与凭证。
+    </p>
 
     <!-- 两栏容器在有界高度里铺满剩余视口：两侧同时被拉伸到同一高度，底部自然对齐。
          左树不再单独限高——原先只有它带 lg:max-h-[calc(100vh-13rem)]、右卡没有，

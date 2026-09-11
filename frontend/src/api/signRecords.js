@@ -53,12 +53,14 @@ export async function fetchTaskDetail(accountId, taskId, kind = 'know') {
 
 // 拉取指定账号在 B 平台「进行中」的签到任务（寝室 + 活动，仅本人未完成）。
 // silent：错误由卡片内联呈现，不走全局 toast（后台静默自动刷新时尤需避免刷屏提示）。
-export async function fetchActiveTasks(accountId) {
+// skipLoadingBar：后台轮询类调用传入，不参与全局顶部加载条。
+export async function fetchActiveTasks(accountId, { skipLoadingBar = false } = {}) {
   if (!accountId) return { items: [] }
   const data = await request({
     url: `/accounts/${accountId}/active-tasks`,
     method: 'get',
     silent: true,
+    skipLoadingBar,
   })
   return { items: data.items || [] }
 }

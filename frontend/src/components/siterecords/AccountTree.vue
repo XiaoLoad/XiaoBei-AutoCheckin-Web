@@ -4,22 +4,28 @@
     <div class="shrink-0 border-b border-ink/5 px-4 pb-3 pt-4">
       <div class="flex items-baseline gap-2">
         <h3 class="text-sm font-semibold text-ink">账号树</h3>
-        <span class="text-xs text-ink-muted tabular-nums">{{ treeCounts.users }} 位用户 · {{ treeCounts.accounts }} 个账号</span>
+        <span class="text-[11.5px] tabular-nums text-ink-muted">{{ treeCounts.users }} 位用户 · {{ treeCounts.accounts }} 个账号</span>
       </div>
-      <div class="mt-2.5 flex items-center gap-2 rounded-xl bg-cloud px-3 py-2">
+      <div class="mt-2.5 flex items-center gap-2 rounded-xl bg-cloud/60 px-3 py-2 ring-1 ring-inset ring-ink/5 transition focus-within:bg-white focus-within:ring-2 focus-within:ring-brand/30">
         <Icon name="search" :size="15" class="shrink-0 text-ink-muted" />
         <input
           :value="keyword"
           type="text"
           placeholder="搜索用户名 / B 平台账号…"
+          aria-label="搜索用户名或 B 平台账号"
           class="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-muted/60"
           @input="keyword = $event.target.value"
         />
-        <span class="shrink-0 rounded-md border border-ink/10 bg-white px-1.5 py-0.5 text-[10.5px] text-ink-muted">模糊</span>
+        <button
+          v-if="keyword"
+          type="button"
+          class="grid h-5 w-5 shrink-0 place-items-center rounded-md text-ink-muted transition hover:bg-cloud hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+          aria-label="清除搜索"
+          @click="keyword = ''"
+        >
+          <Icon name="close" :size="13" />
+        </button>
       </div>
-      <p class="mt-2 px-0.5 text-[11px] leading-relaxed text-ink-muted">
-        命中用户或账号时自动展开并高亮关键词；账号可按登录标识与平台姓名匹配。
-      </p>
     </div>
 
     <!-- 树体 -->
@@ -27,34 +33,40 @@
       <!-- 加载中 -->
       <div v-if="loadingTree" class="space-y-2 p-1.5">
         <div v-for="i in 5" :key="i" class="flex items-center gap-2.5">
-          <div class="h-8 w-8 shrink-0 rounded-full bg-ink/5 animate-pulse" />
+          <div class="xb-skel h-8 w-8 shrink-0 rounded-full bg-ink/5 animate-pulse" />
           <div class="flex-1 space-y-1.5">
-            <div class="h-3 w-24 rounded bg-ink/5 animate-pulse" />
-            <div class="h-2.5 w-16 rounded bg-ink/5 animate-pulse" />
+            <div class="xb-skel h-3 w-24 rounded bg-ink/5 animate-pulse" />
+            <div class="xb-skel h-2.5 w-16 rounded bg-ink/5 animate-pulse" />
           </div>
         </div>
       </div>
 
       <!-- 加载失败 -->
-      <div v-else-if="treeError" class="flex flex-col items-center gap-2 px-4 py-10 text-center text-ink-muted">
-        <Icon name="x-circle" :size="26" class="text-danger opacity-70" />
+      <div v-else-if="treeError" class="flex flex-col items-center gap-2.5 px-4 py-10 text-center text-ink-muted">
+        <span class="grid h-11 w-11 place-items-center rounded-2xl bg-danger/10">
+          <Icon name="x-circle" :size="20" class="text-danger" />
+        </span>
         <span class="text-xs">{{ treeError }}</span>
         <button
           type="button"
-          class="rounded-lg border border-ink/10 px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-cloud"
+          class="rounded-lg border border-ink/10 px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-cloud focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
           @click="loadTree"
         >重试</button>
       </div>
 
       <!-- 全站无账号 -->
-      <div v-else-if="tree.length === 0" class="flex flex-col items-center gap-2 px-4 py-10 text-center text-ink-muted">
-        <Icon name="users" :size="26" class="opacity-40" />
+      <div v-else-if="tree.length === 0" class="flex flex-col items-center gap-2.5 px-4 py-10 text-center text-ink-muted">
+        <span class="grid h-11 w-11 place-items-center rounded-2xl bg-cloud">
+          <Icon name="users" :size="20" class="opacity-60" />
+        </span>
         <span class="text-xs">全站还没有任何 B 平台账号</span>
       </div>
 
       <!-- 搜索无命中 -->
-      <div v-else-if="filteredTree.length === 0" class="flex flex-col items-center gap-1.5 px-4 py-10 text-center text-ink-muted">
-        <Icon name="search" :size="24" class="opacity-40" />
+      <div v-else-if="filteredTree.length === 0" class="flex flex-col items-center gap-2.5 px-4 py-10 text-center text-ink-muted">
+        <span class="grid h-11 w-11 place-items-center rounded-2xl bg-cloud">
+          <Icon name="search" :size="20" class="opacity-60" />
+        </span>
         <span class="text-xs">没有匹配的用户或账号，换个关键词试试</span>
       </div>
 
@@ -63,7 +75,7 @@
           <!-- 用户根节点 -->
           <button
             type="button"
-            class="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left transition hover:bg-cloud"
+            class="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left transition hover:bg-cloud/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
             :aria-expanded="isOpen(node)"
             @click="toggleNode(node.id)"
           >
@@ -74,7 +86,7 @@
               :class="isOpen(node) ? 'rotate-90' : ''"
             />
             <span
-              class="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[12.5px] font-semibold"
+              class="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[12.5px] font-semibold ring-1 ring-inset ring-ink/5"
               :class="avatarCls(node)"
             >{{ node.username.charAt(0).toUpperCase() }}</span>
             <span class="min-w-0 flex-1">
@@ -83,9 +95,7 @@
                 {{ node.role === 'admin' ? '管理员' : '普通用户' }}{{ node.enabled ? '' : ' · 已禁用' }}
               </span>
             </span>
-            <span class="shrink-0 rounded-full bg-cloud px-2 py-0.5 text-[11px] text-ink-muted tabular-nums">
-              {{ node.accounts.length }} 账号
-            </span>
+            <span class="shrink-0 text-[11px] tabular-nums text-ink-muted">{{ node.accounts.length }} 账号</span>
           </button>
 
           <!-- B 平台账号子节点 -->
@@ -94,16 +104,22 @@
               v-for="a in node.accounts"
               :key="a.id"
               type="button"
-              class="relative flex w-full items-center gap-2 rounded-xl px-2 py-1.5 text-left transition hover:bg-cloud"
-              :class="selectedAccountId === Number(a.id) ? 'bg-brand/[0.08] outline outline-1 outline-brand/30' : ''"
+              class="relative flex w-full items-center gap-2 rounded-xl px-2 py-1.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+              :class="selectedAccountId === Number(a.id) ? 'bg-brand/[0.07]' : 'hover:bg-cloud/70'"
               @click="selectAccount(Number(a.id))"
             >
+              <!-- 选中态由树连接线本身表达：该行的连线段落转品牌色 -->
+              <span
+                v-if="selectedAccountId === Number(a.id)"
+                class="pointer-events-none absolute inset-y-1 -left-2.5 w-[2px] rounded-full bg-brand"
+                aria-hidden="true"
+              />
               <span class="h-2 w-2 shrink-0 rounded-full" :class="dotCls(a)" :title="dotTitle(a)" />
               <span class="min-w-0 flex-1">
                 <span class="flex items-center gap-1.5">
                   <span class="truncate text-[13px] font-medium text-ink">{{ a.account }}</span>
                   <span
-                    class="shrink-0 rounded-full px-1.5 py-px text-[10px] font-medium"
+                    class="shrink-0 rounded-md px-1.5 py-px text-[10px] font-medium"
                     :class="typeBadge(a.type).cls"
                   >{{ typeBadge(a.type).label }}</span>
                 </span>
@@ -119,10 +135,10 @@
     </div>
 
     <!-- 图例 -->
-    <div class="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-ink/5 px-4 py-2.5 text-[11px] text-ink-muted">
-      <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-success" />最近成功</span>
-      <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-danger" />最近失败</span>
-      <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-ink/20" />凭证失效</span>
+    <div class="flex shrink-0 flex-wrap items-center gap-x-3.5 gap-y-1 border-t border-ink/5 px-4 py-2.5 text-[10.5px] text-ink-muted">
+      <span class="inline-flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true" />最近成功</span>
+      <span class="inline-flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full bg-danger" aria-hidden="true" />最近失败</span>
+      <span class="inline-flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full bg-ink/20" aria-hidden="true" />凭证失效</span>
     </div>
   </div>
 </template>
@@ -182,13 +198,26 @@ function lastText(a) {
   return `${label} ${ls.time}`
 }
 
-// 搜索命中高亮：plain 文本按关键词切片包 <mark>；未命中原样返回
+// 搜索命中高亮：先 HTML 转义再拼接 mark —— 用户名/账号均可由用户侧决定，
+// 直接 v-html 原文等于开注入口子（与 UserManagementView 同一套做法）
+const ESCAPE_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ESCAPE_MAP[c])
+}
 function highlight(text, hit) {
   const raw = String(text ?? '')
   const q = keyword.value.trim()
-  if (!hit || !q) return raw
+  if (!hit || !q) return escapeHtml(raw)
   const idx = raw.toLowerCase().indexOf(q.toLowerCase())
-  if (idx < 0) return raw
-  return `${raw.slice(0, idx)}<mark class="rounded bg-amber/30 px-0.5">${raw.slice(idx, idx + q.length)}</mark>${raw.slice(idx + q.length)}`
+  if (idx < 0) return escapeHtml(raw)
+  const hitText = raw.slice(idx, idx + q.length)
+  return `${escapeHtml(raw.slice(0, idx))}<mark class="rounded bg-amber/30 px-0.5">${escapeHtml(hitText)}</mark>${escapeHtml(raw.slice(idx + q.length))}`
 }
 </script>
+
+<style scoped>
+/* 仅让刷新/骨架脉冲等动画保留，减弱动效偏好下退化为静态 */
+@media (prefers-reduced-motion: reduce) {
+  .xb-skel { animation: none; }
+}
+</style>

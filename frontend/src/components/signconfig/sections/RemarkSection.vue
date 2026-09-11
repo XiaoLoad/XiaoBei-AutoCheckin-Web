@@ -1,6 +1,6 @@
 <template>
   <ConfigSection title="备注列表" icon="file" :source="source" :error="error" :required="required">
-    <p class="mb-2 text-xs text-ink-muted">签到时后台随机选取一条提交；可按 B 平台账号设置带名备注（如"xxx签到"）。</p>
+    <p class="mb-2 text-xs text-ink-muted">签到时后台随机选取一条提交；支持占位符 <code class="rounded bg-white px-1">{username}</code>（自动替换为该账号的 B 平台姓名），例如「{username}已完成签到」会按各账号姓名分别提交。</p>
 
     <p v-if="config.remarks.length === 0" class="rounded-xl border border-dashed border-ink/15 px-3 py-3 text-center text-xs text-ink-muted">
       暂无备注，点击下方「添加备注」新增一条
@@ -39,11 +39,21 @@
       </button>
       <span v-if="hintIndex !== -1" class="text-xs text-danger">请先填写当前这条备注</span>
     </div>
+
+    <div v-if="previewList.length" class="mt-3 space-y-1 rounded-xl border border-ink/10 bg-cloud/50 px-3 py-2 text-xs">
+      <p class="font-medium text-ink-muted">提交预览（<code class="rounded bg-white px-1">{username}</code> 自动替换为对应账号的 B 平台姓名）</p>
+      <p v-for="(item, i) in previewList" :key="i" class="text-ink-soft">
+        <span class="text-ink-muted">配置：</span>{{ item.raw }}
+        <span class="mx-1 text-ink-muted">→</span>
+        <template v-if="sampleName"><span class="font-medium text-brand">实际提交：{{ item.rendered }}</span></template>
+        <template v-else><span class="text-ink-muted">实际提交：{{ item.raw }}（账号未同步 B 平台姓名时回落为登录标识）</span></template>
+      </p>
+    </div>
   </ConfigSection>
 </template>
 
 <script setup>
-import { ref, watch, nextTick, onBeforeUnmount } from 'vue'
+import { ref, watch, nextTick, onBeforeUnmount, computed } from 'vue'
 import ConfigSection from '@/components/signconfig/ConfigSection.vue'
 import Icon from '@/components/Icon.vue'
 
@@ -51,8 +61,22 @@ const props = defineProps({
   config: { type: Object, required: true },
   source: { type: String, default: '' },
   error: { type: String, default: '' },
-  required: { type: Boolean, default: false }
+  required: { type: Boolean, default: false },
+  // 预览示例用的 B 平台姓名（由父组件按上下文给出：配置套取首个绑定账号，任务取当前账号）
+  sampleName: { type: String, default: '' }
 })
+
+// 含 {username} 的备注实时预览：用 sampleName 渲染为「实际提交」形态，
+// 让用户在保存前看清占位符最终会变成对应账号的 B 平台姓名。
+const previewList = computed(() =>
+  (props.config.remarks || [])
+    .map((r) => String(r ?? '').trim())
+    .filter((r) => r.includes('{username}'))
+    .map((raw) => ({
+      raw,
+      rendered: props.sampleName ? raw.replace(/\{username\}/g, props.sampleName) : raw
+    }))
+)
 
 // 备注本身是字符串数组（后端契约），另用一份并行 key 保证列表项在增删时身份稳定，
 // 避免用索引作 key 导致过渡动画与输入框复用错位。

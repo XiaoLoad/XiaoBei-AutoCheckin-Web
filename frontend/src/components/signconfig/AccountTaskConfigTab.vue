@@ -188,7 +188,7 @@
             :source="store.taskScheduleState.hasInstance ? 'task' : ''"
           />
           <LocationSection :config="store.taskConfig" :required="true" :error="store.formErrors.location" />
-          <RemarkSection :config="store.taskConfig" :required="true" :error="store.formErrors.remarks" />
+          <RemarkSection :config="store.taskConfig" :required="true" :error="store.formErrors.remarks" :sample-name="remarkSampleName" />
           <ImageSection :config="store.taskConfig" />
           <PushSection :config="store.taskConfig" />
           <AdvancedSection :config="store.taskConfig" />
@@ -283,6 +283,11 @@ const filtered = computed(() => {
   if (!q) return store.accountTree
   return store.accountTree.filter((a) => a.name.toLowerCase().includes(q))
 })
+
+// 备注预览示例姓名：当前选中账号的 B 平台姓名
+const remarkSampleName = computed(() =>
+  store.accounts.find((a) => a.id === store.selectedAccountId)?.name || ''
+)
 
 function isOpen(id) {
   return !!expanded[id]

@@ -83,7 +83,7 @@
                 :account-id="String(props.schedule.accountId || '')"
               />
               <LocationSection :config="signConfigStore.taskConfig" :required="true" :error="signConfigStore.formErrors.location" />
-              <RemarkSection :config="signConfigStore.taskConfig" :required="true" :error="signConfigStore.formErrors.remarks" />
+              <RemarkSection :config="signConfigStore.taskConfig" :required="true" :error="signConfigStore.formErrors.remarks" :sample-name="remarkSampleName" />
               <ImageSection :config="signConfigStore.taskConfig" />
               <PushSection :config="signConfigStore.taskConfig" />
               <AdvancedSection :config="signConfigStore.taskConfig" />
@@ -183,6 +183,11 @@ const syncing = ref(false)
 
 // 当前任务调度实例状态（来自 signConfigStore，已含 enabled / scheduleId / configSetId）
 const taskState = computed(() => signConfigStore.taskScheduleState)
+
+// 备注预览示例姓名：当前任务所属账号的 B 平台姓名
+const remarkSampleName = computed(() =>
+  signConfigStore.accounts.find((a) => a.id === String(props.schedule.accountId || ''))?.name || ''
+)
 
 // 配置套下拉：仅本地选择/预览，关联由「套用」显式触发
 const bindPick = computed({

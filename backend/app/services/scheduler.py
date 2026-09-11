@@ -793,8 +793,9 @@ def _execute(schedule, allow_retry=True, course_name=None):
                            resolved=resolved, course_name=course_name)
             return
         # 本次实际提交的单条备注：多条随机选一、单条即用该条、无则占位；
-        # 同时交给提交与推送展示，保证「提交什么就推送什么」。
-        submitted_remark = _select_remark(resolved)
+        # 模板占位符（{username}=B 平台账号姓名）在此一次性渲染，提交与推送共用同一结果，
+        # 保证「提交什么就推送什么」。
+        submitted_remark = _render_remark(_select_remark(resolved), acc)
         session = {
             'token': acc.get_token(),
             'account': acc.account,
@@ -883,6 +884,22 @@ def _schedule_retry(schedule):
         log.info('任务 %s 网络失败，已安排 %d 分钟后补跑', schedule.id, _RETRY_DELAY_MINUTES)
     except Exception:
         log.exception('任务 %s 补跑安排失败（不影响已落库的失败记录）', schedule.id)
+
+
+def _render_remark(text, acc):
+    """渲染备注模板占位符为实际值。当前仅支持 {username}（B 平台账号姓名）。
+    姓名为空时回落到登录账号标识；两者皆空则原样保留（含字面 {username}，由后端兜底不泄露）。"""
+    if not text or text == '—':
+        return text
+    profile = getattr(acc, 'profile', None)
+    if not isinstance(profile, dict):
+        profile = {}
+    name = (profile.get('name') or '').strip()
+    if not name:
+        name = getattr(acc, 'account', '') or ''
+    if not name:
+        return text
+    return text.replace('{username}', name)
 
 
 def _select_remark(resolved):

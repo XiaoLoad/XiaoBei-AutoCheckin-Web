@@ -226,7 +226,7 @@
           <!-- 活动调度策略仅活动签到套可见：寝室套无此块，语义干净不误导 -->
           <ActivitySection v-if="isActivitySet" :config="store.activeSet.config" />
           <LocationSection :config="store.activeSet.config" :required="true" :error="store.formErrors.location" />
-          <RemarkSection :config="store.activeSet.config" :required="true" :error="store.formErrors.remarks" />
+          <RemarkSection :config="store.activeSet.config" :required="true" :error="store.formErrors.remarks" :sample-name="remarkSampleName" />
           <ImageSection :config="store.activeSet.config" />
           <PushSection :config="store.activeSet.config" />
           <AdvancedSection :config="store.activeSet.config" />
@@ -314,6 +314,15 @@ const activeSetUsage = computed(() => (store.activeSet ? setUsage.value[store.ac
 const activeSetSummary = computed(() =>
   store.activeSet ? store.usageSummaryOf(store.activeSet.id) : { accountsCount: 0, instancesCount: 0 }
 )
+
+// 备注预览示例姓名：取当前配置套首个绑定账号的 B 平台姓名（未绑定任何账号时回落到首个账号）
+const remarkSampleName = computed(() => {
+  if (store.activeSet) {
+    const usage = store.usageDetailOf(store.activeSet.id)
+    if (usage.length && usage[0].accountName) return usage[0].accountName
+  }
+  return store.accounts[0]?.name || ''
+})
 
 // —— 批量应用：右滑抽屉替代原「应用全部」弹窗 ——
 const showApplyDrawer = ref(false)

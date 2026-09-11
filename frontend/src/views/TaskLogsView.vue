@@ -126,11 +126,7 @@
             将删除你名下、<span class="font-medium text-ink-soft">该日期之前</span>的全部执行日志（不可恢复）。系统仍会按保留策略自动清理更早记录。
           </p>
           <label class="mt-3 block text-xs font-medium text-ink-muted">删除此日期之前的日志</label>
-          <input
-            v-model="purgeBefore"
-            type="date"
-            class="login-input mt-1 w-full px-3 py-2 text-sm"
-          />
+          <BaseDatePicker v-model="purgeBefore" block class="mt-1.5" placeholder="选择日期" />
           <div class="mt-4 flex justify-end gap-2">
             <button
               type="button"
@@ -634,6 +630,7 @@ import { useTaskLogsStore } from "@/stores/taskLogs";
 import { toast } from "@/utils/toast";
 import Icon from "@/components/Icon.vue";
 import BaseSelect from "@/components/BaseSelect.vue";
+import BaseDatePicker from "@/components/BaseDatePicker.vue";
 import StatCard from "@/components/StatCard.vue";
 import BasePagination from "@/components/BasePagination.vue";
 import SubmitImageThumb from "@/components/tasklogs/SubmitImageThumb.vue";

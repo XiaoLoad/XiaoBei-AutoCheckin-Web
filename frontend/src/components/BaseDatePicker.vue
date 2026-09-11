@@ -1,18 +1,34 @@
 <template>
-  <div ref="root" class="relative inline-block">
-    <!-- 触发器：与同轨的分段按钮等高（h-[30px]），宽度由日期文本决定，不再占两格原生输入框 -->
+  <div ref="root" :class="block ? 'relative block w-full' : 'relative inline-block'">
+    <!-- 触发器：与同轨的分段按钮等高（h-[30px]），宽度由日期文本决定，不再占两格原生输入框。
+         block 形态（弹窗内的独立表单字段）改为撑满并带上输入框外形——无边框的紧凑触发器
+         放在工具栏轨道里合适，孤零零躺在表单标签下会像一行普通文字，看不出可以点 -->
     <div
-      class="flex items-center gap-0.5 rounded-lg transition"
-      :class="open ? 'bg-white shadow-sm ring-1 ring-ink/5' : ''"
+      class="flex items-center gap-0.5 transition"
+      :class="[
+        block ? 'relative w-full' : 'rounded-lg',
+        !block && open ? 'bg-white shadow-sm ring-1 ring-ink/5' : '',
+      ]"
     >
       <button
         ref="trigger"
         type="button"
-        class="flex h-[30px] items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30 disabled:cursor-not-allowed disabled:opacity-50"
-        :class="[
-          open || hasValue ? 'bg-white text-ink shadow-sm ring-1 ring-ink/5' : 'text-ink-muted hover:text-ink-soft',
-          open ? 'ring-brand/30' : ''
-        ]"
+        class="flex items-center gap-1.5 font-medium transition disabled:cursor-not-allowed disabled:opacity-50"
+        :class="block
+          ? [
+              'h-10 w-full justify-start rounded-xl border px-3 pr-10 text-sm',
+              open
+                ? 'border-brand bg-white text-ink ring-4 ring-brand/15'
+                : 'border-ink/10 bg-cloud/70 hover:border-ink/20',
+              hasValue ? 'text-ink' : 'text-ink-muted',
+              'focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/15',
+            ]
+          : [
+              'h-[30px] rounded-lg px-2 text-[13px]',
+              open || hasValue ? 'bg-white text-ink shadow-sm ring-1 ring-ink/5' : 'text-ink-muted hover:text-ink-soft',
+              open ? 'ring-brand/30' : '',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30',
+            ]"
         aria-haspopup="dialog"
         :aria-expanded="open"
         :aria-label="range ? '选择日期范围' : '选择日期'"
@@ -26,6 +42,7 @@
         v-if="hasValue && !disabled"
         type="button"
         class="grid h-5 w-5 shrink-0 place-items-center rounded-md text-ink-muted transition hover:bg-cloud hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+        :class="block ? 'absolute right-3 top-1/2 -translate-y-1/2' : ''"
         aria-label="清除日期"
         @click.stop="clear"
       >
@@ -125,6 +142,8 @@ const props = defineProps({
   from: { type: String, default: null },
   to: { type: String, default: null },
   placeholder: { type: String, default: '选择日期' },
+  // 表单字段形态：撑满容器 + 输入框外形（弹窗内的独立字段），默认仍是工具栏里的紧凑触发器
+  block: { type: Boolean, default: false },
   disabled: { type: Boolean, default: false }
 })
 

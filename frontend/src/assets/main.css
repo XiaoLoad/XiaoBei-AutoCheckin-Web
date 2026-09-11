@@ -132,3 +132,13 @@
 .remark-move {
   transition: transform 0.22s ease;
 }
+
+/* 主题补间窗口（themeStore 在 :root 挂 is-theme-tweening）：临时把过渡时长归零。
+   补间每帧改写 --colors-*，若元素仍带 transition，过渡会被逐帧重启、颜色永远追不上
+   补间值，落后于没有过渡的兄弟元素（症状：定位条已就位、旁边文字还在原地闪）。
+   只压时长、不动动画，GSAP 与入场动效不受影响。 */
+html.is-theme-tweening *,
+html.is-theme-tweening *::before,
+html.is-theme-tweening *::after {
+  transition-duration: 0s;
+}

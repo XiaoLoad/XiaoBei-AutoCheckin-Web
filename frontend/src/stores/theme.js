@@ -12,6 +12,11 @@ const REDUCED_MOTION =
   typeof window !== 'undefined' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
+// 补间期间挂在 <html> 上的标记类（规则见 assets/main.css）：
+// 补间每帧改写 --colors-*，带 transition 的元素会每帧重启过渡、颜色永远追不上补间值，
+// 于是落后于无过渡的兄弟元素——最直观的症状是目录定位条与它的文字标签脱同步、看着在闪。
+const TWEENING_CLASS = 'is-theme-tweening'
+
 // 参与补间的主题变量：色板字段 → --colors- 后缀（与 tailwindcss-themer 命名规则一致）
 const THEMED_VARS = [
   { field: 'brand', suffix: 'brand' },
@@ -82,6 +87,7 @@ export const useThemeStore = defineStore('theme', () => {
   // class 变量，补间期间全站颜色连续流动），完成后清内联、交还 class 变量接管。
   function tweenToTheme(fromMeta, target) {
     const root = document.documentElement
+    root.classList.add(TWEENING_CLASS)
     const computedStyle = getComputedStyle(root)
     const fromChannels = []
     const toChannels = []
@@ -121,6 +127,7 @@ export const useThemeStore = defineStore('theme', () => {
       },
       onComplete: () => {
         activeTween = null
+        root.classList.remove(TWEENING_CLASS)
         // 目标 class 已挂、其变量值与补间终值一致，清内联无缝交还
         clearInlineVars()
       },
@@ -140,8 +147,13 @@ export const useThemeStore = defineStore('theme', () => {
       /* storage 不可用时主题仅本次会话生效 */
     }
     const target = THEME_PALETTE.find((t) => t.id === id)
-    if (target && !REDUCED_MOTION) tweenToTheme(prevMeta, target)
-    else clearInlineVars()
+    if (target && !REDUCED_MOTION) {
+      tweenToTheme(prevMeta, target)
+    } else {
+      // 瞬时换肤：一并摘掉可能残留的补间标记，避免过渡被永久压成 0
+      document.documentElement.classList.remove(TWEENING_CLASS)
+      clearInlineVars()
+    }
   }
 
   // 兜底：index.html 首帧脚本负责防闪色，这里在 store 初始化时再对齐一次（幂等）

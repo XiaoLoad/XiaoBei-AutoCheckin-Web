@@ -137,6 +137,23 @@
                   </span>
                 </dd>
               </div>
+              <div class="flex items-baseline gap-2">
+                <dt class="w-16 shrink-0 leading-5 text-ink-muted">推送凭证</dt>
+                <dd class="flex min-w-0 flex-1 flex-wrap items-center gap-1 leading-5">
+                  <template v-if="pushChannelsOf(item).length">
+                    <span
+                      v-for="ch in pushChannelsOf(item)"
+                      :key="ch"
+                      :title="pushChipTitle(item, ch)"
+                      class="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 font-medium"
+                      :class="pushChipCls(item, ch)"
+                    >
+                      <span class="h-1.5 w-1.5 rounded-full" :class="channelDot(ch)" />{{ channelLabel(ch) }}
+                    </span>
+                  </template>
+                  <span v-else class="text-ink-muted">跟随配置套</span>
+                </dd>
+              </div>
             </dl>
 
             <!-- 操作行：右对齐 -->
@@ -202,6 +219,7 @@ import BaseSelect from '@/components/BaseSelect.vue'
 import BasePagination from '@/components/BasePagination.vue'
 import AccountFormModal from '@/components/AccountFormModal.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
+import { activeChannels, channelDot, channelLabel, channelTone, readCredEntry } from '@/utils/pushChannels'
 
 // 领域状态下沉到 store：视图只做渲染与展示辅助，数据编排由 store 负责
 const store = useAccountsStore()
@@ -302,6 +320,24 @@ function deptText(item) {
   const p = item.profile
   if (!p) return ''
   return [p.college, p.major, p.className].filter(Boolean).join(' · ')
+}
+
+// 该账号有自己推送目标的通道：绑了凭证，或单独指定了收件人（邮件）
+function pushChannelsOf(item) {
+  return activeChannels(item.pushCreds)
+}
+
+// 只指定了收件人、没绑凭证的通道用虚线标签区分「半落位」，避免看着像已绑定
+function pushChipCls(item, ch) {
+  const e = readCredEntry((item.pushCreds || {})[ch])
+  return e.credId ? channelTone(ch) : 'border border-dashed border-ink/25 text-ink-soft'
+}
+
+function pushChipTitle(item, ch) {
+  const e = readCredEntry((item.pushCreds || {})[ch])
+  if (e.credId && e.to) return `已绑定凭证 · 收件人：${e.to}`
+  if (e.credId) return '已绑定凭证'
+  return `仅指定收件人：${e.to}（凭证跟随配置套）`
 }
 
 // 首次加载（store 内部负责拉取与状态管理；失败由全局 toast 提示）

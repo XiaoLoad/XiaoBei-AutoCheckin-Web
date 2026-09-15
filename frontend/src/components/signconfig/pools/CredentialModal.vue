@@ -12,14 +12,7 @@
         <BaseSelect v-model="form.type" :options="typeOptions" size="sm" :disabled="isEdit" placeholder="选择通道" />
       </div>
 
-      <input v-if="form.type === 'serverchan'" v-model="form.fields.serverchanKey" class="w-full rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="Server酱 SendKey" />
-      <input v-if="form.type === 'pushplus'" v-model="form.fields.pushplusToken" class="w-full rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="PushPlus Token" />
-      <template v-if="form.type === 'email'">
-        <input v-model="form.fields.emailSmtp" class="w-full rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="SMTP 地址" />
-        <input v-model="form.fields.emailFrom" class="w-full rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="发件人" />
-        <input v-model="form.fields.emailPass" type="password" class="w-full rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="授权码（留空则不修改）" />
-        <input v-model="form.fields.emailTo" class="w-full rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10" placeholder="收件人" />
-      </template>
+      <PushCredentialFields v-model="form.fields" :channel="form.type" />
     </div>
 
     <template #footer>
@@ -42,6 +35,7 @@ import { reactive, computed, watch } from 'vue'
 import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import BaseModal from '@/components/BaseModal.vue'
+import PushCredentialFields from '@/components/PushCredentialFields.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
 import { toast } from '@/utils/toast'
 

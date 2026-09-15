@@ -28,3 +28,41 @@ def validate_role(raw, *, default='user'):
     if role not in VALID_ROLES:
         return False, role, '角色不合法', 4003
     return True, role, '', 0
+
+
+# 邮件收件人：一行里可写多个（逗号 / 分号 / 中英文标点 / 空白分隔）。
+# 凭证的默认收件人与账号级覆盖共用这一套解析，避免两处各切一次导致行为不一致。
+RECIPIENT_SEP_RE = re.compile(r'[,;，；\s]+')
+EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+RECIPIENT_MAX = 512
+
+
+def parse_recipients(raw):
+    """收件人串 → 去重后列表（保序）。"""
+    out = []
+    for part in RECIPIENT_SEP_RE.split(str(raw or '')):
+        p = part.strip()
+        if p and p not in out:
+            out.append(p)
+    return out
+
+
+def normalize_recipients(raw):
+    """收件人串 → 归一化文本（逗号分隔、保序去重）。"""
+    return ', '.join(parse_recipients(raw))
+
+
+def validate_recipients(raw, *, required=True):
+    """校验收件人串。返回 (ok, normalized, message, code)。"""
+    items = parse_recipients(raw)
+    if not items:
+        if required:
+            return False, '', '收件人不能为空', 4321
+        return True, '', '', 0
+    bad = [x for x in items if not EMAIL_RE.match(x)]
+    if bad:
+        return False, '', f'收件人邮箱格式不正确：{bad[0]}', 4321
+    norm = ', '.join(items)
+    if len(norm) > RECIPIENT_MAX:
+        return False, '', f'收件人过多（最多 {RECIPIENT_MAX} 字符）', 4321
+    return True, norm, '', 0

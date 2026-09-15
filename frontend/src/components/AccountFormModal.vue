@@ -89,6 +89,109 @@
               </p>
             </div>
 
+            <!-- 推送凭证：账号级归属。凭证属于账号本身，配置套只决定"用不用它" -->
+            <div>
+              <div class="mb-3 flex items-center gap-2">
+                <span class="text-[11px] font-semibold tracking-wider text-ink-muted uppercase">推送凭证</span>
+                <span class="h-px flex-1 bg-ink/10" />
+                <span class="inline-flex items-center gap-1 rounded-full bg-ink/5 px-2 py-0.5 text-xs text-ink-muted">
+                  已绑定 {{ boundCount }} / {{ PUSH_CHANNELS.length }}
+                </span>
+              </div>
+
+              <p class="mb-3 text-xs text-ink-muted">
+                绑定后这个账号的签到结果推送到它自己的凭证，一个配置套套用多个账号时互不串号；留空则跟随配置套里的凭证。
+              </p>
+
+              <div class="space-y-3">
+                <div v-for="ch in PUSH_CHANNELS" :key="ch" class="space-y-2">
+                  <div class="flex items-center gap-2.5">
+                    <span class="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[10px] font-bold" :class="channelTone(ch)">
+                      {{ channelShort(ch) }}
+                    </span>
+                    <span class="w-16 shrink-0 text-sm text-ink-soft">{{ channelLabel(ch) }}</span>
+                    <!-- 归属连线：已落位为实线、未落位为虚线，一眼看出哪些通道还没配 -->
+                    <span
+                      class="min-w-[1rem] flex-1"
+                      :class="entryFilled(ch) ? 'h-px bg-brand/30' : 'border-t border-dashed border-ink/20'"
+                    />
+                    <BaseSelect
+                      v-if="credOptionsOf(ch).length > 1"
+                      :model-value="form.pushCreds[ch].credId"
+                      :options="credOptionsOf(ch)"
+                      placement="auto"
+                      placeholder="跟随配置套"
+                      size="sm"
+                      class="w-40 shrink-0 sm:w-56"
+                      @update:model-value="(v) => (form.pushCreds[ch].credId = v)"
+                    />
+                    <button
+                      v-else
+                      type="button"
+                      class="inline-flex w-40 shrink-0 items-center justify-center gap-1 rounded-xl border border-dashed border-brand/40 bg-brand/5 px-3 py-1.5 text-xs font-medium text-brand transition hover:bg-brand/10 sm:w-56"
+                      @click="openInlineNew(ch)"
+                    >
+                      <Icon name="plus" :size="13" />新建凭证
+                    </button>
+                  </div>
+
+                  <!-- 邮件收件人：与凭证选择正交，不绑凭证也能单独指定发给谁 -->
+                  <div v-if="ch === 'email'" class="flex items-start gap-2.5 pl-[7rem]">
+                    <span class="w-16 shrink-0 pt-2 text-xs text-ink-muted">收件人</span>
+                    <div class="min-w-0 flex-1">
+                      <input
+                        v-model.trim="form.pushCreds.email.to"
+                        type="text"
+                        autocomplete="off"
+                        class="w-full rounded-xl border border-ink/10 bg-white px-3 py-1.5 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
+                        placeholder="多个用逗号分隔"
+                      />
+                      <p class="mt-1 text-xs text-ink-muted">{{ recipientHint }}</p>
+                    </div>
+                  </div>
+
+                  <!-- 就地新建凭证：省掉「先去我的资源建好再回来下拉」这一趟，也不丢已填内容 -->
+                  <div v-if="inlineNew && inlineNew.channel === ch" class="pl-[7rem]">
+                    <div class="rounded-xl border border-dashed border-ink/15 bg-cloud/40 p-3">
+                      <div class="flex items-center justify-between gap-2">
+                        <p class="text-xs font-medium text-ink-soft">新建 {{ channelLabel(ch) }} 凭证</p>
+                        <button type="button" class="text-xs text-ink-muted transition hover:text-ink" @click="inlineNew = null">取消</button>
+                      </div>
+                      <div class="mt-2.5 space-y-3">
+                        <div>
+                          <label class="mb-1.5 block text-xs text-ink-muted">凭证名称</label>
+                          <input
+                            v-model.trim="inlineNew.name"
+                            type="text"
+                            autocomplete="off"
+                            maxlength="64"
+                            class="w-full rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
+                            placeholder="如 我的 QQ 邮箱"
+                          />
+                        </div>
+                        <PushCredentialFields v-model="inlineNew.fields" :channel="ch" />
+                      </div>
+                      <div class="mt-3 flex justify-end">
+                        <button
+                          type="button"
+                          class="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-medium text-white shadow-lg shadow-brand/20 transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
+                          :disabled="!inlineNew.name || creatingCred"
+                          @click="saveInlineCredential(ch)"
+                        >
+                          <span v-if="creatingCred" class="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                          {{ creatingCred ? '保存中…' : '保存并绑定' }}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <p class="mt-3 text-xs text-ink-muted">
+                凭证在「我的资源 · 我的凭证」统一维护，密文保管、可随时测试推送。
+              </p>
+            </div>
+
             <!-- 个人信息（平台回填：用户不可手改，仅由 B 平台获取后写入） -->
             <div>
               <div class="mb-3 flex items-center gap-2">
@@ -145,10 +248,21 @@
 </template>
 
 <script setup>
-import { reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import BaseModal from '@/components/BaseModal.vue'
+import BaseSelect from '@/components/BaseSelect.vue'
 import Icon from '@/components/Icon.vue'
+import PushCredentialFields from '@/components/PushCredentialFields.vue'
 import { fetchProfile } from '@/api/accounts'
+import { fetchCredentials, createCredential } from '@/api/signConfig'
+import {
+  PUSH_CHANNELS,
+  channelLabel,
+  channelShort,
+  channelTone,
+  normalizePushCreds,
+  serializePushCreds
+} from '@/utils/pushChannels'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -159,12 +273,26 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'submit', 'cancel'])
 
+// 凭证池里可选的推送凭证（按通道分组），随弹窗打开时拉取
+const credentials = ref([])
+const creatingCred = ref(false)
+// 就地新建凭证的草稿：{ channel, name, fields }，同一时刻只开一个
+const inlineNew = ref(null)
+
+function blankFields() {
+  return {
+    serverchanKey: '', pushplusToken: '',
+    emailSmtp: '', emailFrom: '', emailPass: '', emailTo: ''
+  }
+}
+
 function emptyForm() {
   return {
     account: '',
     password: '',
     enabled: true,
-    profile: { name: '', college: '', major: '', className: '', studentNo: '' }
+    profile: { name: '', college: '', major: '', className: '', studentNo: '' },
+    pushCreds: normalizePushCreds(null)
   }
 }
 
@@ -174,12 +302,68 @@ const verifyState = ref('idle') // idle | checking | ok | fail
 const verifying = ref(false)
 const verifyMsg = ref('')
 
+const boundCount = computed(() => PUSH_CHANNELS.filter((ch) => !!form.pushCreds[ch].credId).length)
+
+// 已选邮箱凭证的默认收件人：作为留空时的回落说明，写进提示而不是输入框占位
+const recipientHint = computed(() => {
+  const cid = form.pushCreds.email.credId
+  const hit = credentials.value.find((c) => c.id === cid)
+  const fallback = (hit && hit.fields && hit.fields.emailTo) || ''
+  return fallback
+    ? `留空则用凭证的默认收件人（${fallback}）`
+    : '留空则用凭证的默认收件人；凭证没写默认值时，这里必须填'
+})
+
+// 该通道是否已有落位内容（绑了凭证或单独指定了收件人）——决定归属连线实线/虚线
+function entryFilled(ch) {
+  const e = form.pushCreds[ch]
+  return !!(e.credId || e.to)
+}
+
+// 每行通道的选项：首项「跟随配置套」用于解绑，其余为该通道下的凭证
+function credOptionsOf(ch) {
+  const mine = credentials.value
+    .filter((c) => c.type === ch)
+    .map((c) => ({ label: c.name, value: c.id }))
+  return [{ label: '跟随配置套', value: null }, ...mine]
+}
+
+async function loadCredentials() {
+  try {
+    credentials.value = await fetchCredentials()
+  } catch {
+    credentials.value = [] // 拉取失败只影响可选项，不阻断账号表单（错误已由全局提示）
+  }
+}
+
+function openInlineNew(ch) {
+  inlineNew.value = { channel: ch, name: '', fields: blankFields() }
+}
+
+async function saveInlineCredential(ch) {
+  const draft = inlineNew.value
+  if (!draft || !draft.name) return
+  creatingCred.value = true
+  try {
+    const created = await createCredential({ name: draft.name, type: ch, fields: { ...draft.fields } })
+    // 接口返回单条，补上列表用的 type 别名后并进本地选项，避免为一条新凭证重拉整个池
+    credentials.value = [...credentials.value, { ...created, type: created.channel }]
+    form.pushCreds[ch].credId = created.id
+    inlineNew.value = null
+  } catch {
+    // 失败原因（缺必填项 / 格式错）已由请求层统一 toast；保留草稿让用户改完重试
+  } finally {
+    creatingCred.value = false
+  }
+}
+
 function resetForm() {
   Object.assign(form, emptyForm())
   errors.account = ''
   errors.password = ''
   verifyState.value = 'idle'
   verifyMsg.value = ''
+  inlineNew.value = null
   if (props.mode === 'edit' && props.account) {
     form.account = props.account.account || ''
     form.password = ''
@@ -192,13 +376,17 @@ function resetForm() {
       studentNo: '',
       ...(props.account.profile || {})
     }
+    form.pushCreds = normalizePushCreds(props.account.pushCreds)
   }
 }
 
 watch(
   () => props.modelValue,
   (open) => {
-    if (open) resetForm()
+    if (open) {
+      resetForm()
+      loadCredentials()
+    }
   },
   { immediate: true }
 )
@@ -263,7 +451,9 @@ async function onSubmit() {
   const payload = {
     account: form.account,
     enabled: form.enabled,
-    profile: { ...form.profile }
+    profile: { ...form.profile },
+    // 只落有内容的项；空对象即"清空绑定"，后端据此把 push_cred_json 置 NULL
+    pushCreds: serializePushCreds(form.pushCreds)
   }
   if (form.password) payload.password = form.password
   emit('submit', payload)

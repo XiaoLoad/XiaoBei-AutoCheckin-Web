@@ -8,6 +8,7 @@ from flask import Blueprint, request
 from app.extensions import db
 from app.models import (BAccount, ConfigSet, ImageGroup, PoolCredential, PoolImage,
                         PoolLocation, PoolUa)
+from app.models.b_account import binding_cred_id
 from app.schemas.pools_schema import (load_credential, load_credential_update,
                                       load_location, load_ua,
                                       mask_fields, required_missing)
@@ -17,6 +18,15 @@ from app.utils.auth import admin_required, token_required
 from app.utils.response import error, success
 
 bp = Blueprint('pools', __name__, url_prefix='/api/pools')
+
+
+def _cred_dict(c):
+    try:
+        fields = json.loads(decrypt(c.secret_enc))
+    except Exception:
+        fields = {}
+    return {'id': c.id, 'channel': c.channel, 'name': c.name,
+            'fields': mask_fields(fields), 'enabled': bool(c.enabled)}
 
 
 @bp.route('', methods=['GET'])
@@ -37,14 +47,6 @@ def aggregate():
     groups = (ImageGroup.query.filter_by(user_id=user.id)
               .order_by(ImageGroup.id.asc()).all())
 
-    def cred_dict(c):
-        try:
-            fields = json.loads(decrypt(c.secret_enc))
-        except Exception:
-            fields = {}
-        return {'id': c.id, 'channel': c.channel, 'name': c.name,
-                'fields': mask_fields(fields), 'enabled': bool(c.enabled)}
-
     return success({
         'locations': [l.to_dict() for l in locs],
         'images': [{'id': i.id, 'name': i.orig_name,
@@ -53,9 +55,19 @@ def aggregate():
                     'inTrash': i.status == 'trash',
                     'used': i.status == 'used'} for i in imgs],
         'imageGroups': [{'id': g.id, 'name': g.name} for g in groups],
-        'credentials': [cred_dict(c) for c in creds],
+        'credentials': [_cred_dict(c) for c in creds],
         'uas': [u.to_dict() for u in uas],
     })
+
+
+@bp.route('/credentials', methods=['GET'])
+@token_required
+def list_credentials():
+    """凭证单拉：账号推送绑定等只需要凭证列表的场景使用，避免连带拉取图库等全量资源池"""
+    user = request.current_user
+    creds = (PoolCredential.query.filter_by(user_id=user.id)
+             .order_by(PoolCredential.id.asc()).all())
+    return success({'items': [_cred_dict(c) for c in creds]})
 
 
 def _visible_location(loc_id, user):
@@ -144,6 +156,13 @@ def _cred_ref_count(config_sets, cred_id):
     """扫描配置体 push.credIds 引用计数（配置套已一次性载入，复用即可）"""
     return sum(1 for cs in config_sets
                if cred_id in (((cs.config or {}).get('push') or {}).get('credIds') or {}).values())
+
+
+def _acc_cred_ref_count(accounts, cred_id):
+    """扫描账号级推送绑定引用计数（b_accounts.push_cred_json）。
+    账号自带凭证是配置套之外的第二种引用来源，漏统计会让删除后留下悬空绑定。"""
+    return sum(1 for a in accounts
+               if cred_id in {binding_cred_id(v) for v in (a.push_creds or {}).values()})
 
 
 @bp.route('/uas', methods=['POST'])
@@ -269,11 +288,16 @@ def delete_credential(cred_id):
     c = PoolCredential.query.filter_by(id=cred_id, user_id=request.current_user.id).first()
     if not c:
         return error(message='凭证不存在', code=4040, status=404)
-    config_sets = _ref_index()
-    refs = _cred_ref_count(config_sets, c.id)
+    refs = _cred_ref_count(_ref_index(), c.id)
+    acc_refs = _acc_cred_ref_count(BAccount.query.all(), c.id)
+    used = []
     if refs:
-        return error(message=f'该凭证被 {refs} 个配置套引用，无法删除',
-                     code=4323, data={'refs': refs}, status=409)
+        used.append(f'{refs} 个配置套')
+    if acc_refs:
+        used.append(f'{acc_refs} 个账号')
+    if used:
+        return error(message=f'该凭证被{"、".join(used)}引用，无法删除',
+                     code=4323, data={'refs': refs, 'accountRefs': acc_refs}, status=409)
     db.session.delete(c)
     db.session.commit()
     return success(message='删除成功')

@@ -30,8 +30,11 @@ export function makeConfig() {
     push: {
       channels: [], // 推送通道多选：serverchan / pushplus / email
       useOwnCredential: true, // true=回填"我的凭证"；false=下方直接填写
+      // true=各账号自带凭证（按执行账号取其在账号管理里绑定的凭证）；false=用套级凭证。
+      // 默认 false：老配置套语义不变，且账号未绑凭证时不会把原有推送静默掐掉。
+      useAccountCredential: false,
       credIds: { serverchan: null, pushplus: null, email: null }, // 回填"我的凭证"时各通道各自绑定的凭证 id
-      cred: { serverchanKey: '', pushplusToken: '', emailSmtp: '', emailFrom: '', emailPass: '', emailTo: '' },
+      cred: { serverchanKey: '', pushplusToken: '', emailSmtp: '', emailFrom: '', emailPass: '', emailTo: '' }, // emailTo 可多个，逗号分隔
       notify: { success: true, skip: true, fail: true }, // 各状态推送开关：成功 / 跳过 / 失败
       template: 'html' // 推送模板：html（默认，优雅卡片）/ txt（纯文本）/ markdown
     },
@@ -82,7 +85,9 @@ export async function fetchConfigMeta() {
       className: (a.profile && a.profile.className) || '',
       platform: a.platform || 'B 打卡平台',
       status: a.enabled ? 'enabled' : 'disabled',
-      signTasks: a.signTasks || []
+      signTasks: a.signTasks || [],
+      // 账号自带的推送凭证绑定 {channel: credentialId}：配置套推送来源选「各账号自带」时按此取凭证
+      pushCreds: a.pushCreds || {}
     })),
     taskTypes: [
       { value: 'dorm', label: '寝室签到' },
@@ -165,6 +170,12 @@ export async function fetchPools() {
 
 async function refreshPools() { return fetchPools() }
 
+// 凭证单拉：账号推送绑定这类只需要凭证列表的场景用，避免连带拉取图库等全量资源池
+export async function fetchCredentials() {
+  const data = await request({ url: '/pools/credentials', method: 'get' })
+  return (data.items || []).map((c) => ({ ...c, type: c.channel }))
+}
+
 // 位置池：scope = system | user
 export async function saveLocation(payload) {
   const body = {
@@ -211,6 +222,16 @@ export async function saveCredential(payload) {
 export async function deleteCredential(id) {
   await request({ url: `/pools/credentials/${id}`, method: 'delete' })
   return (await refreshPools()).credentials
+}
+
+// 新建单条凭证：回传新建记录本身（含 id），供「绑定处就地新建」直接并入本地选项，
+// 不必为一条新凭证把整个资源池重拉一遍（saveCredential 走的是全量刷新）
+export async function createCredential(payload) {
+  const data = await request({
+    url: '/pools/credentials', method: 'post',
+    data: { channel: payload.type, name: payload.name, fields: payload.fields || {} }
+  })
+  return { ...data, type: data.channel }
 }
 
 // 测试推送：用该凭证真实发送一条样例消息，验证通道可用性（template 默认 html）

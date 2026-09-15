@@ -22,6 +22,7 @@ from concurrent.futures import ThreadPoolExecutor as FuturesThreadPool, as_compl
 
 from app.extensions import db
 from app.models import ActivityWindow, BAccount, ConfigSet, JwAccount, Schedule, SignRecord, PushLog
+from app.models.b_account import binding_cred_id
 from app.models.pools import ImageGroup, PoolCredential, PoolLocation, PoolUa
 from app.models.system_config import get_setting
 from app.models.user import now_cst
@@ -118,7 +119,9 @@ def build_config_view(schedule, resolved, uid):
     push_cfg = cfg.get('push') or {}
     channels = push_cfg.get('channels') or []
     use_own = bool(push_cfg.get('useOwnCredential'))
-    cred_ids = push_cfg.get('credIds') or {} if use_own else {}
+    use_account = bool(push_cfg.get('useAccountCredential'))
+    # 各账号自带凭证时凭证名逐账号不同，快照里不展示配置套级凭证名
+    cred_ids = push_cfg.get('credIds') or {} if (use_own and not use_account) else {}
     cred_names = {}
     for ch in channels:
         cid = _snap_to_int(cred_ids.get(ch))
@@ -136,6 +139,8 @@ def build_config_view(schedule, resolved, uid):
                       'credentialName': cred_names.get(ch, '')} for ch in channels],
         'template': push_cfg.get('template') or 'html',
         'useOwnCredential': use_own,
+        'useAccountCredential': use_account,
+        'credSourceLabel': '各账号自带凭证' if use_account else ('回填我的凭证' if use_own else '直接填写'),
         'notify': notify,
     }
 
@@ -1021,7 +1026,7 @@ def dispatch_push(resolved, schedule, acc, status='success', reason='', image_ur
         log.info('任务 %s 状态=%s 被 notify 开关关闭，跳过推送', schedule.id, status)
         return
 
-    creds, issues = _resolve_push_creds(push, schedule.user_id)
+    creds, issues = _resolve_push_creds(push, schedule.user_id, acc)
     template = push.get('template') or 'html'
     # 跳过原因落 push_logs（ok=false, attempts=0）：此前只进服务端日志，任务日志详情里
     # 表现为「没有推送记录」，用户无法排查「配了推送但没收到」——现与发送结果同表可见
@@ -1101,17 +1106,32 @@ def dispatch_push(resolved, schedule, acc, status='success', reason='', image_ur
         log.exception('任务 %s 推送结果落库失败', schedule.id)
 
 
-def _resolve_push_creds(push, user_id):
+def _acc_cred_entry(raw):
+    """账号绑定项归一化 → (cred_id|None, to)。
+    兼容三种形态：纯凭证 id / {credId, to} / 仅 {to}（收件人独立于凭证覆盖）。"""
+    to = str(raw.get('to') or '').strip() if isinstance(raw, dict) else ''
+    return binding_cred_id(raw), to
+
+
+def _resolve_push_creds(push, user_id, account=None):
     """从 push 结构解析出各通道可用密钥。
+    useAccountCredential=true（各账号自带凭证）→ 优先取该账号绑定的凭证，该账号未绑定的
+      通道回落配置套 push.credIds（若有），仍无则记 issue；
     useOwnCredential=true（回填我的凭证）→ 按 push.credIds 解密资源池凭证（仅限本人）；
     useOwnCredential=false（直接填写）→ 读 push.cred 内联字段。
+    账号级收件人（b_accounts.push_creds.email.to）与凭证来源正交：邮件发给谁是这个账号的
+    属性，故三种来源下都覆盖凭证里的默认收件人。
     返回 (creds, issues)：creds={channel: key_or_fields} 仅含已选且密钥非空的通道；
     issues=[{channel, reason}] 逐通道跳过原因——凭证解析失败必须显式暴露（此前静默
     continue，通道被跳过用户完全无感知），调用方负责把 issues 落 push_logs 并记日志。"""
     channels = push.get('channels') or []
     use_own = push.get('useOwnCredential', False)
+    use_account = bool(push.get('useAccountCredential'))
     out = {}
     issues = []
+
+    acc_creds = (getattr(account, 'push_creds', None) or {}) if account is not None else {}
+    acc_email_to = _acc_cred_entry(acc_creds.get('email'))[1]
 
     def _cred_fields(cid):
         c = db.session.get(PoolCredential, cid)
@@ -1122,25 +1142,42 @@ def _resolve_push_creds(push, user_id):
         except Exception:
             return None, '凭证解密失败（主密钥不匹配或数据损坏）'
 
-    if use_own:
+    def _take(ch, cid, to=''):
+        """按凭证 id 解析并落 out；调用前须确认 cid 非空。to 仅对 email 生效（账号级收件人覆盖）。"""
+        fields, err = _cred_fields(cid)
+        if fields is None:
+            issues.append({'channel': ch, 'reason': err})
+            return
+        key_field = {'serverchan': 'serverchanKey', 'pushplus': 'pushplusToken'}.get(ch)
+        if key_field and fields.get(key_field):
+            out[ch] = fields[key_field]
+            return
+        if ch == 'email' and fields.get('emailSmtp') and fields.get('emailFrom'):
+            tos = to or fields.get('emailTo') or ''
+            if tos:
+                out[ch] = {k: fields.get(k) for k in ('emailSmtp', 'emailFrom', 'emailPass')}
+                out[ch]['emailTo'] = tos
+                return
+        issues.append({'channel': ch, 'reason': '凭证缺少必要字段'})
+
+    if use_account:
+        # 账号未绑定的通道回落配置套 credIds（便于「多数账号共用一份、个别账号自带」）
+        set_ids = push.get('credIds') or {}
+        for ch in channels:
+            acc_cid, acc_to = _acc_cred_entry(acc_creds.get(ch))
+            cid = acc_cid or set_ids.get(ch)
+            if not cid:
+                issues.append({'channel': ch, 'reason': '该账号未绑定此通道的推送凭证'})
+                continue
+            _take(ch, cid, acc_to if ch == 'email' else '')
+    elif use_own:
         cred_ids = push.get('credIds') or {}
         for ch in channels:
             cid = cred_ids.get(ch)
             if not cid:
                 issues.append({'channel': ch, 'reason': '未绑定凭证'})
                 continue
-            fields, err = _cred_fields(cid)
-            if fields is None:
-                issues.append({'channel': ch, 'reason': err})
-                continue
-            key_field = {'serverchan': 'serverchanKey', 'pushplus': 'pushplusToken'}.get(ch)
-            if key_field and fields.get(key_field):
-                out[ch] = fields[key_field]
-                continue
-            if ch == 'email' and fields.get('emailSmtp') and fields.get('emailFrom') and fields.get('emailTo'):
-                out[ch] = {k: fields.get(k) for k in ('emailSmtp', 'emailFrom', 'emailPass', 'emailTo')}
-                continue
-            issues.append({'channel': ch, 'reason': '凭证缺少必要字段'})
+            _take(ch, cid, acc_email_to if ch == 'email' else '')
     else:
         cred = push.get('cred') or {}
         if 'serverchan' in channels and cred.get('serverchanKey'):
@@ -1148,9 +1185,10 @@ def _resolve_push_creds(push, user_id):
         if 'pushplus' in channels and cred.get('pushplusToken'):
             out['pushplus'] = cred['pushplusToken']
         if 'email' in channels:
-            email = {k: cred.get(k) for k in ('emailSmtp', 'emailFrom', 'emailPass', 'emailTo')}
-            if email.get('emailSmtp') and email.get('emailFrom') and email.get('emailTo'):
-                out['email'] = email
+            to = acc_email_to or cred.get('emailTo')
+            if cred.get('emailSmtp') and cred.get('emailFrom') and to:
+                out['email'] = {k: cred.get(k) for k in ('emailSmtp', 'emailFrom', 'emailPass')}
+                out['email']['emailTo'] = to
             else:
                 issues.append({'channel': 'email', 'reason': '内联凭证缺少 SMTP 地址/发件人/收件人字段'})
     return out, issues

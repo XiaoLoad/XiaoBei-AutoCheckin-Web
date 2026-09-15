@@ -5,6 +5,23 @@ from app.extensions import db
 from app.models.user import now_cst
 from app.services import crypto
 
+# 账号可绑定的推送通道（与配置套 push.channels 取值一致）
+PUSH_CHANNELS = ('serverchan', 'pushplus', 'email')
+
+
+def binding_cred_id(raw):
+    """绑定项取凭证 id：兼容纯 id 与 email 的 {credId?, to} 两种形态。
+    取不到或非法一律 None（调度解析与凭证引用计数共用，避免两处各判一次）。"""
+    if isinstance(raw, dict):
+        raw = raw.get('credId')
+    if isinstance(raw, bool):
+        return None
+    try:
+        cid = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return cid if cid > 0 else None
+
 
 class BAccount(db.Model):
     __tablename__ = 'b_accounts'
@@ -30,6 +47,11 @@ class BAccount(db.Model):
 
     last_sign_at = db.Column(db.DateTime)
     last_sign_status = db.Column(db.String(16))              # success|fail|skip
+
+    # 账号级推送凭证绑定：JSON {channel: 绑定项}，channel ∈ PUSH_CHANNELS。
+    # 绑定项为凭证 id，或 email 的 {credId?, to}（to=该账号的收件人，可多值逗号分隔）。
+    # 配置套的凭证来源决定「用不用」，账号这里决定「用哪份凭证、邮件发给谁」。
+    push_cred_json = db.Column(db.Text)
 
     created_at = db.Column(db.DateTime, default=now_cst)
     updated_at = db.Column(db.DateTime, default=now_cst, onupdate=now_cst)
@@ -72,6 +94,22 @@ class BAccount(db.Model):
     def set_profile(self, profile: dict):
         self.profile_json = json.dumps(profile, ensure_ascii=False)
 
+    # ---- 推送凭证绑定（账号级）----
+    @property
+    def push_creds(self) -> dict:
+        if not self.push_cred_json:
+            return {}
+        try:
+            data = json.loads(self.push_cred_json)
+            return data if isinstance(data, dict) else {}
+        except (ValueError, TypeError):
+            return {}
+
+    def set_push_creds(self, creds: dict):
+        """只保留白名单通道且值非空的项（空对象与空值丢弃）；全空则置 NULL，不留空对象。"""
+        cleaned = {k: v for k, v in (creds or {}).items() if k in PUSH_CHANNELS and v}
+        self.push_cred_json = json.dumps(cleaned, ensure_ascii=False) if cleaned else None
+
     def sign_tasks(self):
         """该账号已添加至定时任务的签到类型及启用态（按 dorm/activity 固定顺序）。
         用于账号列表「类型」列与配置页账号树徽标动态派生，不依赖账号自身的 type 字段。
@@ -97,6 +135,7 @@ class BAccount(db.Model):
             'type': self.type,
             'enabled': bool(self.enabled),
             'profile': self.profile,
+            'pushCreds': self.push_creds,
             'signTasks': self.sign_tasks(),
             'lastSignIn': {
                 'time': self.last_sign_at.strftime('%Y-%m-%d %H:%M') if self.last_sign_at else '',

@@ -112,6 +112,8 @@ def create_account():
     acc.set_password(data['password'])
     acc.set_profile(result.profile)
     acc.set_token(result.token)
+    if 'pushCreds' in data:
+        acc.set_push_creds(data['pushCreds'])
     db.session.add(acc)
     # 额度占用不再维护计数器：展示与校验一律按账号数现算（见 create 的额度校验）
     db.session.commit()
@@ -157,6 +159,8 @@ def update_account(account_id):
         acc.type = data['type']
     if 'enabled' in data:
         acc.enabled = data['enabled']
+    if 'pushCreds' in data:
+        acc.set_push_creds(data['pushCreds'])
 
     db.session.commit()
     return success(acc.to_dict(), message='保存成功')

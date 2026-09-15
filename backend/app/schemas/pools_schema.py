@@ -3,6 +3,8 @@
 # 库中旧值与用户新填的非密文字段合并后再校验必填（路由层负责合并，见 Task 7）。
 import re
 
+from app.utils.validators import RECIPIENT_MAX, validate_recipients
+
 _CHANNELS = ('serverchan', 'pushplus', 'email')
 _CRED_REQUIRED_FIELDS = {
     'serverchan': ['serverchanKey'],
@@ -12,6 +14,12 @@ _CRED_REQUIRED_FIELDS = {
 _SECRET_KEYS = ('serverchanKey', 'pushplusToken', 'emailPass')
 _MASK_RE = re.compile(r'^••••')
 _COMPOSITE = (dict, list, tuple, set)
+# 字段长度上限：收件人可写多个（逗号分隔），单独放宽
+_FIELD_LIMITS = {'emailTo': RECIPIENT_MAX}
+
+
+def _field_limit(key):
+    return _FIELD_LIMITS.get(str(key), 255)
 
 
 def _field_str(v):
@@ -81,7 +89,13 @@ def load_credential(payload):
             return False, None, f'字段 {k} 内容格式无效', 4321
         if not v:
             return False, None, f'缺少必填项：{k}', 4321
-        clean[k] = v[:255]
+        clean[k] = v[:_field_limit(k)]
+    if channel == 'email':
+        # 收件人可多个：逐个校验邮箱格式并归一化成「a@x.com, b@y.com」
+        ok_to, to, msg_to, _ = validate_recipients(clean['emailTo'])
+        if not ok_to:
+            return False, None, msg_to, 4321
+        clean['emailTo'] = to
     return True, {'channel': channel, 'name': name, 'fields': clean}, '', 0
 
 
@@ -108,7 +122,13 @@ def load_credential_update(payload):
                 return False, None, f'字段 {k} 内容格式无效', 4321
             if _MASK_RE.match(v):
                 continue
-            clean[str(k)[:64]] = v[:255]
+            clean[str(k)[:64]] = v[:_field_limit(k)]
+        # 收件人与创建路径同口径：更新时渠道可能来自库里，故只要传了 emailTo 就按收件人规则校验
+        if clean.get('emailTo'):
+            ok_to, to, msg_to, _ = validate_recipients(clean['emailTo'])
+            if not ok_to:
+                return False, None, msg_to, 4321
+            clean['emailTo'] = to
         data['fields'] = clean
     if not data:
         return False, None, '没有需要更新的字段', 4322

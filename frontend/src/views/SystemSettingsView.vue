@@ -55,7 +55,7 @@
 
           <!-- 导轨层：树线分别画在各组 <ul> 上（组标题因此能"断开"树线、读作标题），
                而定位标全目录只有一个，跨组靠 transform 滑动——不再逐项挂载/卸载，
-               换段时不会出现刻度闪烁 -->
+               换段时不会出现刻度闪烁；纵坐标吸附到当前段那一行，与文字高亮同源 -->
           <div ref="navRailRef" class="relative">
             <span
               class="pointer-events-none absolute left-[9.5px] top-0 h-[18px] w-[2px] rounded-full bg-brand transition-[transform,opacity] duration-200 ease-out"
@@ -569,11 +569,13 @@ const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').mat
 const panelRef = ref(null)
 const navRailRef = ref(null)
 const activeSec = ref('account-info')
-const spyHits = new Set()
-let spy = null
 
-// 定位标：高度固定（动效只走 transform），纵向位置从当前锚点量出。
-// 唯一写入点是 measureMarker——模板里不再按项渲染刻度，换段时没有挂载/卸载这一步。
+// 定位标与文字高亮是同一件事的两处呈现，都取「当前段落」：
+// 当前段落 = 落线之上最靠后的一段（落线 = 段落顶边对齐容器顶、再让开该段 scroll-margin 的位置）。
+// 这条线正是点击导航后 scrollIntoView 停住的位置，因此「点哪个就停哪个、滚到哪就亮哪个」，
+// 标落在当前段的目录行上，与高亮永远一致。
+// （曾用插值让标按段落进度滑行，读数上确实连续，但段落读完时标已经整整领先高亮一行，
+//   表现为"滚动时标对不准锚点、只有点击那一刻是准的"——故改为吸附模型。）
 const MARKER_H = 18
 const markerY = ref(0)
 const markerOn = ref(false)
@@ -582,17 +584,117 @@ const markerStyle = computed(() => ({
   opacity: markerOn.value ? 1 : 0,
 }))
 
-// 目录在移动端是 display:none，量到的高度恒为 0，此时藏起定位标（移动端用 chip 轨高亮）
-function measureMarker() {
+// 段落几何：{ el, margin }。只随集合与断点变化（挂载 / 段落增删 / resize），滚动时不重读
+let sections = []
+let scrollEl = null // 实际滚动元素：lg 下是 main，移动端是文档
+let scrollTarget = null // 事件挂载目标：文档滚动挂 window（元素上的 scroll 事件不冒泡）
+let rafId = 0
+
+// 程序化滚动期间锁定当前段：点击导航后的平滑滚动会依次穿过中间段落，
+// 不锁的话高亮和标会沿途一个个跳过去，点一次跳转能看到连跳好几项
+let navPinned = null
+let pinTimer = 0
+
+// 判定"段落顶边已到读数线"的容差（px）
+const LINE_EPS = 1
+
+// 滚动容器：lg 下是 main（overflow-y-auto），移动端退回文档滚动
+function resolveScrollEl() {
+  let p = panelRef.value ? panelRef.value.parentElement : null
+  while (p && p !== document.body) {
+    const oy = getComputedStyle(p).overflowY
+    if (oy === 'auto' || oy === 'scroll') return p
+    p = p.parentElement
+  }
+  return document.scrollingElement || document.documentElement
+}
+
+function bindScrollEl() {
+  const el = resolveScrollEl()
+  const isDoc = el === document.scrollingElement || el === document.documentElement
+  scrollEl = el
+  const target = isDoc ? window : el
+  if (target === scrollTarget) return
+  scrollTarget?.removeEventListener('scroll', onScrollUpdate)
+  scrollTarget = target
+  scrollTarget.addEventListener('scroll', onScrollUpdate, { passive: true })
+}
+
+function measureSections() {
+  bindScrollEl()
+  sections = []
+  for (const s of allSections.value) {
+    const el = document.getElementById('sec-' + s.id)
+    if (!el) continue
+    sections.push({ id: s.id, el, margin: parseFloat(getComputedStyle(el).scrollMarginTop) || 0 })
+  }
+}
+
+// 容器顶在视口里的位置：元素滚动时是容器自己的顶边，文档滚动时视口顶即 0
+function containerTop() {
+  return scrollTarget === window ? 0 : scrollEl.getBoundingClientRect().top
+}
+
+function scrolledToEnd() {
+  if (scrollTarget === window) {
+    return window.scrollY + window.innerHeight >= document.scrollingElement.scrollHeight - 2
+  }
+  return scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 2
+}
+
+function currentIndex() {
+  const top = containerTop()
+  let idx = 0
+  for (let k = 0; k < sections.length; k++) {
+    // 容差 1px：scrollIntoView 的落位可能差不到 1 像素，严格按 0 判定会把刚点中的段落判给上一段
+    if (sections[k].el.getBoundingClientRect().top - sections[k].margin - top <= LINE_EPS) idx = k
+  }
+  // 滚到尽头取末段：末段可能短到用尽滚动量也越不过自己的落线，否则它永远当不上当前段
+  return scrolledToEnd() ? sections.length - 1 : idx
+}
+
+function updateFrame() {
+  rafId = 0
+  if (!sections.length) return
+  let idx = currentIndex()
+  if (navPinned) {
+    const p = sections.findIndex((s) => s.id === navPinned)
+    if (p >= 0) idx = p
+  }
+  activeSec.value = sections[idx].id
+
+  // 移动端目录是顶部 chip 轨，没有可滑动的标
   const rail = navRailRef.value
-  if (!rail) return
-  const el = rail.querySelector('[data-nav-id="' + activeSec.value + '"]')
-  if (!el || !el.offsetHeight) {
+  const a = rail ? rail.querySelector('[data-nav-id="' + sections[idx].id + '"]') : null
+  if (!a || !a.offsetHeight) {
     markerOn.value = false
     return
   }
-  markerY.value = el.offsetTop + (el.offsetHeight - MARKER_H) / 2
+  markerY.value = a.offsetTop + (a.offsetHeight - MARKER_H) / 2
   markerOn.value = true
+}
+
+// 滚动逐帧触发，同帧内多次事件只算一次；平滑滚动期间事件连续不断，停住即解锁
+function onScrollUpdate() {
+  if (navPinned) {
+    clearTimeout(pinTimer)
+    pinTimer = setTimeout(releasePin, 220)
+  }
+  if (rafId) return
+  rafId = requestAnimationFrame(updateFrame)
+}
+
+function releasePin() {
+  // 只解锁，不在这里重算：解锁时按滚动位置重算，等于把刚点中的那一段又推出去。
+  // 末尾几段短到滚不到自己的落线（用尽滚动量也越不过读数线），滚动判定永远选不到它们，
+  // 一点就跟到别的段上——表现为"先定位准了，随后二次跳到上方或下方的导航"。
+  // 判定权交还给下一次真实滚动事件。
+  navPinned = null
+}
+
+function remeasureAndUpdate() {
+  measureSections()
+  updateFrame()
 }
 
 // 层级只在目录里画一次：四个组，组内挂锚点；系统运行/系统参数两组仅管理员可见
@@ -638,35 +740,17 @@ const dirtyBySection = computed(() => {
 function goTo(id) {
   const el = document.getElementById('sec-' + id)
   if (!el) return
-  activeSec.value = id
+  // 锁住当前段：平滑滚动沿途会经过中间段落，不锁的话高亮与标会跟着一个个跳
+  navPinned = id
   el.scrollIntoView({ behavior: REDUCED_MOTION ? 'auto' : 'smooth', block: 'start' })
+  // 目标本已对齐（不产生滚动）时也要走一次判定；顺带给 220ms 的解锁计时器起步
+  onScrollUpdate()
 }
 
-// 高亮取「落点带内 DOM 序最靠前的一段」：root 用视口，嵌套滚动容器（lg 下 main 自身滚动、
-// 移动端文档滚动）由 IntersectionObserver 连同裁剪祖先一并计算，两种断点都成立。
-function setupSpy() {
-  spy?.disconnect()
-  spy = null
-  spyHits.clear()
-  const els = panelRef.value ? Array.from(panelRef.value.querySelectorAll('[data-sec]')) : []
-  if (!els.length) return
-  spy = new IntersectionObserver(
-    (entries) => {
-      for (const e of entries) {
-        const id = e.target.dataset.sec
-        if (e.isIntersecting) spyHits.add(id)
-        else spyHits.delete(id)
-      }
-      const first = allSections.value.find((s) => spyHits.has(s.id))
-      if (first) activeSec.value = first.id
-    },
-    { root: null, rootMargin: '-104px 0px -55% 0px', threshold: 0 }
-  )
-  els.forEach((el) => spy.observe(el))
-}
-
-// 定位标的几何重算见下方「段落集合变化」处——watch 注册时就会求一次旧值，
-// 放这里会提前求值 navGroups（其依赖 settingsLoading/PARAM_GROUPS 尚未初始化，触发 TDZ）
+// 当前段完全由滚动位置判定（见 updateFrame / currentIndex），不再另挂 IntersectionObserver：
+// 两套判定曾同时存在、各按不同基准切换，标与高亮由此出现一行左右的不同步。
+// 几何重算见下方 watch(navGroups)：watch 注册时即求一次旧值，写在这里会提前求值 navGroups
+// （其依赖 settingsLoading/PARAM_GROUPS 尚未初始化，触发 TDZ）
 
 // ==================== 区零：主题色（所有角色） ====================
 const themeStore = useThemeStore()
@@ -884,15 +968,9 @@ watch(settingsLoading, async (loading) => {
   }
 })
 
-// 段落集合随加载态/角色变化而增删，观察目标需同步重建
-watch([settingsLoading, () => auth.isAdmin], async () => {
-  await nextTick()
-  setupSpy()
-})
-
-// 高亮变化、以及目录项增删（加载态与角色切换都会改动 navGroups）都会改变锚点几何，重新量一次定位标。
+// 段落集合随加载态/角色变化而增删（navGroups 是它的唯一出口），几何与当前段都要重建。
 // 必须写在 settingsLoading/PARAM_GROUPS/paramGroups 之后：watch 注册时即求一次旧值，提前会触发 TDZ
-watch([activeSec, navGroups], () => nextTick(measureMarker))
+watch(navGroups, () => nextTick(remeasureAndUpdate))
 
 function resetFormToDefaults() {
   for (const item of settingsItems.value) {
@@ -1019,17 +1097,18 @@ onMounted(async () => {
     loadSystemInfo()
   }
   await nextTick()
-  setupSpy()
-  measureMarker()
-  // 视口变化会让目录项换行、字体加载完成也会让文字重新排版——两者都会挪动定位标的落点
-  window.addEventListener('resize', measureMarker)
-  document.fonts?.ready.then(measureMarker)
+  remeasureAndUpdate()
+  // 视口变化会让目录项换行、字体加载完成也会让文字重新排版——两者都会挪动落线与锚点行
+  window.addEventListener('resize', remeasureAndUpdate)
+  document.fonts?.ready.then(remeasureAndUpdate)
 })
 
 onBeforeUnmount(() => {
   clearTimeout(savedFlashTimer)
-  spy?.disconnect()
-  window.removeEventListener('resize', measureMarker)
+  clearTimeout(pinTimer)
+  window.removeEventListener('resize', remeasureAndUpdate)
+  scrollTarget?.removeEventListener('scroll', onScrollUpdate)
+  if (rafId) cancelAnimationFrame(rafId)
 })
 </script>
 

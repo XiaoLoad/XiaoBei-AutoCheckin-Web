@@ -35,16 +35,29 @@
               密码
               <span v-if="mode === 'edit'" class="font-normal text-ink-muted">（留空不修改）</span>
             </label>
-            <input
-              id="acc-password"
-              v-model="form.password"
-              type="password"
-              maxlength="64"
-              placeholder="至少 6 位"
-              class="login-input"
-              :class="errors.password && 'border-danger focus:border-danger focus:ring-danger/10'"
-              @input="onCredentialInput('password')"
-            />
+            <!-- 显示开关由组件自持：浏览器原生的「小眼睛」只在首次输入时出现，
+                 编辑态密码框本来就是空的，那里没有它，所以这里始终提供 -->
+            <div class="relative">
+              <input
+                id="acc-password"
+                v-model="form.password"
+                :type="showPassword ? 'text' : 'password'"
+                maxlength="64"
+                placeholder="至少 6 位"
+                class="login-input pwd-input pr-11"
+                :class="errors.password && 'border-danger focus:border-danger focus:ring-danger/10'"
+                @input="onCredentialInput('password')"
+              />
+              <button
+                type="button"
+                class="absolute right-2.5 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-lg text-ink-muted transition hover:bg-cloud hover:text-brand"
+                :aria-label="showPassword ? '隐藏密码' : '显示密码'"
+                :aria-pressed="showPassword"
+                @click="showPassword = !showPassword"
+              >
+                <Icon :name="showPassword ? 'eye-off' : 'eye'" :size="16" />
+              </button>
+            </div>
             <p v-if="errors.password" class="mt-1 text-xs text-danger">{{ errors.password }}</p>
           </div>
         </div>
@@ -304,6 +317,8 @@ const credentials = ref([])
 const creatingCred = ref(false)
 // 就地新建凭证的草稿：{ channel, name, fields }，同一时刻只开一个
 const inlineNew = ref(null)
+// 密码明文开关：每次打开弹窗都回到掩码态，不跨会话记住
+const showPassword = ref(false)
 
 function blankFields() {
   return {
@@ -417,6 +432,7 @@ function resetForm() {
   verifyState.value = 'idle'
   verifyMsg.value = ''
   inlineNew.value = null
+  showPassword.value = false
   if (props.mode === 'edit' && props.account) {
     form.account = props.account.account || ''
     form.password = ''
@@ -536,6 +552,13 @@ defineExpose({ close })
 </script>
 
 <style scoped>
+/* 关掉浏览器自带的密码显示按钮（Edge 的 ::-ms-reveal），避免与字段内的开关
+   并排成两只眼睛；只作用于本弹窗的密码框，不动其它页面的原生行为 */
+.pwd-input::-ms-reveal,
+.pwd-input::-ms-clear {
+  display: none;
+}
+
 /* 通道行两列：左列是通道标识（移动端按内容宽、sm 起固定宽以便三行对齐），右列是控件。
    标识与控件各占一格，"哪个通道 / 配了什么"在同一条水平线上对读。 */
 .cred-row {

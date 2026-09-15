@@ -1,6 +1,8 @@
 <template>
   <!-- 新增/编辑 B 平台账号弹窗：基于 BaseModal 组装（遮罩/ESC/滚动锁定/过渡均由骨架提供）。
-       表单只包字段区（回车触发 submit），底部按钮在 footer 插槽经 click 提交。 -->
+       表单只包字段区（回车触发 submit），底部按钮在 footer 插槽经 click 提交。
+       版面：身份与校验 → 推送去向 → 平台档案。可写内容一律带边框控件、只读读数一律内嵌
+       cloud 块，沿用全站「形状即语义」的规则，不靠标题区分层级。 -->
   <BaseModal
     :model-value="modelValue"
     size="xl"
@@ -8,223 +10,238 @@
     @update:model-value="(v) => emit('update:modelValue', v)"
     @cancel="onCancel"
   >
-    <form class="space-y-5" @submit.prevent="onSubmit">
-            <!-- 账号信息 -->
-            <div class="space-y-4">
-              <div>
-                <label class="mb-1.5 block text-sm font-medium text-ink-soft">B 平台账号</label>
+    <form class="space-y-6" @submit.prevent="onSubmit">
+      <!-- 身份与校验：账号/密码为两列字段，其下是两个动作（启用开关与校验），
+           两者几何一致、并排成一行，末尾承载校验结论 -->
+      <section class="space-y-4">
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-ink-soft" for="acc-account">B 平台账号</label>
+            <input
+              id="acc-account"
+              v-model.trim="form.account"
+              type="text"
+              maxlength="64"
+              placeholder="如 A-301"
+              class="login-input"
+              :class="errors.account && 'border-danger focus:border-danger focus:ring-danger/10'"
+              @input="onCredentialInput('account')"
+            />
+            <p v-if="errors.account" class="mt-1 text-xs text-danger">{{ errors.account }}</p>
+          </div>
+
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-ink-soft" for="acc-password">
+              密码
+              <span v-if="mode === 'edit'" class="font-normal text-ink-muted">（留空不修改）</span>
+            </label>
+            <input
+              id="acc-password"
+              v-model="form.password"
+              type="password"
+              maxlength="64"
+              placeholder="至少 6 位"
+              class="login-input"
+              :class="errors.password && 'border-danger focus:border-danger focus:ring-danger/10'"
+              @input="onCredentialInput('password')"
+            />
+            <p v-if="errors.password" class="mt-1 text-xs text-danger">{{ errors.password }}</p>
+          </div>
+        </div>
+
+        <div class="grid gap-4 sm:grid-cols-2">
+          <button
+            type="button"
+            role="switch"
+            :aria-checked="form.enabled"
+            class="flex items-center justify-between gap-3 rounded-xl border border-ink/10 bg-cloud/60 px-4 py-3 text-sm transition hover:border-ink/20"
+            :class="form.enabled ? 'text-ink-soft' : 'text-ink-muted'"
+            @click="form.enabled = !form.enabled"
+          >
+            <span>账号{{ form.enabled ? '启用' : '停用' }}</span>
+            <span
+              class="relative h-5 w-9 shrink-0 rounded-full transition"
+              :class="form.enabled ? 'bg-success' : 'bg-ink/25'"
+            >
+              <span
+                class="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all"
+                :class="form.enabled ? 'left-[18px]' : 'left-0.5'"
+              />
+            </span>
+          </button>
+
+          <button
+            type="button"
+            class="flex items-center justify-center gap-1.5 rounded-xl border px-4 py-3 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-45"
+            :class="verifyState === 'ok'
+              ? 'border-success/30 bg-success/5 text-success'
+              : 'border-brand/30 bg-brand/5 text-brand hover:bg-brand/10'"
+            :disabled="verifying || !form.account || !form.password"
+            @click="runVerify"
+          >
+            <span v-if="verifying" class="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand/30 border-t-brand" />
+            <Icon v-else :name="verifyState === 'ok' ? 'check-circle' : 'user-check'" :size="14" />
+            {{ verifyButtonText }}
+          </button>
+        </div>
+
+        <p class="flex items-start gap-1.5 text-xs" :class="verifyView.tone">
+          <Icon v-if="verifyView.icon" :name="verifyView.icon" :size="14" class="mt-px shrink-0" />
+          <span>{{ verifyView.text }}</span>
+        </p>
+      </section>
+
+      <!-- 推送凭证：账号级归属。凭证属于账号本身，配置套只决定「用不用它」 -->
+      <section>
+        <div class="mb-2 flex items-center gap-2">
+          <span class="text-[11px] font-semibold tracking-wider text-ink-muted uppercase">推送去向</span>
+          <span class="h-px flex-1 bg-ink/10" />
+          <!-- 落位刻度：三格自左向右对应下方三行通道，填充即该通道已有自己的推送目标 -->
+          <span
+            class="flex items-center gap-1"
+            role="img"
+            :aria-label="`${filledCount} / ${PUSH_CHANNELS.length} 个通道已落位`"
+          >
+            <span
+              v-for="ch in PUSH_CHANNELS"
+              :key="ch"
+              class="h-1.5 w-4 rounded-[2px] transition-colors duration-300"
+              :class="entryFilled(ch) ? 'bg-brand' : 'bg-ink/10'"
+              :title="channelLabel(ch)"
+            />
+          </span>
+        </div>
+
+        <ul class="divide-y divide-ink/5">
+          <li v-for="ch in PUSH_CHANNELS" :key="ch" class="cred-row relative py-3 pl-3.5">
+            <!-- 落位刻度线：已落位实线、未落位虚线，三行并排即可扫出哪几个还没配 -->
+            <span
+              aria-hidden="true"
+              class="absolute inset-y-0 left-0 w-0 border-l-2"
+              :class="entryFilled(ch) ? 'border-brand' : 'border-dashed border-ink/15'"
+            />
+
+            <span class="flex min-w-0 items-center gap-2.5">
+              <span class="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[10px] font-bold" :class="channelTone(ch)">
+                {{ channelShort(ch) }}
+              </span>
+              <span class="truncate text-[13px] text-ink-soft">{{ channelLabel(ch) }}</span>
+            </span>
+
+            <span class="flex min-w-0 items-center gap-1.5">
+              <BaseSelect
+                v-if="hasOwnCreds(ch)"
+                :model-value="form.pushCreds[ch].credId"
+                :options="credOptionsOf(ch)"
+                placement="auto"
+                placeholder="跟随配置套"
+                size="sm"
+                class="min-w-0 flex-1"
+                @update:model-value="(v) => (form.pushCreds[ch].credId = v)"
+              />
+              <button
+                v-else
+                type="button"
+                class="flex min-w-0 flex-1 items-center justify-center gap-1 rounded-xl border border-dashed px-3 py-2 text-xs font-medium transition"
+                :class="openFor(ch) ? 'border-brand/50 bg-brand/10 text-brand' : 'border-brand/40 bg-brand/5 text-brand hover:bg-brand/10'"
+                @click="toggleInlineNew(ch)"
+              >
+                <Icon name="plus" :size="13" />新建凭证
+              </button>
+              <!-- 已有凭证时仍可就地再加一份，不必绕去资源池 -->
+              <button
+                v-if="hasOwnCreds(ch)"
+                type="button"
+                class="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-xl border border-dashed transition"
+                :class="openFor(ch)
+                  ? 'border-brand/50 bg-brand/10 text-brand'
+                  : 'border-ink/15 text-ink-muted hover:border-brand/40 hover:bg-brand/5 hover:text-brand'"
+                :aria-label="`新建${channelLabel(ch)}凭证`"
+                @click="toggleInlineNew(ch)"
+              >
+                <Icon name="plus" :size="14" />
+              </button>
+            </span>
+
+            <!-- 邮件收件人：与凭证选择正交，不绑凭证也能单独指定发给谁 -->
+            <div v-if="ch === 'email'" class="cred-row col-span-2 mt-2">
+              <span class="text-xs text-ink-muted">收件人</span>
+              <div class="min-w-0">
                 <input
-                  v-model.trim="form.account"
+                  v-model.trim="form.pushCreds.email.to"
                   type="text"
-                  maxlength="64"
-                  placeholder="如 A-301"
-                  class="login-input"
-                  :class="errors.account && 'border-danger focus:border-danger focus:ring-danger/10'"
-                  @input="errors.account = ''"
+                  autocomplete="off"
+                  placeholder="可填多个，逗号分隔"
+                  aria-label="邮件收件人"
+                  class="w-full rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
                 />
-                <p v-if="errors.account" class="mt-1 text-xs text-danger">{{ errors.account }}</p>
+                <p class="mt-1 text-xs" :class="recipientWarn ? 'text-warning' : 'text-ink-muted'">{{ recipientHint }}</p>
               </div>
+            </div>
 
-              <div>
-                <label class="mb-1.5 block text-sm font-medium text-ink-soft">
-                  密码
-                  <span class="font-normal text-ink-muted">{{ mode === 'edit' ? '（留空则不修改）' : '' }}</span>
-                </label>
-                <input
-                  v-model="form.password"
-                  type="password"
-                  maxlength="64"
-                  placeholder="至少 6 位"
-                  class="login-input"
-                  :class="errors.password && 'border-danger focus:border-danger focus:ring-danger/10'"
-                  @input="errors.password = ''"
-                />
-                <p v-if="errors.password" class="mt-1 text-xs text-danger">{{ errors.password }}</p>
+            <!-- 就地新建凭证：省掉「先去我的资源建好再回来下拉」这一趟，也不丢已填内容 -->
+            <div v-if="openFor(ch)" class="col-span-2 mt-2 rounded-xl bg-cloud/50 p-3.5">
+              <div class="flex items-center justify-between gap-2">
+                <p class="text-xs font-medium text-ink-soft">新建{{ channelLabel(ch) }}凭证</p>
+                <button type="button" class="text-xs text-ink-muted transition hover:text-ink" @click="inlineNew = null">取消</button>
               </div>
-
-              <div>
-                <label class="mb-1.5 block text-sm font-medium text-ink-soft">状态</label>
+              <div class="mt-3 space-y-3">
+                <div>
+                  <label class="mb-1.5 block text-xs text-ink-muted" for="inline-cred-name">凭证名称</label>
+                  <input
+                    id="inline-cred-name"
+                    v-model.trim="inlineNew.name"
+                    type="text"
+                    autocomplete="off"
+                    maxlength="64"
+                    placeholder="如 我的 QQ 邮箱"
+                    class="w-full rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
+                  />
+                </div>
+                <PushCredentialFields v-model="inlineNew.fields" :channel="ch" />
+              </div>
+              <div class="mt-3 flex justify-end">
                 <button
                   type="button"
-                  class="flex h-[46px] w-full items-center justify-between rounded-xl border border-ink/10 bg-cloud/60 px-4 text-sm transition"
-                  :class="form.enabled ? 'text-success' : 'text-ink-muted'"
-                  @click="form.enabled = !form.enabled"
+                  class="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-medium text-white shadow-lg shadow-brand/20 transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
+                  :disabled="!inlineNew.name || creatingCred"
+                  @click="saveInlineCredential(ch)"
                 >
-                  <span>{{ form.enabled ? '启用' : '禁用' }}</span>
-                  <span
-                    class="relative h-5 w-9 rounded-full transition"
-                    :class="form.enabled ? 'bg-success' : 'bg-ink/25'"
-                  >
-                    <span
-                      class="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all"
-                      :class="form.enabled ? 'left-[18px]' : 'left-0.5'"
-                    />
-                  </span>
+                  <span v-if="creatingCred" class="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                  {{ creatingCred ? '保存中…' : '保存并绑定' }}
                 </button>
               </div>
             </div>
+          </li>
+        </ul>
 
-            <!-- 第三方账号校验 -->
-            <div class="rounded-xl border border-ink/10 bg-cloud/40 p-4">
-              <div class="flex items-center justify-between gap-3">
-                <div class="min-w-0">
-                  <p class="text-sm font-medium text-ink-soft">账号密码校验</p>
-                  <p class="mt-0.5 text-xs text-ink-muted">新增后对接 B 平台前，校验账号密码是否正确</p>
-                </div>
-                <button
-                  type="button"
-                  class="shrink-0 rounded-lg border border-brand/30 bg-brand/5 px-3 py-2 text-sm font-medium text-brand transition hover:bg-brand/10 disabled:cursor-not-allowed disabled:opacity-50"
-                  :disabled="verifying || !form.account || !form.password"
-                  @click="runVerify"
-                >
-                  <span v-if="verifying" class="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand/40 border-t-brand" />
-                  <span v-else>校验账号</span>
-                </button>
-              </div>
-              <p v-if="verifyState === 'ok'" class="mt-3 flex items-center gap-1.5 text-xs font-medium text-success">
-                <Icon name="check-circle" :size="14" />{{ verifyMsg }}
-              </p>
-              <p v-else-if="verifyState === 'fail'" class="mt-3 flex items-center gap-1.5 text-xs font-medium text-danger">
-                <Icon name="alert" :size="14" />{{ verifyMsg }}
-              </p>
-            </div>
+        <p class="mt-3 text-xs text-ink-muted">
+          未绑定的通道跟随配置套里的凭证；已绑定的通道各账号推自己的目标，批量套用不会串号。
+        </p>
+      </section>
 
-            <!-- 推送凭证：账号级归属。凭证属于账号本身，配置套只决定"用不用它" -->
-            <div>
-              <div class="mb-3 flex items-center gap-2">
-                <span class="text-[11px] font-semibold tracking-wider text-ink-muted uppercase">推送凭证</span>
-                <span class="h-px flex-1 bg-ink/10" />
-                <span class="inline-flex items-center gap-1 rounded-full bg-ink/5 px-2 py-0.5 text-xs text-ink-muted">
-                  已绑定 {{ boundCount }} / {{ PUSH_CHANNELS.length }}
-                </span>
-              </div>
-
-              <p class="mb-3 text-xs text-ink-muted">
-                绑定后这个账号的签到结果推送到它自己的凭证，一个配置套套用多个账号时互不串号；留空则跟随配置套里的凭证。
-              </p>
-
-              <div class="space-y-3">
-                <div v-for="ch in PUSH_CHANNELS" :key="ch" class="space-y-2">
-                  <div class="flex items-center gap-2.5">
-                    <span class="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[10px] font-bold" :class="channelTone(ch)">
-                      {{ channelShort(ch) }}
-                    </span>
-                    <span class="w-16 shrink-0 text-sm text-ink-soft">{{ channelLabel(ch) }}</span>
-                    <!-- 归属连线：已落位为实线、未落位为虚线，一眼看出哪些通道还没配 -->
-                    <span
-                      class="min-w-[1rem] flex-1"
-                      :class="entryFilled(ch) ? 'h-px bg-brand/30' : 'border-t border-dashed border-ink/20'"
-                    />
-                    <BaseSelect
-                      v-if="credOptionsOf(ch).length > 1"
-                      :model-value="form.pushCreds[ch].credId"
-                      :options="credOptionsOf(ch)"
-                      placement="auto"
-                      placeholder="跟随配置套"
-                      size="sm"
-                      class="w-40 shrink-0 sm:w-56"
-                      @update:model-value="(v) => (form.pushCreds[ch].credId = v)"
-                    />
-                    <button
-                      v-else
-                      type="button"
-                      class="inline-flex w-40 shrink-0 items-center justify-center gap-1 rounded-xl border border-dashed border-brand/40 bg-brand/5 px-3 py-1.5 text-xs font-medium text-brand transition hover:bg-brand/10 sm:w-56"
-                      @click="openInlineNew(ch)"
-                    >
-                      <Icon name="plus" :size="13" />新建凭证
-                    </button>
-                  </div>
-
-                  <!-- 邮件收件人：与凭证选择正交，不绑凭证也能单独指定发给谁 -->
-                  <div v-if="ch === 'email'" class="flex items-start gap-2.5 pl-[7rem]">
-                    <span class="w-16 shrink-0 pt-2 text-xs text-ink-muted">收件人</span>
-                    <div class="min-w-0 flex-1">
-                      <input
-                        v-model.trim="form.pushCreds.email.to"
-                        type="text"
-                        autocomplete="off"
-                        class="w-full rounded-xl border border-ink/10 bg-white px-3 py-1.5 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
-                        placeholder="多个用逗号分隔"
-                      />
-                      <p class="mt-1 text-xs text-ink-muted">{{ recipientHint }}</p>
-                    </div>
-                  </div>
-
-                  <!-- 就地新建凭证：省掉「先去我的资源建好再回来下拉」这一趟，也不丢已填内容 -->
-                  <div v-if="inlineNew && inlineNew.channel === ch" class="pl-[7rem]">
-                    <div class="rounded-xl border border-dashed border-ink/15 bg-cloud/40 p-3">
-                      <div class="flex items-center justify-between gap-2">
-                        <p class="text-xs font-medium text-ink-soft">新建 {{ channelLabel(ch) }} 凭证</p>
-                        <button type="button" class="text-xs text-ink-muted transition hover:text-ink" @click="inlineNew = null">取消</button>
-                      </div>
-                      <div class="mt-2.5 space-y-3">
-                        <div>
-                          <label class="mb-1.5 block text-xs text-ink-muted">凭证名称</label>
-                          <input
-                            v-model.trim="inlineNew.name"
-                            type="text"
-                            autocomplete="off"
-                            maxlength="64"
-                            class="w-full rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
-                            placeholder="如 我的 QQ 邮箱"
-                          />
-                        </div>
-                        <PushCredentialFields v-model="inlineNew.fields" :channel="ch" />
-                      </div>
-                      <div class="mt-3 flex justify-end">
-                        <button
-                          type="button"
-                          class="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-medium text-white shadow-lg shadow-brand/20 transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
-                          :disabled="!inlineNew.name || creatingCred"
-                          @click="saveInlineCredential(ch)"
-                        >
-                          <span v-if="creatingCred" class="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                          {{ creatingCred ? '保存中…' : '保存并绑定' }}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <p class="mt-3 text-xs text-ink-muted">
-                凭证在「我的资源 · 我的凭证」统一维护，密文保管、可随时测试推送。
-              </p>
-            </div>
-
-            <!-- 个人信息（平台回填：用户不可手改，仅由 B 平台获取后写入） -->
-            <div>
-              <div class="mb-3 flex items-center gap-2">
-                <span class="text-[11px] font-semibold tracking-wider text-ink-muted uppercase">个人信息</span>
-                <span class="h-px flex-1 bg-ink/10" />
-                <span class="inline-flex items-center gap-1 rounded-full bg-ink/5 px-2 py-0.5 text-xs text-ink-muted">
-                  <Icon name="lock" :size="12" />校验通过自动回填
-                </span>
-              </div>
-              <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label class="mb-1.5 block text-sm font-medium text-ink-soft">姓名</label>
-                  <input v-model.trim="form.profile.name" type="text" placeholder="从平台获取" disabled class="login-input bg-cloud/60 text-ink-muted cursor-not-allowed" />
-                </div>
-                <div>
-                  <label class="mb-1.5 block text-sm font-medium text-ink-soft">学号</label>
-                  <input v-model.trim="form.profile.studentNo" type="text" placeholder="从平台获取" disabled class="login-input bg-cloud/60 text-ink-muted cursor-not-allowed" />
-                </div>
-                <div>
-                  <label class="mb-1.5 block text-sm font-medium text-ink-soft">学院</label>
-                  <input v-model.trim="form.profile.college" type="text" placeholder="从平台获取" disabled class="login-input bg-cloud/60 text-ink-muted cursor-not-allowed" />
-                </div>
-                <div>
-                  <label class="mb-1.5 block text-sm font-medium text-ink-soft">专业</label>
-                  <input v-model.trim="form.profile.major" type="text" placeholder="从平台获取" disabled class="login-input bg-cloud/60 text-ink-muted cursor-not-allowed" />
-                </div>
-                <div class="sm:col-span-2">
-                  <label class="mb-1.5 block text-sm font-medium text-ink-soft">班级</label>
-                  <input v-model.trim="form.profile.className" type="text" placeholder="从平台获取" disabled class="login-input bg-cloud/60 text-ink-muted cursor-not-allowed" />
-                </div>
-              </div>
-              <p class="mt-2 text-xs text-ink-muted">账号密码校验通过后，个人信息由 B 平台自动获取并回填，无需手动操作。</p>
-            </div>
+      <!-- 平台档案（B 平台回填，用户不可改，故用内嵌只读块而非输入框） -->
+      <section>
+        <div class="mb-2 flex items-center gap-2">
+          <span class="text-[11px] font-semibold tracking-wider text-ink-muted uppercase">平台档案</span>
+          <span class="h-px flex-1 bg-ink/10" />
+          <span class="inline-flex items-center gap-1 text-[11px] text-ink-muted">
+            <Icon name="lock" :size="12" />校验通过后自动回填
+          </span>
+        </div>
+        <dl class="grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl bg-cloud/50 px-3.5 py-3 sm:grid-cols-3">
+          <div v-for="f in PROFILE_FIELDS" :key="f.key" class="min-w-0">
+            <dt class="text-[11px] text-ink-muted">{{ f.label }}</dt>
+            <dd
+              class="mt-0.5 truncate text-sm"
+              :class="form.profile[f.key] ? 'text-ink' : 'text-ink/30'"
+              :title="form.profile[f.key] || ''"
+            >
+              {{ form.profile[f.key] || '—' }}
+            </dd>
+          </div>
+        </dl>
+      </section>
     </form>
 
     <template #footer>
@@ -273,6 +290,15 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'submit', 'cancel'])
 
+// 平台档案只读读数的展示顺序与名称（字段键与后端 map_student_info 一致）
+const PROFILE_FIELDS = [
+  { key: 'name', label: '姓名' },
+  { key: 'studentNo', label: '学号' },
+  { key: 'college', label: '学院' },
+  { key: 'major', label: '专业' },
+  { key: 'className', label: '班级' }
+]
+
 // 凭证池里可选的推送凭证（按通道分组），随弹窗打开时拉取
 const credentials = ref([])
 const creatingCred = ref(false)
@@ -302,22 +328,16 @@ const verifyState = ref('idle') // idle | checking | ok | fail
 const verifying = ref(false)
 const verifyMsg = ref('')
 
-const boundCount = computed(() => PUSH_CHANNELS.filter((ch) => !!form.pushCreds[ch].credId).length)
+const filledCount = computed(() => PUSH_CHANNELS.filter((ch) => entryFilled(ch)).length)
 
-// 已选邮箱凭证的默认收件人：作为留空时的回落说明，写进提示而不是输入框占位
-const recipientHint = computed(() => {
-  const cid = form.pushCreds.email.credId
-  const hit = credentials.value.find((c) => c.id === cid)
-  const fallback = (hit && hit.fields && hit.fields.emailTo) || ''
-  return fallback
-    ? `留空则用凭证的默认收件人（${fallback}）`
-    : '留空则用凭证的默认收件人；凭证没写默认值时，这里必须填'
-})
-
-// 该通道是否已有落位内容（绑了凭证或单独指定了收件人）——决定归属连线实线/虚线
+// 该通道是否已有落位内容（绑了凭证或单独指定了收件人）——刻度线与刻度格共用同一判定
 function entryFilled(ch) {
   const e = form.pushCreds[ch]
   return !!(e.credId || e.to)
+}
+
+function hasOwnCreds(ch) {
+  return credentials.value.some((c) => c.type === ch)
 }
 
 // 每行通道的选项：首项「跟随配置套」用于解绑，其余为该通道下的凭证
@@ -336,8 +356,10 @@ async function loadCredentials() {
   }
 }
 
-function openInlineNew(ch) {
-  inlineNew.value = { channel: ch, name: '', fields: blankFields() }
+const openFor = (ch) => !!inlineNew.value && inlineNew.value.channel === ch
+
+function toggleInlineNew(ch) {
+  inlineNew.value = openFor(ch) ? null : { channel: ch, name: '', fields: blankFields() }
 }
 
 async function saveInlineCredential(ch) {
@@ -356,6 +378,37 @@ async function saveInlineCredential(ch) {
     creatingCred.value = false
   }
 }
+
+// 所选邮箱凭证的默认收件人：作为留空时的回落说明，写进提示而不是输入框占位
+const emailFallback = computed(() => {
+  const hit = credentials.value.find((c) => c.id === form.pushCreds.email.credId)
+  return ((hit && hit.fields && hit.fields.emailTo) || '').trim()
+})
+
+const recipientHint = computed(() =>
+  emailFallback.value
+    ? `留空则发给凭证默认收件人（${emailFallback.value}）`
+    : '这个凭证没写默认收件人，留空时这里必填'
+)
+// 没有默认收件人又没填，就是真会发不出去的情况，提示转成警示色
+const recipientWarn = computed(() => !emailFallback.value && !form.pushCreds.email.to)
+
+const verifyButtonText = computed(() => {
+  if (verifyState.value === 'checking') return '校验中…'
+  return verifyState.value === 'ok' ? '重新校验' : '校验账号'
+})
+
+// 校验行承载三种结论；idle 时它说的是一句说明——保存本就会自动校验，免得用户以为必须先点按钮
+const verifyView = computed(() => {
+  if (verifyState.value === 'checking') return { text: '正在校验账号密码…', tone: 'text-ink-soft', icon: '' }
+  if (verifyState.value === 'ok') return { text: verifyMsg.value || '校验通过', tone: 'text-success', icon: 'check-circle' }
+  if (verifyState.value === 'fail') return { text: verifyMsg.value || '校验失败', tone: 'text-danger', icon: 'alert' }
+  return {
+    text: props.mode === 'add' ? '保存时自动校验账号密码，通过后回填平台档案' : '改密码后保存会自动校验',
+    tone: 'text-ink-muted',
+    icon: ''
+  }
+})
 
 function resetForm() {
   Object.assign(form, emptyForm())
@@ -380,16 +433,14 @@ function resetForm() {
   }
 }
 
-watch(
-  () => props.modelValue,
-  (open) => {
-    if (open) {
-      resetForm()
-      loadCredentials()
-    }
-  },
-  { immediate: true }
-)
+// 账号或密码一改，上一次的校验结论就失效——免得带着旧结论直接保存
+function onCredentialInput(field) {
+  errors[field] = ''
+  if (verifyState.value !== 'idle') {
+    verifyState.value = 'idle'
+    verifyMsg.value = ''
+  }
+}
 
 async function runVerify() {
   if (!form.account || !form.password) {
@@ -412,7 +463,7 @@ async function runVerify() {
   }
 }
 
-// 校验成功后从 B 平台档案自动回填（预检已缓存 profile，此处即时返回；字段保持禁用）
+// 校验成功后从 B 平台档案自动回填（预检已缓存 profile，此处即时返回；字段保持只读）
 async function backfillProfile() {
   if (!form.account) return
   const profile = await fetchProfile(form.account)
@@ -468,5 +519,36 @@ function onCancel() {
   close()
 }
 
+// watch 一律写在脚本末尾：注册时会立刻求一次源值，写在依赖声明之前会触发 TDZ，
+// setup 抛错会导致整个组件不渲染（eslint/build 都查不出）
+watch(
+  () => props.modelValue,
+  (open) => {
+    if (open) {
+      resetForm()
+      loadCredentials()
+    }
+  },
+  { immediate: true }
+)
+
 defineExpose({ close })
 </script>
+
+<style scoped>
+/* 通道行两列：左列是通道标识（移动端按内容宽、sm 起固定宽以便三行对齐），右列是控件。
+   标识与控件各占一格，"哪个通道 / 配了什么"在同一条水平线上对读。 */
+.cred-row {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  align-items: center;
+  column-gap: 0.75rem;
+}
+
+/* 收件人行复用同一模板：标签落在标识列、输入框与上行控件左缘对齐 */
+@media (min-width: 640px) {
+  .cred-row {
+    grid-template-columns: 7.5rem minmax(0, 1fr);
+  }
+}
+</style>

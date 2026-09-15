@@ -220,6 +220,7 @@ import BasePagination from '@/components/BasePagination.vue'
 import AccountFormModal from '@/components/AccountFormModal.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
 import { activeChannels, channelDot, channelLabel, channelTone, readCredEntry } from '@/utils/pushChannels'
+import { accountTypeMeta } from '@/utils/accountType'
 
 // 领域状态下沉到 store：视图只做渲染与展示辅助，数据编排由 store 负责
 const store = useAccountsStore()
@@ -259,11 +260,13 @@ function onConfirmDelete() {
 }
 
 // 自定义下拉选项（通用数据：{ label, value }）
+// 类型为四分类严格匹配（store 侧按 accountTypeCode 精确比较），故「仅」字不可省
 const typeOptions = [
   { label: '全部', value: '' },
-  { label: '寝室', value: 'dorm' },
-  { label: '活动', value: 'activity' },
-  { label: '寝室 + 活动', value: 'general' }
+  { label: '仅寝室签到', value: 'dorm' },
+  { label: '仅活动签到', value: 'activity' },
+  { label: '寝室 + 活动', value: 'general' },
+  { label: '未配置任务', value: 'none' }
 ]
 const signOptions = [
   { label: '全部', value: '' },
@@ -278,17 +281,8 @@ const enabledOptions = [
   { label: '禁用', value: 'false' }
 ]
 
-// 签到类型映射：动态基于「已添加至定时任务且启用」的签到类型派生
-// 两者都启用 → 寝室 + 活动；仅寝室 → 寝室签到；仅活动 → 活动签到；都未添加 → 未配置任务
-function typeMeta(item) {
-  const st = item.signTasks || []
-  const dorm = st.some((t) => t.type === 'dorm' && t.enabled)
-  const activity = st.some((t) => t.type === 'activity' && t.enabled)
-  if (dorm && activity) return { label: '寝室 + 活动', cls: 'bg-ink/10 text-ink-soft' }
-  if (dorm) return { label: '寝室签到', cls: 'bg-brand/10 text-brand' }
-  if (activity) return { label: '活动签到', cls: 'bg-info/10 text-info' }
-  return { label: '未配置任务', cls: 'bg-ink/5 text-ink-muted' }
-}
+// 签到类型映射：唯一出处见 utils/accountType.js（按 signTasks 的任务启用态派生）
+const typeMeta = (item) => accountTypeMeta(item.signTasks)
 
 // 上一次签到状态映射：label 用完整措辞（软标签内展示），tag 为标签底色
 function signMeta(item) {

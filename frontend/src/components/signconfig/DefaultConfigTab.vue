@@ -248,6 +248,7 @@ import { gsap } from 'gsap'
 import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
+import { taskTypeMeta } from '@/utils/accountType'
 import { toast } from '@/utils/toast'
 import TimeSection from '@/components/signconfig/sections/TimeSection.vue'
 import ActivitySection from '@/components/signconfig/sections/ActivitySection.vue'
@@ -264,7 +265,7 @@ const store = useSignConfigStore()
 
 // 移动端配置套切换器选项（带类型前缀防误选）
 const setOptions = computed(() => store.userConfigSets.map((s) => ({
-  label: `${s.taskType === 'activity' ? '活动' : '寝室'} · ${s.name}`,
+  label: `${taskTypeMeta(s.taskType).short} · ${s.name}`,
   value: s.id
 })))
 

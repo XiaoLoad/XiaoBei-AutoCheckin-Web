@@ -315,6 +315,7 @@ def _recent_logs():
             'studentName': name,
             'account': acc.account if acc else '',
             'type': '活动签到' if r.task_type == 'activity' else '寝室签到',
+            'taskType': r.task_type,
             'status': r.status,
             'failReason': r.fail_reason or '',
         })

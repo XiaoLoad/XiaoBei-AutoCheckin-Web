@@ -120,8 +120,8 @@
                   <span class="truncate text-[13px] font-medium text-ink">{{ a.account }}</span>
                   <span
                     class="shrink-0 rounded-md px-1.5 py-px text-[10px] font-medium"
-                    :class="typeBadge(a.type).cls"
-                  >{{ typeBadge(a.type).label }}</span>
+                    :class="accountTypeMeta(a.signTasks).cls"
+                  >{{ accountTypeMeta(a.signTasks).label }}</span>
                 </span>
                 <span class="mt-px block truncate text-[11px] text-ink-muted">
                   {{ (a.profile && a.profile.name) || '未回填姓名' }} · {{ lastText(a) }}
@@ -147,6 +147,7 @@
 import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useSiteRecordsStore } from '@/stores/siteRecords'
+import { accountTypeMeta } from '@/utils/accountType'
 import Icon from '@/components/Icon.vue'
 
 const store = useSiteRecordsStore()
@@ -183,12 +184,6 @@ function dotCls(a) {
 function dotTitle(a) {
   const dot = accDot(a)
   return dot === 'ok' ? '最近签到成功' : dot === 'err' ? '最近签到失败' : '凭证失效或未校验'
-}
-
-function typeBadge(t) {
-  if (t === 'activity') return { label: '活动', cls: 'bg-info/10 text-info' }
-  if (t === 'dorm') return { label: '寝室', cls: 'bg-brand/10 text-brand' }
-  return { label: '通用', cls: 'bg-ink/5 text-ink-soft' }
 }
 
 function lastText(a) {

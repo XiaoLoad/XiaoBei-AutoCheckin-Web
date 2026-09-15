@@ -121,7 +121,7 @@
                   <p class="truncate font-semibold text-ink" :title="a.name || a.account">{{ a.name || a.account }}</p>
                   <p class="truncate text-xs text-ink-muted" :title="[a.college, a.major].filter(Boolean).join(' · ')">{{ [a.college, a.major].filter(Boolean).join(' · ') || '—' }}</p>
                 </div>
-                <span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium" :class="typeBadge(a.type)">{{ a.type }}</span>
+                <span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium" :class="accountTypeMetaByCode(a.typeCode).cls">{{ accountTypeMetaByCode(a.typeCode).label }}</span>
               </div>
               <p class="mt-3 truncate text-xs text-ink-muted" :title="a.className">班级：{{ a.className || '—' }}</p>
               <div class="mt-auto flex items-center justify-between gap-2 pt-3">
@@ -147,7 +147,7 @@
         <h3 class="font-semibold text-ink">我的最近签到日志</h3>
         <div class="flex items-center gap-2 sm:gap-3">
           <div class="w-32 sm:w-36">
-            <BaseSelect v-model="fType" size="sm" :options="[{ label: '全部类型', value: 'all' }, { label: '活动签到', value: 'activity' }, { label: '寝室打卡', value: 'dorm' }]" />
+            <BaseSelect v-model="fType" size="sm" :options="[{ label: '全部类型', value: 'all' }, { label: '活动签到', value: 'activity' }, { label: '寝室签到', value: 'dorm' }]" />
           </div>
           <RouterLink to="/task-logs" class="shrink-0 text-sm font-medium text-brand hover:underline">查看全部</RouterLink>
         </div>
@@ -174,8 +174,8 @@
               <td class="py-3 pr-4 text-ink-muted whitespace-nowrap">{{ r.college || '—' }}</td>
               <td class="py-3 pr-4 text-ink-muted whitespace-nowrap">{{ r.className || '—' }}</td>
               <td class="py-3 pr-4">
-                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium" :class="r.type.includes('活动') ? 'bg-brand/10 text-brand' : 'bg-info/10 text-info'">
-                  {{ r.type }}
+                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium" :class="taskTypeMeta(r.taskType).cls">
+                  {{ taskTypeMeta(r.taskType).label }}
                 </span>
               </td>
               <td class="py-3 pr-4">
@@ -186,7 +186,7 @@
               <td class="py-3 max-w-[260px]">
                 <RouterLink
                   v-if="r.result === 'fail'"
-                  :to="{ path: '/task-logs', query: { accountId: r.accountId, type: r.type.includes('活动') ? 'activity' : 'dorm', status: 'fail' } }"
+                  :to="{ path: '/task-logs', query: { accountId: r.accountId, type: r.taskType, status: 'fail' } }"
                   class="inline-flex items-center gap-1 text-xs font-medium text-danger hover:underline"
                 >
                   签到失败 · 查看详情
@@ -213,6 +213,7 @@ import BaseSelect from '@/components/BaseSelect.vue'
 import BaseChart from '@/components/BaseChart.vue'
 import { useDashboardStore } from '@/stores/dashboard'
 import { useThemeStore } from '@/stores/theme'
+import { accountTypeMetaByCode, taskTypeMeta } from '@/utils/accountType'
 
 const store = useDashboardStore()
 const themeStore = useThemeStore()
@@ -254,11 +255,7 @@ const successRate = computed(() => {
 })
 
 const filteredLogs = computed(() =>
-  (me.value.recentLogs || []).filter((r) => {
-    if (fType.value === 'all') return true
-    const isActivity = r.type.includes('活动')
-    return (isActivity ? 'activity' : 'dorm') === fType.value
-  })
+  (me.value.recentLogs || []).filter((r) => fType.value === 'all' || r.taskType === fType.value)
 )
 
 // ===== 账号卡片：默认只展示前 N 个，超出可展开（避免拉伸/显示不全）=====
@@ -268,26 +265,20 @@ const visibleAccounts = computed(() => {
   const items = me.value.accounts.items || []
   return accountsExpanded.value ? items : items.slice(0, ACCOUNT_LIMIT)
 })
-// 账号类型徽标配色：与饼图一致（活动=品牌蓝 / 寝室=信息蓝 / 通用=中性）
-const typeBadge = (t) => ({
-  '通用': 'bg-ink/10 text-ink-soft',
-  '寝室': 'bg-info/10 text-info',
-  '活动': 'bg-brand/10 text-brand',
-  '未配置': 'bg-ink/5 text-ink-muted',
-}[t] || 'bg-ink/5 text-ink-muted')
 // 头像首字：优先姓名，缺失回退登录账号
 const initialOf = (a) => (a.name || a.account || '?').charAt(0)
 
 // ===== 图表配色（与 App 设计令牌对齐：brand/success/danger/info/amber/ink）=====
-// brand 与 dorm 均走 theme store：getter 形式保住 computed 的依赖追踪，切换主题时
-// 引用 C.brand / C.dorm 的图表 option 会重新求值，BaseChart 的 deep watch 自动重绘。
-// dorm 为主题系列副色（companion），保证与当前主题主色拉开色相、双系列可辨识。
+// brand 与 activity 均走 theme store：getter 形式保住 computed 的依赖追踪，切换主题时
+// 引用 C.brand / C.activity 的图表 option 会重新求值，BaseChart 的 deep watch 自动重绘。
+// 寝室系列取主题 brand、活动系列取 activity（默认即 info，撞色相的主题在色板单独覆盖），
+// 与两处徽标的取色口径一致——图表与徽标说的必须是同一种颜色。
 const C = {
   success: '#16a34a',
   fail:    '#dc2626',
   skip:    '#F2A65A',
   get brand() { return themeStore.brandHex },
-  get dorm() { return themeStore.companionHex },
+  get activity() { return themeStore.activityHex },
   ink:     '#5B6478',
   grid:    'rgba(91,100,120,0.10)',
 }
@@ -344,8 +335,8 @@ const typeDistOption = computed(() => ({
     itemStyle: { borderColor: '#fff', borderWidth: 2, borderRadius: 6 },
     emphasis: { scale: true, scaleSize: 6 },
     data: [
-      { value: me.value.typeDist?.activity || 0, name: '活动打卡', itemStyle: { color: C.brand } },
-      { value: me.value.typeDist?.dorm || 0, name: '寝室打卡', itemStyle: { color: C.dorm } }
+      { value: me.value.typeDist?.activity || 0, name: '活动签到', itemStyle: { color: C.activity } },
+      { value: me.value.typeDist?.dorm || 0, name: '寝室签到', itemStyle: { color: C.brand } }
     ]
   }]
 }))

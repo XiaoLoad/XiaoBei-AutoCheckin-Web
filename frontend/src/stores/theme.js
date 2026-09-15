@@ -70,8 +70,8 @@ export const useThemeStore = defineStore('theme', () => {
   // 当前主题元信息（label/各色 hex 等），供图表 tooltip 等 JS 消费方取色
   const meta = computed(() => THEME_PALETTE.find((t) => t.id === current.value) || THEME_PALETTE[0])
   const brandHex = computed(() => meta.value.brand)
-  // 图表系列副色：双系列图表的第二系列用色，随主题切换（见 themePalette 注释）
-  const companionHex = computed(() => meta.value.companion)
+  // 图表「活动签到」系列用色，随主题切换（见 themePalette 注释）
+  const activityHex = computed(() => meta.value.activity)
 
   // 进行中的补间：再次切换时 kill 并以其内联值（补间中间态）为新起点，天然衔接
   let activeTween = null
@@ -159,5 +159,5 @@ export const useThemeStore = defineStore('theme', () => {
   // 兜底：index.html 首帧脚本负责防闪色，这里在 store 初始化时再对齐一次（幂等）
   applyToRoot(current.value)
 
-  return { current, meta, brandHex, companionHex, setTheme }
+  return { current, meta, brandHex, activityHex, setTheme }
 })

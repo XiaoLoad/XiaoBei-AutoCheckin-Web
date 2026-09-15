@@ -2,6 +2,7 @@
 # 登录标识允许手机号或身份证号：仅做非空与长度上限，不做格式强校验（B 平台服务端识别）
 from app.utils.validators import validate_recipients
 
+# 已废弃：对应 b_accounts.type，仅保留以兼容旧调用方；界面已无此字段，展示请按 signTasks 派生
 VALID_TYPES = ('dorm', 'activity', 'general')
 # 账号级推送凭证绑定：{channel: credential_id}，通道白名单
 PUSH_CHANNELS = ('serverchan', 'pushplus', 'email')
@@ -87,10 +88,11 @@ def load_preflight(payload):
 
 
 def load_create(payload):
-    """新增账号：preflight 基础上允许可选 type / enabled"""
+    """新增账号：preflight 基础上允许可选 type（已废弃）/ enabled"""
     ok, data, msg, code = load_preflight(payload)
     if not ok:
         return ok, data, msg, code
+    # type 已废弃，前端从不提交，此处仅兼容旧调用方
     type_ = payload.get('type') or 'general'
     if type_ not in VALID_TYPES:
         return False, None, f'账号类型须为 {" / ".join(VALID_TYPES)}', 4101
@@ -105,7 +107,7 @@ def load_create(payload):
 
 
 def load_update(payload):
-    """编辑账号：account/password/type/enabled 均可选；提供任意一项即参与更新"""
+    """编辑账号：account/password/enabled 均可选；提供任意一项即参与更新（type 已废弃）"""
     payload = payload or {}
     data = {}
     if payload.get('account') is not None:

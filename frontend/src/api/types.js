@@ -21,7 +21,9 @@
  * @property {number} id
  * @property {string} account       B 平台账号标识
  * @property {string} platform      平台名称
- * @property {('dorm'|'activity'|'general')} type   签到类型
+ * @property {('dorm'|'activity'|'general')} type   已废弃：创建时的死值，勿用于展示
+ * @property {{ type:('dorm'|'activity'), enabled:boolean, exists:boolean, configSetId:(number|null) }[]} signTasks
+ *           已添加至定时任务的签到类型及启用态；类型展示按它派生（utils/accountType.js）
  * @property {boolean} enabled       是否启用
  * @property {AccountProfile} profile       个人信息（平台回填）
  * @property {{ time: string, ok?: boolean, status?: SignStatus }} lastSignIn  上一次签到

@@ -104,13 +104,13 @@
           :aria-expanded="detailOpen(r.id)"
           @click="store.toggleExpand(r)"
         >
-          <span class="h-8 w-1 shrink-0 rounded-full" :class="typeRail(r.type)" />
+          <span class="h-8 w-1 shrink-0 rounded-full" :class="taskTypeMeta(r.type).solid" />
 
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
               <span class="truncate text-sm font-semibold text-ink" :title="r.taskName">{{ r.taskName }}</span>
-              <span class="shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium" :class="typeBadge(r.type).cls">
-                {{ typeBadge(r.type).label }}
+              <span class="shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium" :class="taskTypeMeta(r.type).cls">
+                {{ taskTypeMeta(r.type).label }}
               </span>
               <span v-if="r.needPhoto" class="shrink-0 whitespace-nowrap rounded-full bg-amber/10 px-2 py-0.5 text-[11px] font-medium text-amber">需拍照</span>
             </div>
@@ -123,7 +123,7 @@
             <div v-if="r._progress !== null" class="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-ink/10">
               <div
                 class="h-full rounded-full transition-[width] duration-700 ease-out"
-                :class="typeRail(r.type)"
+                :class="taskTypeMeta(r.type).solid"
                 :style="{ width: r._progress + '%' }"
               />
             </div>
@@ -168,6 +168,7 @@ import { computed, ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { gsap } from 'gsap'
 import { useSignRecordsStore } from '@/stores/signRecords'
+import { taskTypeMeta } from '@/utils/accountType'
 import Icon from '@/components/Icon.vue'
 import TaskDetailPanel from '@/components/signrecords/TaskDetailPanel.vue'
 import { useCollapseTransition } from '@/composables/useCollapseTransition'
@@ -266,16 +267,8 @@ function remainInfo(se, now) {
   return { text: `剩余 ${fmtDur(mins)}`, cls: 'bg-cloud text-ink-soft' }
 }
 
-function typeBadge(t) {
-  return t === 'activity'
-    ? { label: '活动签到', cls: 'bg-info/10 text-info' }
-    : { label: '寝室签到', cls: 'bg-brand/10 text-brand' }
-}
-function typeRail(t) {
-  return t === 'activity' ? 'bg-info' : 'bg-brand'
-}
 function shortLabel(t) {
-  return t === 'activity' ? '活动' : '寝室'
+  return taskTypeMeta(t).short
 }
 
 // 分桶计数：头部始终给出寝/活各自的数量（而非单一总数），
@@ -296,7 +289,7 @@ function bucketCls(b) {
   // 未筛选（两类都在看）或命中当前筛选 → 用自身类型色；被筛选排除的那一类退为中性，
   // 用颜色差异表达「列表已按类型收窄」，避免用户以为另一类的任务消失了
   const shown = typeFilter.value === 'all' || typeFilter.value === b.type
-  return shown ? typeBadge(b.type).cls : 'bg-cloud text-ink-soft'
+  return shown ? taskTypeMeta(b.type).cls : 'bg-cloud text-ink-soft'
 }
 function bucketTitle(b) {
   if (!b.count) return `${b.label}签到：当前没有进行中的任务`

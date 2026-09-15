@@ -319,8 +319,8 @@
                 <td class="py-3 pr-4 text-ink-muted">{{ r.studentName || '—' }}</td>
                 <td class="py-3 pr-4 text-ink-muted">{{ r.account }}</td>
                 <td class="py-3 pr-4">
-                  <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium" :class="r.type === '活动签到' ? 'bg-brand/10 text-brand' : 'bg-info/10 text-info'">
-                    {{ r.type }}
+                  <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium" :class="taskTypeMeta(r.taskType).cls">
+                    {{ taskTypeMeta(r.taskType).label }}
                   </span>
                 </td>
                 <td class="py-3 pr-4">
@@ -404,6 +404,7 @@ import BaseSelect from '@/components/BaseSelect.vue'
 import Icon from '@/components/Icon.vue'
 import { useAdminOverviewStore } from '@/stores/adminOverview'
 import { useThemeStore } from '@/stores/theme'
+import { taskTypeMeta } from '@/utils/accountType'
 
 // [权限判断] 本页仅管理员可达（分发见 DashboardView；路由守卫二次校验）。
 const store = useAdminOverviewStore()

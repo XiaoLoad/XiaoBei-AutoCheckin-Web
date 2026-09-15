@@ -182,8 +182,8 @@
                 <div class="min-w-0 flex-1">
                   <div class="flex flex-wrap items-center gap-2">
                     <span class="truncate text-[15px] font-semibold text-ink">{{ row.taskName }}</span>
-                    <span class="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap" :class="typeBadge(row.type).cls">
-                      {{ typeBadge(row.type).label }}
+                    <span class="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap" :class="taskTypeMeta(row.type).cls">
+                      {{ taskTypeMeta(row.type).label }}
                     </span>
                     <span v-if="row.needPhoto" class="shrink-0 rounded-full bg-amber/10 px-2 py-0.5 text-xs font-medium text-amber whitespace-nowrap">需拍照</span>
                   </div>
@@ -399,6 +399,7 @@ import { gsap } from 'gsap'
 import PhotoSwipeLightbox from 'photoswipe/lightbox'
 import PhotoSwipe from 'photoswipe'
 import { useSignRecordsStore } from '@/stores/signRecords'
+import { taskTypeMeta } from '@/utils/accountType'
 import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import StatCard from '@/components/StatCard.vue'
@@ -452,12 +453,6 @@ const statusTabs = [
 ]
 // 周日起始，对齐旧版日历 UI
 const weekHeads = ['日', '一', '二', '三', '四', '五', '六']
-
-function typeBadge(t) {
-  return t === 'activity'
-    ? { label: '活动签到', cls: 'bg-info/10 text-info' }
-    : { label: '寝室签到', cls: 'bg-brand/10 text-brand' }
-}
 
 function statusBadge(finished) {
   return finished

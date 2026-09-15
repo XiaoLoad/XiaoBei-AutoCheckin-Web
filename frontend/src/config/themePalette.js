@@ -10,8 +10,9 @@
 //     surface —— 页面底色（布局根、body 兜底底色）；
 //     card    —— 卡片底色（微染近白，dash-card 等页面卡片；弹窗/下拉等浮层保持纯白形成层次）；
 //     panel   —— 深色面板（侧边栏、系统信息横幅、登录品牌区）；
-//     companion —— 图表系列副色（用户仪表盘「寝室打卡」等第二系列），随主题挑选、
-//                  唯一约束是与本主题 brand 拉开色相，保证双系列图表可辨识；
+//     activity —— 图表「活动签到」系列用色，默认取 info 令牌值（#0ea5e9）以与活动徽标同色；
+//                  仅当本主题 brand 与 info 色相撞车、饼图两瓣分不出来时才覆盖（见 teal），
+//                  覆盖值的唯一约束是与本主题 brand 拉开色相；
 //   ocean 主题的三项表面值即历史现行值（cloud/白/ink），默认主题视觉零变化。
 export const THEME_STORAGE_KEY = 'xb_theme'
 export const DEFAULT_THEME_ID = 'ocean'
@@ -21,36 +22,37 @@ export const THEME_PALETTE = [
     id: 'ocean', cls: '', label: '深海蓝',
     brand: '#1674f8', dark: '#0f5dd4', light: '#4a9aff',
     surface: '#EEF2F9', card: '#FFFFFF', panel: '#14213D',
-    companion: '#0ea5e9',
+    activity: '#0ea5e9',
   },
   {
     id: 'jade', cls: 'theme-jade', label: '翡翠绿',
     brand: '#047857', dark: '#065f46', light: '#34d399',
     surface: '#EAF3EE', card: '#FBFDFC', panel: '#0E2A22',
-    companion: '#0ea5e9',
+    activity: '#0ea5e9',
   },
   {
     id: 'violet', cls: 'theme-violet', label: '紫罗兰',
     brand: '#7c3aed', dark: '#6d28d9', light: '#a78bfa',
     surface: '#F1EEF9', card: '#FCFBFE', panel: '#211A38',
-    companion: '#0ea5e9',
+    activity: '#0ea5e9',
   },
   {
     id: 'coral', cls: 'theme-coral', label: '珊瑚橙',
     brand: '#c2410c', dark: '#9a3412', light: '#fb923c',
     surface: '#F8F0E9', card: '#FEFBF8', panel: '#31201A',
-    companion: '#0e7490',
+    activity: '#0ea5e9',
   },
   {
+    // brand 与 info 同属青系（#0e7490 / #0ea5e9），饼图里两瓣几乎分不出来，故活动系列改用紫
     id: 'teal', cls: 'theme-teal', label: '青碧',
     brand: '#0e7490', dark: '#155e75', light: '#22d3ee',
     surface: '#E9F2F5', card: '#FAFCFD', panel: '#0C2733',
-    companion: '#8b5cf6',
+    activity: '#8b5cf6',
   },
   {
     id: 'blossom', cls: 'theme-blossom', label: '淡粉',
     brand: '#db2777', dark: '#be185d', light: '#f472b6',
     surface: '#FAEFF3', card: '#FDFBFC', panel: '#31121F',
-    companion: '#0ea5e9',
+    activity: '#0ea5e9',
   },
 ]

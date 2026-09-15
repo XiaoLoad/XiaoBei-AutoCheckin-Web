@@ -32,7 +32,9 @@ class BAccount(db.Model):
     account = db.Column(db.String(64), nullable=False)
     password_enc = db.Column(db.Text, nullable=False)       # Fernet 密文
     platform = db.Column(db.String(32), nullable=False, default='B 打卡平台')
-    # 账号分类标签：dorm=寝室 activity=活动 general=通用（仅展示语义，任务类型见 schedules）
+    # 已废弃：界面建的账号一律落到缺省 'general'（新增/编辑弹窗无此字段，前端从不提交），
+    # 读它作展示会让所有账号长同一个标签。类型请由 sign_tasks() 派生（前端 utils/accountType.js）。
+    # 保留该列是因为同项目 App 端可能仍在消费，删列属契约破坏。
     type = db.Column(db.String(16), nullable=False, default='general')
     enabled = db.Column(db.Boolean, nullable=False, default=True)
 
@@ -132,7 +134,7 @@ class BAccount(db.Model):
             'id': self.id,
             'account': self.account,
             'platform': self.platform,
-            'type': self.type,
+            'type': self.type,          # 已废弃，勿用于展示；展示请读 signTasks
             'enabled': bool(self.enabled),
             'profile': self.profile,
             'pushCreds': self.push_creds,

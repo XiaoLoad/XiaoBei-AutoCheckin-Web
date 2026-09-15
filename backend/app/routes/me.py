@@ -92,17 +92,24 @@ def me_overview():
                 return True
         return False
 
-    def _type_label(sign_tasks):
-        """按启用态派生类型：寝室+活动均启用→通用，仅其一→该类型，皆无→未配置。"""
+    def _type_code(sign_tasks):
+        """按启用态派生类型码：两类都启用→general，仅其一→该类型，皆未启用→none。
+
+        展示文案已归到前端 utils/accountType.js（与账号树/记录页/账号管理页同源），
+        中文 type 仅为兼容既有消费方保留。
+        """
         dorm_on = any(t['type'] == 'dorm' and t['enabled'] for t in sign_tasks)
         act_on = any(t['type'] == 'activity' and t['enabled'] for t in sign_tasks)
         if dorm_on and act_on:
-            return '通用'
+            return 'general'
         if dorm_on:
-            return '寝室'
+            return 'dorm'
         if act_on:
-            return '活动'
-        return '未配置'
+            return 'activity'
+        return 'none'
+
+    # 历史中文取值，由类型码派生，避免两个字段各自判定后漂移
+    type_labels = {'general': '通用', 'dorm': '寝室', 'activity': '活动', 'none': '未配置'}
 
     account_items = []
     for a in accounts:
@@ -110,6 +117,7 @@ def me_overview():
             continue
         p = a.profile
         st = _sign_tasks_of(a.id)
+        code = _type_code(st)
         account_items.append({
             'id': a.id,
             'account': a.account,
@@ -117,7 +125,8 @@ def me_overview():
             'college': p.get('college') or '',
             'major': p.get('major') or '',
             'className': p.get('className') or '',
-            'type': _type_label(st),
+            'type': type_labels[code],
+            'typeCode': code,
             'platform': a.platform,
             'enabled': bool(a.enabled),
             'lastStatus': a.last_sign_status or 'never',
@@ -205,7 +214,8 @@ def me_overview():
             'account': acc.account if acc else '',
             'college': prof.get('college') or '',
             'className': prof.get('className') or '',
-            'type': '寝室打卡' if r.task_type == 'dorm' else '活动签到',
+            'type': '寝室签到' if r.task_type == 'dorm' else '活动签到',
+            'taskType': r.task_type,
             'result': _status_pill(r.status),
             'note': r.fail_reason or ('已自动完成打卡' if r.status == 'success' else ''),
         })

@@ -9,7 +9,7 @@
         icon="records"
         tone="brand"
         :loading="loadingLogs"
-        :count-up
+        count-up
       />
       <StatCard
         label="成功"
@@ -18,7 +18,7 @@
         icon="check-circle"
         tone="success"
         :loading="loadingLogs"
-        :count-up
+        count-up
       />
       <StatCard
         label="失败"
@@ -27,7 +27,7 @@
         icon="x-circle"
         tone="danger"
         :loading="loadingLogs"
-        :count-up
+        count-up
       />
       <StatCard
         label="跳过"
@@ -36,7 +36,7 @@
         icon="alert"
         tone="amber"
         :loading="loadingLogs"
-        :count-up
+        count-up
       />
     </div>
 
@@ -215,9 +215,9 @@
                   </span>
                   <span
                     class="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap"
-                    :class="typeBadge(row.taskType).cls"
+                    :class="taskTypeMeta(row.taskType).cls"
                   >
-                    {{ typeBadge(row.taskType).label }}
+                    {{ taskTypeMeta(row.taskType).label }}
                   </span>
                 </div>
                 <div class="mt-1 truncate text-sm text-ink-soft">
@@ -627,6 +627,7 @@ import { useRoute } from "vue-router";
 import { storeToRefs } from "pinia";
 import { gsap } from "gsap";
 import { useTaskLogsStore } from "@/stores/taskLogs";
+import { taskTypeMeta } from "@/utils/accountType";
 import { toast } from "@/utils/toast";
 import Icon from "@/components/Icon.vue";
 import BaseSelect from "@/components/BaseSelect.vue";
@@ -708,12 +709,6 @@ const statusTabs = [
   { label: "失败", value: "fail" },
   { label: "跳过", value: "skip" },
 ];
-
-function typeBadge(t) {
-  return t === "activity"
-    ? { label: "活动签到", cls: "bg-info/10 text-info" }
-    : { label: "寝室签到", cls: "bg-brand/10 text-brand" };
-}
 
 function logRail(status) {
   if (status === "success") return "bg-success";

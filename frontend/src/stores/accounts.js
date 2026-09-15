@@ -5,6 +5,7 @@ import { defineStore } from 'pinia'
 import { useRefreshBusStore } from '@/stores/refreshBus'
 import { ref, computed, watch } from 'vue'
 import { fetchAccounts, createAccount, updateAccount, deleteAccount } from '@/api/accounts'
+import { accountTypeCode } from '@/utils/accountType'
 
 export const useAccountsStore = defineStore('accounts', () => {
   const refreshBus = useRefreshBusStore()
@@ -40,19 +41,12 @@ export const useAccountsStore = defineStore('accounts', () => {
   )
 
   // 模糊搜索 + 三项筛选（前端演示）
-  // 类型筛选基于「已添加至定时任务且启用」的签到类型派生（dorm/activity/general），
-  // 不再依赖账号自身的 type 字段（该字段已废弃展示用途）。
+  // 类型筛选与类型徽标同口径：四分类严格匹配（general/dorm/activity/none 选一），
+  // 判定唯一出处 utils/accountType.js。不读账号自身的 type 字段（该字段已废弃展示用途）。
   const filtered = computed(() => {
     const kw = keyword.value.trim().toLowerCase()
     return accounts.value.filter((a) => {
-      if (typeFilter.value) {
-        const st = a.signTasks || []
-        const dorm = st.some((t) => t.type === 'dorm' && t.enabled)
-        const act = st.some((t) => t.type === 'activity' && t.enabled)
-        if (typeFilter.value === 'dorm' && !dorm) return false
-        if (typeFilter.value === 'activity' && !act) return false
-        if (typeFilter.value === 'general' && !(dorm && act)) return false
-      }
+      if (typeFilter.value && accountTypeCode(a.signTasks) !== typeFilter.value) return false
       if (enabledFilter.value !== '' && String(a.enabled) !== enabledFilter.value) return false
       if (signFilter.value) {
         const st = (a.lastSignIn && a.lastSignIn.status) || 'never'

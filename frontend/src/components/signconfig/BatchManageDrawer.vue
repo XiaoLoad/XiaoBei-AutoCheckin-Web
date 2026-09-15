@@ -472,6 +472,7 @@ import Icon from '@/components/Icon.vue'
 import { useOverlayA11y } from '@/composables/useOverlayA11y'
 import BaseSelect from '@/components/BaseSelect.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
+import { taskTypeMeta } from '@/utils/accountType'
 import { useSchedulesStore } from '@/stores/schedules'
 import { useRefreshBusStore } from '@/stores/refreshBus'
 
@@ -517,7 +518,7 @@ const pickSetId = ref('')
 const setPickOptions = computed(() => [
   { label: '不设置（用各自现有配置）', value: '' },
   ...store.userConfigSets.map((s) => ({
-    label: `${s.taskType === 'activity' ? '活动' : '寝室'} · ${s.name}`,
+    label: `${taskTypeMeta(s.taskType).short} · ${s.name}`,
     value: s.id
   })),
 ])

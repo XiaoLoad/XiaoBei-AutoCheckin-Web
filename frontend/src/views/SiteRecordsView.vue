@@ -24,8 +24,8 @@
                 {{ selectedAccount.profile.name }}
               </span>
             </div>
-            <span class="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-medium" :class="typeBadge(selectedAccount.type).cls">
-              {{ typeBadge(selectedAccount.type).label }}
+            <span class="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-medium" :class="accountTypeMeta(selectedAccount.signTasks).cls">
+              {{ accountTypeMeta(selectedAccount.signTasks).label }}
             </span>
             <!-- 验证状态是「状态」不是「标签」：圆点 + 文字，不再占用胶囊 -->
             <span
@@ -181,8 +181,8 @@
                 <div class="min-w-0 flex-1">
                   <div class="flex flex-wrap items-center gap-2">
                     <span class="truncate text-[15px] font-semibold text-ink">{{ row.taskName }}</span>
-                    <span class="shrink-0 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11px] font-medium" :class="typeBadge(row.type).cls">
-                      {{ typeBadge(row.type).label }}
+                    <span class="shrink-0 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11px] font-medium" :class="taskTypeMeta(row.type).cls">
+                      {{ taskTypeMeta(row.type).label }}
                     </span>
                     <span v-if="row.needPhoto" class="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-[11px] font-medium text-amber">
                       <Icon name="image" :size="12" />需拍照
@@ -254,6 +254,7 @@ import { gsap } from 'gsap'
 import PhotoSwipeLightbox from 'photoswipe/lightbox'
 import PhotoSwipe from 'photoswipe'
 import { useSiteRecordsStore } from '@/stores/siteRecords'
+import { accountTypeMeta, taskTypeMeta } from '@/utils/accountType'
 import Icon from '@/components/Icon.vue'
 import BasePagination from '@/components/BasePagination.vue'
 import BaseDatePicker from '@/components/BaseDatePicker.vue'
@@ -309,12 +310,6 @@ function clearAllFilters() {
 function applyDateRange({ from, to }) {
   if (!from && !to) store.clearDateRange()
   else store.setDateRange(from, to)
-}
-
-function typeBadge(t) {
-  if (t === 'activity') return { label: '活动签到', cls: 'bg-info/10 text-info' }
-  if (t === 'dorm') return { label: '寝室签到', cls: 'bg-brand/10 text-brand' }
-  return { label: '通用账号', cls: 'bg-ink/5 text-ink-soft' }
 }
 
 function detailOf(row) {

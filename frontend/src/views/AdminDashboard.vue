@@ -147,14 +147,19 @@
                 <li
                   v-for="row in health.invalidCredentials.list"
                   :key="'ic' + row.account"
-                  class="health-row flex items-center gap-2 rounded-lg bg-cloud/70 px-2.5 py-2 text-xs"
+                  class="health-row rounded-lg bg-cloud/70 px-2.5 py-2 text-xs"
                 >
-                  <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500"></span>
-                  <span class="min-w-0 flex-1 truncate text-ink-soft">{{ row.account }}</span>
-                  <span class="hidden shrink-0 text-ink-muted sm:inline">{{ row.username }}</span>
-                  <span class="shrink-0 rounded-full bg-red-500/10 px-1.5 py-0.5 text-[10px] text-red-600">
-                    {{ row.verifyStatus === 'unverified' ? '未校验' : '已失效' }}
-                  </span>
+                  <!-- 两行式卡片：首行账号 + 状态徽标，次行归属用户。
+                       两列列表共用同一结构，行内各列左右缘才会跨行跨列对齐
+                       （此前账号 flex-1 + 尾随 shrink-0 项宽度不定，中间那列会随内容左右飘） -->
+                  <div class="flex items-center gap-2">
+                    <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500"></span>
+                    <span class="min-w-0 flex-1 truncate font-medium text-ink">{{ row.account }}</span>
+                    <span class="shrink-0 rounded-full bg-red-500/10 px-1.5 py-0.5 text-[10px] text-red-600">
+                      {{ row.verifyStatus === 'unverified' ? '未校验' : '已失效' }}
+                    </span>
+                  </div>
+                  <p class="mt-1 truncate pl-3.5 text-[11px] text-ink-muted">{{ row.username || '未绑定用户' }}</p>
                 </li>
                 <li v-if="!health.invalidCredentials.list.length" class="rounded-lg bg-success/10 px-2.5 py-2 text-xs text-success">
                   全部账号凭证正常
@@ -167,14 +172,20 @@
                 <li
                   v-for="row in health.staleSign.list"
                   :key="'st' + row.account + row.taskType"
-                  class="health-row flex items-center gap-2 rounded-lg bg-cloud/70 px-2.5 py-2 text-xs"
+                  class="health-row rounded-lg bg-cloud/70 px-2.5 py-2 text-xs"
                 >
-                  <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"></span>
-                  <span class="min-w-0 flex-1 truncate text-ink-soft">{{ row.account }}</span>
-                  <span class="hidden shrink-0 text-ink-muted sm:inline">{{ row.username }}</span>
-                  <span class="shrink-0 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-600">
-                    {{ row.days === null ? '从未签到' : `${row.days} 天未签` }}
-                  </span>
+                  <div class="flex items-center gap-2">
+                    <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"></span>
+                    <span class="min-w-0 flex-1 truncate font-medium text-ink">{{ row.account }}</span>
+                    <span class="shrink-0 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-600">
+                      {{ row.days === null ? '从未签到' : `${row.days} 天未签` }}
+                    </span>
+                  </div>
+                  <!-- 漏签的主体是「某账号的某类任务」，同一账号寝/活两条都漏时若不带类型就是两张一样的卡片 -->
+                  <p class="mt-1 flex items-center gap-1 pl-3.5 text-[11px] text-ink-muted">
+                    <span class="min-w-0 truncate">{{ row.username || '未绑定用户' }}</span>
+                    <span class="shrink-0">· {{ taskTypeMeta(row.taskType).label }}</span>
+                  </p>
                 </li>
                 <li v-if="!health.staleSign.list.length" class="rounded-lg bg-success/10 px-2.5 py-2 text-xs text-success">
                   无漏签风险任务
@@ -356,30 +367,75 @@
       </section>
 
       <!-- ============ 调度器运行状态 + 即将执行 ============ -->
+      <!-- 左列两张卡：调度器自身指标撑不满右卡高度，与其被拉伸留白，不如各表一件事
+           ——运行现状 + 工作节奏，两卡合计自然接近右卡，不依赖任何硬撑 -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <section class="dash-card p-5 v-reveal delay-5">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="font-semibold text-ink">调度器运行状态</h3>
-            <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium" :class="scheduler.running ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'">
-              <span class="h-1.5 w-1.5 rounded-full" :class="scheduler.running ? 'bg-success animate-pulse' : 'bg-danger'"></span>
-              {{ scheduler.running ? '运行中' : '已暂停' }}
-            </span>
-          </div>
-          <dl class="space-y-2.5 text-sm">
-            <div class="flex items-center justify-between"><dt class="text-ink-muted">注册任务</dt><dd class="font-medium text-ink tabular-nums">{{ scheduler.jobCount }} 个</dd></div>
-            <div class="flex items-center justify-between"><dt class="text-ink-muted">启用中任务</dt><dd class="font-medium text-ink tabular-nums">{{ schedulesEnabled }} 个</dd></div>
-            <div class="flex items-center justify-between"><dt class="text-ink-muted">今日执行</dt><dd class="font-medium text-ink tabular-nums">{{ scheduler.todayRuns }} 次</dd></div>
-            <div class="flex items-center justify-between"><dt class="text-ink-muted">下次执行</dt><dd class="font-medium text-ink tabular-nums">{{ nextRunText }}</dd></div>
-          </dl>
-        </section>
+        <div class="flex flex-col gap-4">
+          <section class="dash-card p-5 v-reveal delay-5">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="font-semibold text-ink">调度器运行状态</h3>
+              <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium" :class="scheduler.running ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'">
+                <span class="h-1.5 w-1.5 rounded-full" :class="scheduler.running ? 'bg-success animate-pulse' : 'bg-danger'"></span>
+                {{ scheduler.running ? '运行中' : '已暂停' }}
+              </span>
+            </div>
+            <dl class="space-y-2.5 text-sm">
+              <div class="flex items-baseline justify-between gap-3">
+                <dt class="shrink-0 text-ink-muted">启用任务</dt>
+                <dd class="text-right font-medium text-ink tabular-nums">
+                  {{ schedulesEnabled }} 个
+                  <span class="ml-1 text-xs font-normal text-ink-muted">寝室 {{ taskTypes.dorm }} · 活动 {{ taskTypes.activity }}</span>
+                </dd>
+              </div>
+              <div class="flex items-baseline justify-between gap-3">
+                <dt class="shrink-0 text-ink-muted">已注册定时</dt>
+                <dd class="text-right font-medium text-ink tabular-nums">
+                  {{ scheduler.jobCount }} 个
+                  <span v-if="unregisteredCount" class="ml-1 text-xs font-normal text-amber">未注册 {{ unregisteredCount }}</span>
+                </dd>
+              </div>
+              <div class="flex items-baseline justify-between gap-3">
+                <dt class="shrink-0 text-ink-muted">最近执行</dt>
+                <dd class="font-medium text-ink" :title="scheduler.lastRunAt || '暂无执行记录'">{{ scheduler.lastRunAgo || '暂无记录' }}</dd>
+              </div>
+              <div class="flex items-baseline justify-between gap-3">
+                <dt class="shrink-0 text-ink-muted">下次执行</dt>
+                <dd class="text-right font-medium text-ink tabular-nums">
+                  {{ nextRunText }}
+                  <span v-if="nextInText" class="ml-1 text-xs font-normal text-ink-muted">{{ nextInText }}</span>
+                </dd>
+              </div>
+            </dl>
+          </section>
+
+          <section class="dash-card p-5 v-reveal delay-5">
+            <h3 class="font-semibold text-ink">调度节奏</h3>
+            <p class="mt-0.5 mb-4 text-xs text-ink-muted">任务何时被触发、失败后多久补跑</p>
+            <dl class="space-y-2.5 text-sm">
+              <div class="flex items-center justify-between gap-3"><dt class="text-ink-muted">对账心跳</dt><dd class="font-medium text-ink tabular-nums">每 {{ rhythm.reconcileSeconds }} 秒</dd></div>
+              <div class="flex items-center justify-between gap-3"><dt class="text-ink-muted">活动探测</dt><dd class="font-medium text-ink">随心跳轮询</dd></div>
+              <div class="flex items-center justify-between gap-3"><dt class="text-ink-muted">失败补跑</dt><dd class="font-medium text-ink tabular-nums">{{ rhythm.retryDelayMinutes }} 分钟后</dd></div>
+              <div class="flex items-center justify-between gap-3"><dt class="text-ink-muted">日志清理</dt><dd class="font-medium text-ink tabular-nums">每 {{ rhythm.pruneIntervalHours }} 小时</dd></div>
+              <div class="flex items-center justify-between gap-3"><dt class="text-ink-muted">日志保留</dt><dd class="font-medium text-ink tabular-nums">{{ rhythm.logRetentionDays }} 天</dd></div>
+            </dl>
+          </section>
+        </div>
 
         <section class="dash-card p-5 lg:col-span-2 v-reveal delay-5">
           <h3 class="font-semibold text-ink mb-4">即将执行的任务</h3>
           <ul class="space-y-2">
-            <li v-for="(n, i) in scheduler.nextRuns" :key="i" class="flex items-center gap-3 rounded-xl border border-ink/5 bg-ink/[0.02] px-3 py-2.5 text-sm">
-              <span class="inline-flex items-center rounded-full bg-brand/10 px-2.5 py-0.5 text-xs font-medium text-brand">{{ n.taskLabel }}</span>
-              <span class="min-w-0 flex-1 truncate font-medium text-ink">{{ n.account }}</span>
-              <span class="shrink-0 text-ink-muted tabular-nums">{{ n.time }}</span>
+            <li v-for="(n, i) in scheduler.nextRuns" :key="i" class="flex items-start gap-3 rounded-xl border border-ink/5 bg-ink/[0.02] px-3 py-2.5 text-sm">
+              <span class="inline-flex shrink-0 items-center rounded-full bg-brand/10 px-2.5 py-0.5 text-xs font-medium text-brand">{{ n.taskLabel }}</span>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2">
+                  <span class="min-w-0 flex-1 truncate font-medium text-ink">{{ n.account }}</span>
+                  <span class="shrink-0 text-xs text-ink-muted tabular-nums">{{ n.time }}</span>
+                </div>
+                <!-- 账号只说明「签哪个号」，用户与姓名说明「谁的任务」，缺一都定位不到人 -->
+                <p class="mt-0.5 truncate text-xs text-ink-muted">
+                  用户 {{ n.username || '—' }}<template v-if="n.studentName"> · 姓名 {{ n.studentName }}</template>
+                </p>
+              </div>
             </li>
             <li v-if="!scheduler.nextRuns.length" class="rounded-xl bg-cloud/60 px-3 py-4 text-center text-sm text-ink-muted">
               暂无排队中的执行计划
@@ -510,6 +566,23 @@ const invalidNum = ref(0)
 const staleNum = ref(0)
 // 下次执行时间：调度器 nextRuns 的最早一条（cron 任务与轮询任务混合排序）
 const nextRunText = computed(() => scheduler.value.nextRuns[0]?.time || '暂无排期')
+// 距下次执行的相对时间：后端按请求时刻算好，页面不为此再挂定时器
+const nextInText = computed(() => {
+  const m = scheduler.value.nextRunIn
+  if (m === null || m === undefined) return ''
+  if (m < 1) return '不到 1 分钟后'
+  if (m < 60) return `约 ${m} 分钟后`
+  const h = Math.round(m / 60)
+  return h < 24 ? `约 ${h} 小时后` : `约 ${Math.round(h / 24)} 天后`
+})
+// 类型构成与节奏参数：接口缺字段时给与后端一致的兜底，避免卡片出现空值
+const taskTypes = computed(() => scheduler.value.taskTypes || { dorm: 0, activity: 0 })
+const rhythm = computed(() => scheduler.value.rhythm || {
+  reconcileSeconds: 30, pruneIntervalHours: 24, retryDelayMinutes: 10, logRetentionDays: 180,
+})
+// 启用任务里未注册 cron 的数量：活动 course 关每日兜底、或缺少有效时刻的任务属此类
+const unregisteredCount = computed(() =>
+  Math.max(0, schedulesEnabled.value - (scheduler.value.jobCount || 0)))
 
 function animateHealth() {
   const setFinal = () => {

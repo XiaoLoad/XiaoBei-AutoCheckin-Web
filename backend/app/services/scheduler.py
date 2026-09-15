@@ -211,6 +211,8 @@ _atexit_registered = False
 
 RECONCILE_JOB_ID = '_reconcile'
 _RECONCILE_SECONDS = 30
+# 超期日志清理周期（每日一次）
+_PRUNE_INTERVAL_HOURS = 24
 
 
 def _job_id(schedule_id):
@@ -274,7 +276,7 @@ def init_scheduler(app):
                   id=RECONCILE_JOB_ID, replace_existing=True)
     # 超期日志清理：每日独立 job（启动后 30s 先跑一次，此后 24h 周期）
     sched.add_job(
-        _prune_old_sign_records, 'interval', hours=24,
+        _prune_old_sign_records, 'interval', hours=_PRUNE_INTERVAL_HOURS,
         id='_prune_logs', replace_existing=True,
         next_run_time=now_cst() + timedelta(seconds=30),
     )
@@ -868,6 +870,19 @@ def _execute(schedule, allow_retry=True, course_name=None):
 # 一次性延迟 job 重走完整执行链路。环境变量可调：SCHEDULER_RETRY_DELAY_MIN 延迟分钟数（默认 10）。
 RETRY_JOB_PREFIX = '_retry_'
 _RETRY_DELAY_MINUTES = max(1, int(os.getenv('SCHEDULER_RETRY_DELAY_MIN', '10') or 10))
+
+
+def runtime_settings():
+    """调度器的运行节奏参数：管理端展示「它按什么节奏工作」时读取。
+
+    这些值分别来自模块常量、环境变量与系统设置，展示层各自复制一份必然漂移，只在此处取。
+    """
+    return {
+        'reconcileSeconds': _RECONCILE_SECONDS,
+        'pruneIntervalHours': _PRUNE_INTERVAL_HOURS,
+        'retryDelayMinutes': _RETRY_DELAY_MINUTES,
+        'logRetentionDays': int(get_setting('sign_log_retention_days') or 180),
+    }
 
 
 def _schedule_retry(schedule):

@@ -4,7 +4,7 @@
 import os
 import re
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from flask import Blueprint, request
 from sqlalchemy import case, func
@@ -249,10 +249,26 @@ def _account_health():
     }
 
 
+def _ago_text(dt):
+    """距今多久的粗粒度中文描述（None → 空串）。"""
+    if dt is None:
+        return ''
+    mins = int((now_cst() - dt).total_seconds() // 60)
+    if mins < 1:
+        return '刚刚'
+    if mins < 60:
+        return f'{mins} 分钟前'
+    if mins < 1440:
+        return f'{mins // 60} 小时前'
+    return f'{mins // 1440} 天前'
+
+
 def _scheduler_info():
-    """调度器真实状态：运行标志 / job 总数 / 今日执行次数 / 即将执行 Top 5"""
-    from app.services.scheduler import get_scheduler
-    today = now_cst().date()
+    """调度器真实状态：运行标志 / 任务注册情况 / 最近与下次执行 / 运行节奏参数
+
+    即将执行的每条带账号、归属用户与姓名——只看账号无法定位到人。
+    不再返回今日执行次数：它与 summary.today.total 同源同值，同一张卡里出现即冗余。"""
+    from app.services.scheduler import get_scheduler, runtime_settings
     sched = get_scheduler()
     jobs = sorted((j for j in sched.get_jobs() if str(j.id).startswith('sched_')),
                   key=lambda j: j.next_run_time or None)
@@ -266,15 +282,35 @@ def _scheduler_info():
         if s is None:
             continue
         acc = db.session.get(BAccount, s.account_id)
+        u = db.session.get(User, acc.user_id) if acc else None
         nrt = j.next_run_time.astimezone().strftime('%m-%d %H:%M') if j.next_run_time else ''
         next_runs.append({
             'account': acc.account if acc else '',
+            'username': u.username if u else '',
+            'studentName': ((acc.profile or {}).get('name') or '') if acc else '',
             'taskLabel': '寝室签到' if s.task_type == 'dorm' else '活动签到',
             'time': nrt,
         })
-    today_runs = SignRecord.query.filter(SignRecord.sign_date == today).count()
+    # 启用任务构成：注册 job 数可能少于启用任务数——活动 course 策略且关闭每日兜底的任务
+    # 不注册 cron（全天由课表窗口轮询接管），缺少有效时刻的也跳过注册。差值是「未注册」
+    # 而非脏数据，故保留两数各自呈现，不合并成一项。
+    type_rows = (db.session.query(Schedule.task_type, func.count(Schedule.id))
+                 .filter(Schedule.enabled.is_(True)).group_by(Schedule.task_type).all())
+    type_counts = {t: int(n) for t, n in type_rows}
+    last_run = db.session.query(func.max(SignRecord.created_at)).scalar()
+    # 距下次执行的分钟数：按请求时刻算好，页面不必为此再挂一个定时器
+    next_in = None
+    if jobs and jobs[0].next_run_time:
+        nrt = jobs[0].next_run_time
+        next_in = max(0, int((nrt - datetime.now(nrt.tzinfo)).total_seconds() // 60))
     return {'running': bool(sched.running), 'jobCount': len(jobs),
-            'todayRuns': today_runs, 'nextRuns': next_runs}
+            'taskTypes': {'dorm': type_counts.get('dorm', 0),
+                          'activity': type_counts.get('activity', 0)},
+            'lastRunAt': last_run.strftime('%m-%d %H:%M') if last_run else '',
+            'lastRunAgo': _ago_text(last_run),
+            'nextRunIn': next_in,
+            'rhythm': runtime_settings(),
+            'nextRuns': next_runs}
 
 
 def _recent_logs():

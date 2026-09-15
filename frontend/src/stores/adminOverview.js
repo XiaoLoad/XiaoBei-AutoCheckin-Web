@@ -22,7 +22,12 @@ const EMPTY = {
     invalidCredentials: { total: 0, list: [] },
     staleSign: { total: 0, list: [] },
   },
-  scheduler: { running: false, jobCount: 0, todayRuns: 0, nextRuns: [] },
+  scheduler: {
+    running: false, jobCount: 0, nextRuns: [],
+    taskTypes: { dorm: 0, activity: 0 },
+    lastRunAt: '', lastRunAgo: '', nextRunIn: null,
+    rhythm: { reconcileSeconds: 30, pruneIntervalHours: 24, retryDelayMinutes: 10, logRetentionDays: 180 },
+  },
   recentLogs: { items: [], total: 0, page: 1, page_size: 10 },
   schedulesEnabled: 0,
 }

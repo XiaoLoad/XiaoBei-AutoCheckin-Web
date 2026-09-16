@@ -84,9 +84,22 @@ export async function fetchOpLogSummary() {
       loginToday: 0, loginFailToday: 0, userChangeToday: 0, ongoingSessions: 0,
     },
     anomalies: data.anomalies || [],
+    // 已被确认压住的（关掉 ≠ 删掉）：界面要用它说明「已处理 N 个来源 IP」
+    ackedQuiet: (data.ackedQuiet || []).map((it) => ({
+      ip: it.ip || '',
+      username: it.username || '',
+      countAtAck: it.countAtAck || 0,
+      count: it.count || 0,
+      ackedAt: it.ackedAt || '',
+    })),
     anomalyWindowDays: data.anomalyWindowDays || 7,
     retentionDays: data.retentionDays || 365,
   }
+}
+
+// 把告警标记为已处理；ips 由服务端按库里的真实失败次数记录，前端只报「处理哪些」
+export async function ackOpLogAnomalies(ips) {
+  return request({ url: '/op-logs/anomalies/ack', method: 'post', data: { ips } })
 }
 
 // 筛选项：分类与动作的现存值（带计数）

@@ -74,6 +74,18 @@
             :class="showAnomalies ? 'rotate-180' : ''"
           />
         </button>
+
+        <!-- 告警的关闭渠道。文案直接写后果，不做成裸「×」——
+             审计页上的叉极易被读成「清空这些记录」，而它其实只是「我看过了」。 -->
+        <button
+          type="button"
+          class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-ink/10 bg-white px-2.5 py-1 text-xs font-medium text-ink-soft transition hover:border-ink/20 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30 disabled:cursor-not-allowed disabled:opacity-60"
+          :disabled="store.acking"
+          @click="showAck = true"
+        >
+          <Icon name="check-circle" :size="13" />
+          标记已处理
+        </button>
       </div>
 
       <!-- 明细：每条一个胶囊，横向流动，通常两三行内看完；
@@ -107,6 +119,59 @@
           </button>
         </div>
       </Transition>
+    </section>
+
+    <!-- 已被处理的告警：横幅撤了，但「处理过什么」不能跟着消失——
+         否则用户分不清「已处理」和「被删掉」，而这正是把确认记录落库的全部意义。
+         用中性卡而不是 danger 底：这是已解决状态，不该继续占着告警的视觉权重。 -->
+    <section
+      v-else-if="store.ackedQuiet.length"
+      class="shrink-0 rounded-2xl border border-ink/5 bg-card px-4 py-2.5 sm:px-5"
+    >
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <span
+          class="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-success/10 text-success"
+        >
+          <Icon name="check-circle" :size="14" />
+        </span>
+        <p class="text-xs text-ink-muted">
+          已处理
+          <b class="font-medium tabular-nums text-ink-soft">{{ store.ackedQuiet.length }}</b>
+          个来源 IP · 近 {{ store.anomalyWindowDays }} 天均无新增失败
+        </p>
+        <button
+          type="button"
+          class="ml-auto inline-flex shrink-0 items-center gap-1 rounded-lg px-1.5 py-1 text-xs font-medium text-brand transition hover:bg-cloud focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+          @click="showAcked = !showAcked"
+        >
+          {{ showAcked ? '收起记录' : '查看记录' }}
+          <Icon
+            name="chevron-down"
+            :size="13"
+            class="transition-transform duration-200"
+            :class="showAcked ? 'rotate-180' : ''"
+          />
+        </button>
+      </div>
+      <!-- 凭据：谁在什么时候把哪个 IP 标记为已处理、当时失败了几次。
+           这几个字段就是「已处理」与「被删掉」的分界，不能省。 -->
+      <div v-if="showAcked" class="mt-2 flex flex-wrap gap-2">
+        <span
+          v-for="a in store.ackedQuiet"
+          :key="a.ip"
+          class="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-ink/10 bg-white px-2.5 py-1.5 text-xs"
+        >
+          <span class="tabular-nums text-ink">{{ a.ip }}</span>
+          <span class="text-ink/20">·</span>
+          <span class="text-ink-muted">
+            确认时失败 <b class="tabular-nums text-ink-soft">{{ a.countAtAck }}</b> 次
+          </span>
+          <span class="text-ink/20">·</span>
+          <span class="tabular-nums text-ink-muted">
+            {{ a.username || '系统' }} 于 {{ a.ackedAt }} 标记
+          </span>
+        </span>
+      </div>
     </section>
 
     <!-- 筛选：单行铺开（窄屏自然折行）。
@@ -328,6 +393,27 @@
 
     <!-- 底部占位：滚动容器的末端 padding 会被折叠，末端间距靠真实占位块兜住 -->
     <div class="h-6 shrink-0" aria-hidden="true" />
+
+    <!-- 确认是「留痕」而非「关闭开关」，所以要先说清它的后果再让人按下去 -->
+    <ConfirmModal
+      v-model="showAck"
+      title="标记异常告警为已处理"
+      icon="check-circle"
+      confirm-text="标记已处理"
+      confirming-text="处理中…"
+      :confirming="store.acking"
+      @confirm="onConfirmAck"
+    >
+      <p>
+        将把当前
+        <b class="tabular-nums text-ink">{{ store.anomalies.length }}</b>
+        个来源 IP 记为已处理，横幅不再提示。
+      </p>
+      <p class="mt-2">
+        之后其中任何一个 IP 再出现<strong class="text-ink">新增</strong>登录失败，
+        告警会重新出现。确认记录会带上你的账号与时间，可在「查看记录」里回看。
+      </p>
+    </ConfirmModal>
   </div>
 </template>
 
@@ -338,6 +424,7 @@ import StatCard from '@/components/StatCard.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import BaseDatePicker from '@/components/BaseDatePicker.vue'
 import BasePagination from '@/components/BasePagination.vue'
+import ConfirmModal from '@/components/ConfirmModal.vue'
 import Icon from '@/components/Icon.vue'
 import OpLogEntry from '@/components/userlogs/OpLogEntry.vue'
 import OpSessionCard from '@/components/userlogs/OpSessionCard.vue'
@@ -384,6 +471,10 @@ const keywordDraft = ref(store.filters.keyword)
 // 异常明细默认展开：收起会把「哪台机器在试密码」藏起来，而那正是这条告警要传达的东西；
 // 明细最多 5 条、按胶囊横排，占用高度可控
 const showAnomalies = ref(true)
+
+// 告警的关闭渠道（方案 C：服务端按管理员账号记「已处理」）与已处理记录的回看开关
+const showAck = ref(false)
+const showAcked = ref(false)
 
 // 动效统一挂在这一处开关上：命中系统「减少动态效果」时所有补间直接落终态
 const reduceMotion = ref(false)
@@ -446,6 +537,25 @@ function onInspectIp(ip) {
   keywordDraft.value = ip
   onViewSwitch('flow')
   store.applyFilter({ keyword: ip })
+}
+
+// 标记已处理：横幅会随之下线，而「它为什么没了」必须说出来——
+// 否则用户只会看到告警自己消失，分不清是处理掉了还是被清空了。
+// 失败时留着弹窗，让人能重试，而不是关掉再猜哪一步没成。
+async function onConfirmAck() {
+  const ips = store.anomalies.map((a) => a.ip)
+  if (!ips.length) {
+    showAck.value = false
+    return
+  }
+  try {
+    const ok = await store.ackAnomalies(ips)
+    if (!ok) return // 已有一次确认在跑
+    showAck.value = false
+    toast(`已标记 ${ips.length} 个来源 IP 为已处理，出现新增失败会重新提示`, 'success')
+  } catch (e) {
+    toast(e.message || '标记失败', 'error')
+  }
 }
 
 // 文件名带本地时间戳：同一天导出多次不会互相覆盖（日期 key 同样禁用 toISOString）

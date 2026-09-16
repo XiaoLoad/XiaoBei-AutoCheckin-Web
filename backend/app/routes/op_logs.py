@@ -1,11 +1,13 @@
 # 操作日志读取蓝图：管理员审计平台用户的关键操作（登录/登出/用户与权限变更）。
 # 前缀 /api/op-logs；全部限管理员——日志含全员用户名、IP、UA 与变更明细，属敏感信息。
-# 写入不在这里：见 services/op_log.py 的事件订阅者（发布方 app/events.py）。
+# 日志本身的写入不在这里：见 services/op_log.py 的事件订阅者（发布方 app/events.py）。
+# 本蓝图唯一的写接口是 /anomalies/ack（把告警标记为已处理），写的是确认记录而非日志。
 #
-# 三个读取口径，各管一件事，互不叠加：
+# 读取口径各管一件事，互不叠加：
 #   /           平铺流水（按时间倒序，供「流水」视图与导出）
 #   /sessions   会话段（成功登录 → 登出之间的一切操作归一段，供「会话」视图）
 #   /summary    页头指标 + 异常聚合（今日脉搏与「同一 IP 连续登录失败」告警）
+#   /meta       筛选项候选值
 # 会话由日志现算而非落库：日志是只追加的事实流，会话是它的一个投影；
 # 另建 sessions 表会引入「登出时回写」「超时补收口」两套状态同步，得不偿失。
 from datetime import datetime, timedelta
@@ -14,11 +16,11 @@ from flask import Blueprint, current_app, request
 from sqlalchemy import func, or_
 
 from app.extensions import db
-from app.models.op_log import OpLog
+from app.models.op_log import OpAnomalyAck, OpLog
 from app.models.system_config import get_setting
 from app.models.user import now_cst
 from app.utils.auth import admin_required
-from app.utils.response import success
+from app.utils.response import error, success
 
 bp = Blueprint('op_logs', __name__, url_prefix='/api/op-logs')
 
@@ -32,6 +34,11 @@ _SESSION_SCAN_CAP = 20000
 _ANOMALY_WINDOW_DAYS = 7
 _ANOMALY_MIN_FAILS = 3
 _ANOMALY_TOP_N = 5
+# 窗口内按 IP 聚合的兜底上限：只为防住「上万个 IP 各失败 3 次」的极端量，
+# 正常规模远达不到，故不做 SQL 层的阈值+排序截断（截断后再过滤确认会导致少显示）
+_ANOMALY_SCAN_CAP = 200
+# 单次「标记已处理」的来源 IP 上限：界面一次最多给 5 条（Top N），留些余量
+_ACK_MAX_IPS = 20
 
 
 def _parse_date(raw, end_of_day=False):
@@ -289,41 +296,83 @@ def _ongoing_count(ttl_hours):
                and r.created_at >= now - timedelta(hours=ttl_hours))
 
 
-def _anomalies():
-    """同一 IP 连续登录失败：登录失败没有归属用户，也就没有会话可看，
-    只能按 IP 聚合成一条「未能建立会话的尝试」，否则这批记录在会话视图里完全隐形。"""
-    since = now_cst() - timedelta(days=_ANOMALY_WINDOW_DAYS)
-    base = [OpLog.action == 'auth.login', OpLog.result == 'fail',
-            OpLog.ip != '', OpLog.created_at >= since]
-    groups = (db.session.query(OpLog.ip, func.count(OpLog.id),
-                               func.min(OpLog.created_at), func.max(OpLog.created_at))
-              .filter(*base)
-              .group_by(OpLog.ip)
-              .having(func.count(OpLog.id) >= _ANOMALY_MIN_FAILS)
-              .order_by(func.count(OpLog.id).desc())
-              .limit(_ANOMALY_TOP_N).all())
+def _anomaly_groups(viewer_id, since):
+    """近窗口内按 IP 聚合的登录失败，并带上该账号对这些 IP 的「已确认次数」。
+
+    一次查回来交给调用方分档（该显示的 / 被确认压住的）：把「确认过就不再显示」
+    也塞进 SQL 的 having 只会让这段更难读，而窗口内的 IP 数是小量，不值得为它下推。
+    """
+    acks = (db.session.query(OpAnomalyAck.ip,
+                             func.max(OpAnomalyAck.count_at_ack).label('acked'))
+            .filter(OpAnomalyAck.user_id == viewer_id)
+            .group_by(OpAnomalyAck.ip).subquery())
+    return (db.session.query(OpLog.ip, func.count(OpLog.id).label('cnt'),
+                             func.min(OpLog.created_at), func.max(OpLog.created_at),
+                             func.coalesce(func.max(acks.c.acked), 0).label('acked'))
+            .outerjoin(acks, acks.c.ip == OpLog.ip)
+            .filter(OpLog.action == 'auth.login', OpLog.result == 'fail',
+                    OpLog.ip != '', OpLog.created_at >= since)
+            .group_by(OpLog.ip)
+            .order_by(func.count(OpLog.id).desc())
+            .limit(_ANOMALY_SCAN_CAP).all())
+
+
+def _with_accounts(groups, since):
+    """把「被尝试的账号」补进去：它只存在 detail JSON 里，故取回这批 IP 的行后自己解析
+    （已限定 IP 与窗口，规模可控）。"""
     if not groups:
         return []
-
-    ips = [g[0] for g in groups]
-    # 被尝试的账号只存在 detail JSON 里，故取回这批 IP 的行后在前端侧解析（已限定 IP 与窗口，规模可控）
-    rows = (OpLog.query.filter(*base, OpLog.ip.in_(ips))
+    rows = (OpLog.query
+            .filter(OpLog.action == 'auth.login', OpLog.result == 'fail',
+                    OpLog.ip != '', OpLog.created_at >= since,
+                    OpLog.ip.in_([g.ip for g in groups]))
             .order_by(OpLog.created_at.desc()).limit(200).all())
     accounts = {}
     for r in rows:
-        detail = r.get_detail() or {}
-        acc = detail.get('account')
+        acc = (r.get_detail() or {}).get('account')
         if acc:
             accounts.setdefault(r.ip, [])
             if acc not in accounts[r.ip]:
                 accounts[r.ip].append(acc)
     return [{
-        'ip': ip,
-        'count': int(cnt),
-        'firstAt': first.strftime('%m-%d %H:%M') if first else '',
-        'lastAt': last.strftime('%m-%d %H:%M') if last else '',
-        'accounts': accounts.get(ip, [])[:6],
-    } for ip, cnt, first, last in groups]
+        'ip': g.ip,
+        'count': int(g.cnt),
+        'firstAt': g[2].strftime('%m-%d %H:%M') if g[2] else '',
+        'lastAt': g[3].strftime('%m-%d %H:%M') if g[3] else '',
+        'accounts': accounts.get(g.ip, [])[:6],
+    } for g in groups]
+
+
+def _anomalies(viewer_id):
+    """同一 IP 连续登录失败：登录失败没有归属用户，也就没有会话可看，
+    只能按 IP 聚合成一条「未能建立会话的尝试」，否则这批记录在会话视图里完全隐形。
+
+    已确认过的 IP 不再提示，但只在它「没有新增失败」时保持沉默：确认记的是确认当时的
+    次数，之后再挨新的失败（次数超过它）就要重新冒出来——否则一次确认就能把一个
+    还在被撞的 IP 永久藏起来，那这条告警还不如不做。
+
+    返回 (该显示的, 被确认压住的)：后者不是内部细节，界面要用它说明「已处理 N 个」
+    ——关掉的东西必须仍然可见，否则「已处理」与「被删掉」在用户眼里没有区别。
+    """
+    since = now_cst() - timedelta(days=_ANOMALY_WINDOW_DAYS)
+    groups = _anomaly_groups(viewer_id, since)
+
+    def _qualifies(g):
+        return g.cnt >= _ANOMALY_MIN_FAILS
+
+    hits = [g for g in groups if _qualifies(g) and g.cnt > (g.acked or 0)]
+    quiet = [g for g in groups if _qualifies(g) and g.cnt <= (g.acked or 0)][:_ANOMALY_TOP_N]
+
+    counts = {g.ip: int(g.cnt) for g in quiet}
+    acked_quiet = []
+    if quiet:
+        # 取确认记录而不是从聚合结果里凑：确认人、确认时间就是这条「已处理」的凭据本身
+        acked_quiet = [dict(a.to_dict(), count=counts.get(a.ip, 0)) for a in
+                       OpAnomalyAck.query
+                       .filter(OpAnomalyAck.user_id == viewer_id,
+                               OpAnomalyAck.ip.in_(list(counts)))
+                       .order_by(OpAnomalyAck.created_at.desc()).all()]
+    return _with_accounts(hits[:_ANOMALY_TOP_N], since), acked_quiet
 
 
 @bp.route('/summary', methods=['GET'])
@@ -336,6 +385,8 @@ def op_log_summary():
     """
     ttl_hours = _session_ttl_hours()
     today_start = datetime.combine(now_cst().date(), datetime.min.time())
+    # 以「当前登录的管理员」为口径：确认是个人行为，甲处理过不等于乙也看过了
+    anomalies, acked_quiet = _anomalies(request.current_user.id)
 
     def _count(*conds):
         return OpLog.query.filter(*conds).count()
@@ -353,10 +404,61 @@ def op_log_summary():
                                           OpLog.action == 'auth.password')),
             'ongoingSessions': _ongoing_count(ttl_hours),
         },
-        'anomalies': _anomalies(),
+        'anomalies': anomalies,
+        # 已被确认压住的那些：界面据此说明「已处理 N 个来源 IP」，
+        # 关掉的告警仍要看得见，否则「已处理」和「被删掉」在用户眼里没区别
+        'ackedQuiet': acked_quiet,
         'anomalyWindowDays': _ANOMALY_WINDOW_DAYS,
         'retentionDays': int(get_setting('op_log_retention_days') or 365),
     })
+
+
+@bp.route('/anomalies/ack', methods=['POST'])
+@admin_required
+def op_log_anomaly_ack():
+    """把异常告警标记为已处理，按当前管理员账号留痕。
+
+    记的是「确认当时该 IP 失败了几次」，而不是一句「已忽略」：之后再出现新增失败
+    （窗口内次数超过这个数）就会重新冒出来。确认依据必须由服务端现算——
+    沿用前端传来的次数，等于让界面自己决定它什么时候再提醒自己。
+    同一账号对同一 IP 重复确认是覆盖（更新次数与时间），不是追加。
+    """
+    viewer = request.current_user
+    payload = request.get_json(silent=True) or {}
+    raw = payload.get('ips')
+    if not isinstance(raw, list):
+        return error(message='ips 必须是数组', code=4000, status=400)
+
+    ips = []
+    for item in raw[:_ACK_MAX_IPS]:
+        ip = str(item if item is not None else '').strip()
+        if ip and ip not in ips:
+            ips.append(ip)
+    if not ips:
+        return error(message='没有可标记的来源 IP', code=4001, status=400)
+
+    since = now_cst() - timedelta(days=_ANOMALY_WINDOW_DAYS)
+    counts = dict(db.session.query(OpLog.ip, func.count(OpLog.id))
+                  .filter(OpLog.action == 'auth.login', OpLog.result == 'fail',
+                          OpLog.ip.in_(ips), OpLog.created_at >= since)
+                  .group_by(OpLog.ip).all())
+
+    existing = {a.ip: a for a in OpAnomalyAck.query
+                .filter(OpAnomalyAck.user_id == viewer.id, OpAnomalyAck.ip.in_(ips)).all()}
+    now = now_cst()
+    for ip in ips:
+        row = existing.get(ip)
+        if row is None:
+            db.session.add(OpAnomalyAck(user_id=viewer.id, username=viewer.username or '',
+                                        ip=ip, count_at_ack=int(counts.get(ip, 0)),
+                                        created_at=now))
+        else:
+            row.username = viewer.username or ''
+            row.count_at_ack = int(counts.get(ip, 0))
+            row.created_at = now
+    db.session.commit()
+
+    return success({'acked': ips, 'ackedAt': now.strftime('%Y-%m-%d %H:%M')})
 
 
 @bp.route('/meta', methods=['GET'])

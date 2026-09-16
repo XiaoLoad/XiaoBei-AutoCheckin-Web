@@ -9,6 +9,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useRefreshBusStore } from '@/stores/refreshBus'
 import {
+  ackOpLogAnomalies,
   fetchOpLogs,
   fetchOpLogMeta,
   fetchOpLogSessions,
@@ -54,6 +55,9 @@ export const useOpLogsStore = defineStore('opLogs', () => {
 
   const metrics = ref({ loginToday: 0, loginFailToday: 0, userChangeToday: 0, ongoingSessions: 0 })
   const anomalies = ref([])
+  // 已被本账号确认压住的来源 IP：关掉的东西仍要看得见，
+  // 否则「已处理」和「被删掉」在界面上没有区别
+  const ackedQuiet = ref([])
   const anomalyWindowDays = ref(7)
   const retentionDays = ref(365)
   const meta = ref({ categories: [], actions: [] })
@@ -64,6 +68,8 @@ export const useOpLogsStore = defineStore('opLogs', () => {
   // 指标与列表走两个接口：指标未到位时卡片显示骨架，但不阻塞列表浏览
   const summaryLoaded = ref(false)
   const exporting = ref(false)
+  // 「标记已处理」进行中：按钮要禁用并显示处理文案，否则连点会发两次确认
+  const acking = ref(false)
   // 展开态的唯一真相：同一时刻至多展开一条（手风琴），条目上不另存 open 标记
   const expandedId = ref(null)
   let seq = 0
@@ -166,11 +172,27 @@ export const useOpLogsStore = defineStore('opLogs', () => {
       const res = await fetchOpLogSummary()
       metrics.value = res.metrics
       anomalies.value = res.anomalies
+      ackedQuiet.value = res.ackedQuiet
       anomalyWindowDays.value = res.anomalyWindowDays
       retentionDays.value = res.retentionDays
       summaryLoaded.value = true
     } catch (e) {
       /* 指标取不到不影响列表浏览，保留上次数值（首屏为 0） */
+    }
+  }
+
+  // 标记异常告警为已处理：确认依据（当时的失败次数）由服务端现算，
+  // 前端只报「处理哪些 IP」，免得界面自己决定它什么时候再提醒自己。
+  // 成功后重取 summary，让横幅与「已处理 N 个」的说明同步落到位。
+  async function ackAnomalies(ips) {
+    if (acking.value) return false
+    acking.value = true
+    try {
+      await ackOpLogAnomalies(ips)
+      await loadSummary()
+      return true
+    } finally {
+      acking.value = false
     }
   }
 
@@ -277,6 +299,7 @@ export const useOpLogsStore = defineStore('opLogs', () => {
     sessionTotal,
     metrics,
     anomalies,
+    ackedQuiet,
     anomalyWindowDays,
     retentionDays,
     meta,
@@ -285,6 +308,7 @@ export const useOpLogsStore = defineStore('opLogs', () => {
     loaded,
     summaryLoaded,
     exporting,
+    acking,
     expandedId,
     isSession,
     groups,
@@ -303,5 +327,6 @@ export const useOpLogsStore = defineStore('opLogs', () => {
     setPageSize,
     toggleDetail,
     exportRows,
+    ackAnomalies,
   }
 })

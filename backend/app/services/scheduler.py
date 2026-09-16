@@ -21,7 +21,7 @@ from apscheduler.executors.pool import ThreadPoolExecutor
 from concurrent.futures import ThreadPoolExecutor as FuturesThreadPool, as_completed
 
 from app.extensions import db
-from app.models import ActivityWindow, BAccount, ConfigSet, JwAccount, Schedule, SignRecord, PushLog
+from app.models import ActivityWindow, BAccount, ConfigSet, JwAccount, OpLog, Schedule, SignRecord, PushLog
 from app.models.b_account import binding_cred_id
 from app.models.pools import ImageGroup, PoolCredential, PoolLocation, PoolUa
 from app.models.system_config import get_setting
@@ -491,7 +491,8 @@ def _poll_activity_windows():
 
 
 def _prune_old_sign_records():
-    """按 sign_log_retention_days 清理超期执行日志（全局策略，不区分用户）。
+    """按 sign_log_retention_days 清理超期执行日志（全局策略，不区分用户），
+    并按 op_log_retention_days（默认 365 天，长于签到日志）清理超期操作审计日志。
     作为每日独立 job 运行（此前挂在 30s 对账上，created_at 已加索引仍无必要逐 30s 扫描）。
     调度线程执行时无 Flask 应用上下文，此处自行入上下文（与 reconcile 同款守卫）；
     读取失败回退默认值，清理异常仅记日志不中断。"""
@@ -504,12 +505,17 @@ def _prune_old_sign_records():
             deleted = SignRecord.query.filter(SignRecord.created_at < cutoff).delete(synchronize_session=False)
             # push_logs 随签到日志同周期清理（created_at 与执行记录同刻生成）
             PushLog.query.filter(PushLog.created_at < cutoff).delete(synchronize_session=False)
+            op_days = get_setting('op_log_retention_days') or 365
+            op_cutoff = now_cst() - timedelta(days=int(op_days))
+            op_deleted = OpLog.query.filter(OpLog.created_at < op_cutoff).delete(synchronize_session=False)
             if deleted:
                 log.info('清理超期签到日志 %d 条（保留 %d 天）', deleted, int(days))
+            if op_deleted:
+                log.info('清理超期用户日志 %d 条（保留 %d 天）', op_deleted, int(op_days))
             db.session.commit()
         except Exception as e:
             db.session.rollback()
-            log.warning('签到日志自动清理失败：%s', e)
+            log.warning('日志自动清理失败：%s', e)
 
 
 def _extract_jitter(schedule):
@@ -882,6 +888,7 @@ def runtime_settings():
         'pruneIntervalHours': _PRUNE_INTERVAL_HOURS,
         'retryDelayMinutes': _RETRY_DELAY_MINUTES,
         'logRetentionDays': int(get_setting('sign_log_retention_days') or 180),
+        'opLogRetentionDays': int(get_setting('op_log_retention_days') or 365),
     }
 
 

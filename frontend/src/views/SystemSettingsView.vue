@@ -864,7 +864,7 @@ let savedFlashTimer = null
 const PARAM_GROUPS = [
   { id: 'register', title: '注册与额度', icon: 'user-check', hint: '新账号的开通方式与用量基线', keys: ['registration_enabled', 'default_quota'] },
   { id: 'security', title: '账号安全', icon: 'shield', hint: '密码策略与会话凭证有效期', keys: ['password_min_length', 'session_hours'] },
-  { id: 'data', title: '数据治理', icon: 'layers', hint: '日志清理周期与预警口径', keys: ['sign_log_retention_days', 'quota_warn_ratio'] },
+  { id: 'data', title: '数据治理', icon: 'layers', hint: '日志清理周期与预警口径', keys: ['sign_log_retention_days', 'op_log_retention_days', 'quota_warn_ratio'] },
   { id: 'map', title: '地图服务', icon: 'map-pin', hint: '位置池「地图拾取」使用的高德开放平台凭证', keys: ['amap_web_key', 'amap_security_code'] },
 ]
 // 数字参数的单位后缀：随输入框内联展示，免去把单位写进 label
@@ -873,6 +873,7 @@ const PARAM_UNITS = {
   password_min_length: '位',
   session_hours: '小时',
   sign_log_retention_days: '天',
+  op_log_retention_days: '天',
   quota_warn_ratio: '%',
 }
 

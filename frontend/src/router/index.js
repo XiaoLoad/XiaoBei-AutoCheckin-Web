@@ -69,6 +69,13 @@ const dynamicRoutes = [
     component: () => import('@/views/SystemSettingsView.vue'),
     // [权限判断] 账户安全对所有角色开放；系统参数/系统信息区仅管理员可见（页面内按角色分区，后端二次校验）
     meta: { title: '系统设置', requiresAuth: true, roles: ['admin', 'user'], group: '系统', icon: 'settings' }
+  },
+  {
+    path: '/user-logs',
+    name: 'user-logs',
+    component: () => import('@/views/UserLogsView.vue'),
+    // [权限判断] 用户日志（平台操作审计）仅管理员可访问：含全员用户名、IP、UA 与权限变更明细
+    meta: { title: '用户日志', requiresAuth: true, roles: ['admin'], group: '运营管理', icon: 'shield', order: 2 }
   }
 ]
 

@@ -9,7 +9,7 @@ from app.models.system_config import get_setting
 from app.models.user import User, now_cst
 from app.utils.auth import blacklist_token, generate_token, token_required
 from app.utils.response import error, success
-from app.events import auth_logged_out
+from app.events import auth_logged_out, auth_login, auth_password_changed
 
 bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
@@ -19,6 +19,8 @@ def login():
     """
     登录：校验账号密码 → 生成 JWT → 返回 token 与用户基本信息
     错误码：1000 参数缺失 / 1001 账号不存在 / 1003 账号禁用 / 1002 密码错误
+    四个失败分支同样发布 auth_login（result='fail'），审计日志据此留痕——
+    连续失败是排查暴力破解与「账号是不是被锁了」的唯一线索。
     """
     payload = request.get_json(silent=True) or {}
     account = (payload.get('account') or '').strip()
@@ -28,15 +30,19 @@ def login():
 
     user = User.query.filter_by(username=account).first()
     if not user:
+        auth_login.send('auth.login', result='fail', username=account, reason='账号不存在')
         return error(message='账号不存在', code=1001, status=401)
     if not user.enabled:
+        auth_login.send('auth.login', result='fail', username=account, reason='账号已被禁用')
         return error(message='账号已被禁用', code=1003, status=403)
     if not user.check_password(password):
+        auth_login.send('auth.login', result='fail', username=account, reason='密码错误')
         return error(message='密码错误', code=1002, status=401)
 
     token = generate_token(user)
     user.last_login = now_cst()
     db.session.commit()
+    auth_login.send('auth.login', result='success', user=user)
 
     return success(
         {
@@ -88,6 +94,7 @@ def change_password():
 
     u.set_password(new_password)
     db.session.commit()
+    auth_password_changed.send('auth.password', user=u)
     return success(message='密码修改成功')
 
 

@@ -105,12 +105,14 @@ def update_user(user_id):
     # password 不能进 setattr 循环：模型列是 password_hash，setattr(user, 'password', 明文)
     # 只会挂一个瞬时属性并在 commit 后丢弃（密码看似保存实则未变），必须走 set_password 哈希
     password = data.pop('password', None)
+    # 审计用：先抓取本次要改字段的原值，订阅者据此还原 from→to（改角色这类变更是重点）
+    before = {k: getattr(user, k, None) for k in data}
     for key, value in data.items():
         setattr(user, key, value)
     if password:
         user.set_password(password)
     db.session.commit()
-    user_changed.send('users.update', user=user)
+    user_changed.send('users.update', user=user, before=before, password_changed=bool(password))
     return success(user.to_dict(), message='保存成功')
 
 

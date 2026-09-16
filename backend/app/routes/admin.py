@@ -11,7 +11,7 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
-from app.models import BAccount, Schedule, SignRecord, User
+from app.models import BAccount, PushLog, Schedule, SignRecord, User
 from app.models.system_config import get_setting
 from app.models.user import now_cst
 from app.services.b_platform.history import fetch_history_tasks, fetch_task_detail
@@ -25,12 +25,22 @@ bp = Blueprint('admin', __name__, url_prefix='/api/admin')
 # 或条目超上限即失效/淘汰，避免重复聚合拖慢仪表盘、也避免内存无限增长。
 _ADMIN_AGG_TTL = int(os.getenv('ADMIN_OVERVIEW_CACHE_TTL', '60'))
 
+# 各聚合函数持有的缓存 dict（注册表），供 clear_agg_cache() 统一失效。
+_AGG_CACHES = []
+
+
+def clear_agg_cache():
+    """清空全部聚合缓存。测试用例造完数据必须调用，否则 60s TTL 内读到的是上一个用例的投影。"""
+    for store in _AGG_CACHES:
+        store.clear()
+
 
 def _ttl_cache(ttl):
     """有界 TTL 内存缓存装饰器：缓存纯聚合结果，单进程内生效。"""
 
     def deco(fn):
         store = {}
+        _AGG_CACHES.append(store)
 
         def wrapper(*args, **kwargs):
             key = (args, tuple(sorted(kwargs.items())))
@@ -249,6 +259,132 @@ def _account_health():
     }
 
 
+# 推送失败原因归类：error 原文含动态信息（code=…/HTTP 状态/异常文案），直接 GROUP BY 会碎片化，
+# 与 _classify_fail_reason 同一范式（原文聚合 → 前缀归类合并）。
+_PUSH_SKIP_PREFIX = '已跳过：'
+# 跳过类与发送失败类是两回事：前者「压根没发出去」（没配凭证/凭证缺字段），后者「发出去了被平台拒」。
+# 两者分开归类也分开统计——合在一起，「该账号没配推送凭证」会在页面上伪装成「通道故障」。
+_PUSH_FAIL_CATEGORIES = [
+    ('平台拒绝', ('推送被拒',)),
+    ('响应异常', ('响应非 JSON', '收件人为空')),
+    ('连接超时', ('timeout', 'Timeout', 'timed out')),
+    ('连接失败', ('ConnectionError', 'NewConnectionError', 'Max retries', 'getaddrinfo',
+                  'Connection aborted', 'Connection reset', 'RemoteDisconnected')),
+    ('SMTP 认证失败', ('Authentication', 'authentication', 'SMTPAuthenticationError', '535 ')),
+    ('内部异常', ('内部异常',)),
+]
+_PUSH_SKIP_CATEGORIES = [
+    # 键取「未绑定」而非「未绑定凭证」：账号级与套级两条文案是「未绑定此通道的推送凭证」
+    # 与「未绑定凭证」，只匹配后者会把前者漏进「其他」。
+    ('未绑定凭证', ('未绑定',)),
+    ('凭证缺少字段', ('凭证缺少必要字段', '缺少 SMTP 地址/发件人/收件人字段')),
+]
+
+
+def _classify_push_reason(err):
+    """推送 error 原文 → 归类名。先剥「已跳过：」前缀再查表，跳过类只查跳过表。"""
+    r = (err or '').strip()
+    skipped = r.startswith(_PUSH_SKIP_PREFIX)
+    if skipped:
+        r = r[len(_PUSH_SKIP_PREFIX):]
+    for name, keys in (_PUSH_SKIP_CATEGORIES if skipped else _PUSH_FAIL_CATEGORIES):
+        if any(k in r for k in keys):
+            return name
+    return '其他未发送' if skipped else '其他'
+
+
+@_ttl_cache(_ADMIN_AGG_TTL)
+def _push_health(days=7):
+    """全站推送送达健康（近 N 天）：按通道聚合真实发送成败 + 未送达原因归类 +
+    「签到成功但通知未送达」交叉标记。
+
+    ⚠️ 口径核心：成功率的分母只算 attempts>0 的真实发送。跳过类（attempts=0，如
+    「该账号未绑定此通道的推送凭证」）单列——把「用户没配凭证」混进分母，页面会把
+    「没配」读成「通道坏了」，这是这套统计里最容易骗到人的一处。
+
+    「签到成功但通知未送达」的动机是表注释里那次真实事故（单账号 pushplus 静默失败，
+    错误只进控制台）：签到结果与通知送达是两件事，签到页面上全是成功时，用户可能
+    从头到尾没收到过通知。真实发送失败排在跳过类之前——前者要查通道，后者要催配置。
+    """
+    start = now_cst() - timedelta(days=days)
+    ok_sum = func.sum(case((PushLog.ok.is_(True), 1), else_=0))
+    sent_sum = func.sum(case((PushLog.attempts > 0, 1), else_=0))
+    skip_sum = func.sum(case((PushLog.attempts == 0, 1), else_=0))
+    rows = (db.session.query(PushLog.channel, sent_sum, ok_sum, skip_sum)
+            .filter(PushLog.created_at >= start)
+            .group_by(PushLog.channel).all())
+    by_channel = []
+    tot = {'sent': 0, 'ok': 0, 'skipped': 0}
+    for ch, sent, ok, skipped in rows:
+        sent, ok, skipped = int(sent or 0), int(ok or 0), int(skipped or 0)
+        by_channel.append({
+            'channel': ch, 'sent': sent, 'ok': ok, 'fail': sent - ok, 'skipped': skipped,
+            'rate': round(ok / sent * 100) if sent else None,
+        })
+        tot['sent'] += sent
+        tot['ok'] += ok
+        tot['skipped'] += skipped
+    # 真实失败多的在前；同档按发送量降序（有量才谈得上率）
+    by_channel.sort(key=lambda x: (-x['fail'], -x['sent']))
+
+    reason_rows = (db.session.query(PushLog.error, PushLog.attempts, func.count(PushLog.id))
+                   .filter(PushLog.created_at >= start, PushLog.ok.is_(False))
+                   .group_by(PushLog.error, PushLog.attempts)
+                   .order_by(func.count(PushLog.id).desc())
+                   .limit(200).all())
+    fail_merged, skip_merged = {}, {}
+    for err, attempts, n in reason_rows:
+        n = int(n)
+        bucket = skip_merged if int(attempts or 0) == 0 else fail_merged
+        name = _classify_push_reason(err)
+        bucket[name] = bucket.get(name, 0) + n
+    def as_items(d):
+        return [{'category': k, 'count': v}
+                for k, v in sorted(d.items(), key=lambda x: -x[1])]
+
+    cross_where = (PushLog.created_at >= start, PushLog.ok.is_(False),
+                   SignRecord.status == 'success')
+    cross_total = (db.session.query(func.count(PushLog.id))
+                   .join(SignRecord, PushLog.sign_record_id == SignRecord.id)
+                   .filter(*cross_where).scalar())
+    cross_rows = (db.session.query(PushLog, SignRecord)
+                  .join(SignRecord, PushLog.sign_record_id == SignRecord.id)
+                  .filter(*cross_where)
+                  .order_by(PushLog.attempts.desc(), PushLog.created_at.desc(),
+                            PushLog.id.desc())
+                  .limit(8).all())
+    uids = {rec.user_id for _p, rec in cross_rows}
+    aids = {p.account_id for p, _r in cross_rows if p.account_id}
+    users = {u.id: u for u in User.query.filter(User.id.in_(uids)).all()} if uids else {}
+    accs = {a.id: a for a in BAccount.query.filter(BAccount.id.in_(aids)).all()} if aids else {}
+    cross = []
+    for p, rec in cross_rows:
+        u = users.get(rec.user_id)
+        acc = accs.get(p.account_id)
+        cross.append({
+            'username': u.username if u else '',
+            'account': acc.account if acc else '',
+            'studentName': ((acc.profile or {}).get('name') or '') if acc else '',
+            'channel': p.channel,
+            'error': (p.error or '')[:120],
+            'skipped': int(p.attempts or 0) == 0,
+            'time': p.created_at.strftime('%m-%d %H:%M') if p.created_at else '',
+            'signRecordId': rec.id,
+        })
+
+    return {
+        'days': days,
+        'summary': {'sent': tot['sent'], 'ok': tot['ok'], 'fail': tot['sent'] - tot['ok'],
+                    'skipped': tot['skipped'],
+                    'rate': round(tot['ok'] / tot['sent'] * 100) if tot['sent'] else None,
+                    'channels': len([c for c in by_channel if c['sent'] > 0])},
+        'byChannel': by_channel,
+        'failReasons': as_items(fail_merged),
+        'skipReasons': as_items(skip_merged),
+        'signOkPushFail': {'total': int(cross_total or 0), 'list': cross},
+    }
+
+
 def _ago_text(dt):
     """距今多久的粗粒度中文描述（None → 空串）。"""
     if dt is None:
@@ -392,6 +528,7 @@ def overview():
         'quota': _quota_overview(),
         'riskUsers': _risk_users(7),
         'accountHealth': _account_health(),
+        'pushHealth': _push_health(7),
         'scheduler': _scheduler_info(),
         'recentLogs': _recent_logs(),
         'schedulesEnabled': schedule_enabled,

@@ -22,6 +22,14 @@ const EMPTY = {
     invalidCredentials: { total: 0, list: [] },
     staleSign: { total: 0, list: [] },
   },
+  // 推送送达：成功率的分母只含真实发出的推送（attempts>0）；
+  // 未发送（attempts=0，如未配置凭证）走 skipped 单列，不与发送失败混算
+  pushHealth: {
+    days: 7,
+    summary: { sent: 0, ok: 0, fail: 0, skipped: 0, rate: null, channels: 0 },
+    byChannel: [], failReasons: [], skipReasons: [],
+    signOkPushFail: { total: 0, list: [] },
+  },
   scheduler: {
     running: false, jobCount: 0, nextRuns: [],
     taskTypes: { dorm: 0, activity: 0 },

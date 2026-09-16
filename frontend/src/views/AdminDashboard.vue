@@ -196,6 +196,140 @@
         </div>
       </section>
 
+      <!-- ============ 推送送达（全站） ============
+           口径说明必须写在卡里：成功率的分母只含「真实发出去的推送」（attempts>0），
+           未发送（没配凭证/凭证缺字段）单列——不写清楚，管理员会把「用户没配凭证」
+           读成「推送通道坏了」，这是这套统计最容易骗到人的地方。 -->
+      <section class="dash-card p-5 sm:p-6 v-reveal delay-3">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+          <div>
+            <h3 class="font-semibold text-ink">推送送达</h3>
+            <p class="mt-0.5 text-xs text-ink-muted">
+              近 {{ pushHealth.days }} 天 · 送达率只统计真实发出的推送，未发送单列、不计入分母
+            </p>
+          </div>
+          <span
+            class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
+            :class="PUSH_TONE[pushTone].cls"
+          >
+            <span class="h-1.5 w-1.5 rounded-full" :class="PUSH_TONE[pushTone].dot"></span>
+            {{ pushBadge }}
+          </span>
+        </div>
+
+        <p v-if="pushEmpty" class="rounded-xl bg-cloud/60 px-3 py-6 text-center text-sm text-ink-muted">
+          近 {{ pushHealth.days }} 天没有推送记录
+        </p>
+
+        <template v-else>
+          <!-- 摘要 -->
+          <div class="flex flex-wrap items-baseline gap-x-6 gap-y-2">
+            <div>
+              <span class="text-2xl font-bold tabular-nums text-ink">{{ pushHealth.summary.sent }}</span>
+              <span class="ml-1 text-xs text-ink-muted">次真实发送</span>
+            </div>
+            <div>
+              <span class="text-2xl font-bold tabular-nums" :class="rateTextCls(pushHealth.summary.rate)">
+                {{ pushHealth.summary.rate === null ? '—' : pushHealth.summary.rate }}<span
+                  v-if="pushHealth.summary.rate !== null" class="text-base">%</span>
+              </span>
+              <span class="ml-1 text-xs text-ink-muted">送达率</span>
+            </div>
+            <div class="text-xs text-ink-muted">
+              成功 <span class="font-medium tabular-nums text-success">{{ pushHealth.summary.ok }}</span>
+              · 失败 <span class="font-medium tabular-nums text-danger">{{ pushHealth.summary.fail }}</span>
+              · 未发送 <span class="font-medium tabular-nums text-amber">{{ pushHealth.summary.skipped }}</span>
+            </div>
+          </div>
+
+          <div class="mt-5 grid gap-6 lg:grid-cols-2">
+            <!-- 左：按通道 -->
+            <div class="min-w-0">
+              <div class="mb-2 flex items-center justify-between gap-2">
+                <p class="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">按通道</p>
+                <span class="text-[11px] text-ink-muted">{{ pushHealth.summary.channels }} 个通道有发送</span>
+              </div>
+              <ul class="space-y-1.5">
+                <li
+                  v-for="c in pushHealth.byChannel"
+                  :key="'ch' + c.channel"
+                  class="flex items-center gap-2.5 rounded-lg bg-cloud/70 px-2.5 py-2 text-xs"
+                >
+                  <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="channelDot(c.channel)"></span>
+                  <span class="w-16 shrink-0 truncate font-medium text-ink">{{ channelLabel(c.channel) }}</span>
+                  <span class="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-ink/10">
+                    <span class="block h-full rounded-full" :class="rateBarCls(c.rate)" :style="{ width: (c.rate || 0) + '%' }"></span>
+                  </span>
+                  <span class="w-9 shrink-0 text-right tabular-nums" :class="rateTextCls(c.rate)">
+                    {{ c.rate === null ? '—' : c.rate + '%' }}
+                  </span>
+                  <span class="w-24 shrink-0 text-right text-[11px] text-ink-muted tabular-nums">
+                    {{ c.sent }} 发<span v-if="c.fail"> · <span class="text-danger">{{ c.fail }} 失败</span></span><span v-if="c.skipped"> · {{ c.skipped }} 未发</span>
+                  </span>
+                </li>
+                <li v-if="!pushHealth.byChannel.length" class="rounded-lg bg-cloud/60 px-2.5 py-2 text-xs text-ink-muted">
+                  没有通道产生过发送
+                </li>
+              </ul>
+            </div>
+
+            <!-- 右：签到成功但通知未送达（PushLog 建表动机里那次真实事故：签到页全是成功，
+                 用户却从头到尾没收到通知）。真失败排在未发送之前——前者要查通道，后者要催配置。 -->
+            <div class="min-w-0">
+              <div class="mb-2 flex items-center justify-between gap-2">
+                <p class="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">签到成功但通知未送达</p>
+                <span v-if="pushHealth.signOkPushFail.total > pushHealth.signOkPushFail.list.length" class="text-[11px] text-ink-muted">
+                  共 {{ pushHealth.signOkPushFail.total }} 条
+                </span>
+              </div>
+              <ul class="space-y-1.5">
+                <li
+                  v-for="x in pushHealth.signOkPushFail.list"
+                  :key="'pf' + x.signRecordId + x.channel + x.time"
+                  class="rounded-lg px-2.5 py-2 text-xs"
+                  :class="x.skipped ? 'bg-amber/[0.08]' : 'bg-danger/[0.06]'"
+                >
+                  <div class="flex items-center gap-2">
+                    <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="x.skipped ? 'bg-amber' : 'bg-danger'"></span>
+                    <span class="min-w-0 flex-1 truncate font-medium text-ink">
+                      {{ x.username || '未绑定用户' }}<template v-if="x.account"> · {{ x.account }}</template>
+                    </span>
+                    <span class="shrink-0 text-[11px] text-ink-muted tabular-nums">{{ x.time }}</span>
+                  </div>
+                  <!-- 原因文案可能很长（含 code/HTTP 状态），截断但保留 title 供悬停查看 -->
+                  <p class="mt-1 truncate pl-3.5 text-[11px] text-ink-muted" :title="x.error">
+                    <span class="font-medium" :class="x.skipped ? 'text-amber' : 'text-danger'">{{ x.skipped ? '未发送' : '发送失败' }}</span>
+                    · {{ channelLabel(x.channel) }}<template v-if="x.error"> · {{ x.error }}</template>
+                  </p>
+                </li>
+                <li v-if="!pushHealth.signOkPushFail.list.length" class="rounded-lg bg-success/10 px-2.5 py-2 text-xs text-success">
+                  签到成功的通知全部送达
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- 失败/未发送原因归类：两组分开，跳过类混进失败组会让「没配凭证」看起来像通道故障 -->
+          <div
+            v-if="pushHealth.failReasons.length || pushHealth.skipReasons.length"
+            class="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-ink/5 pt-3 text-[11px]"
+          >
+            <div v-if="pushHealth.failReasons.length" class="flex flex-wrap items-center gap-1.5">
+              <span class="text-ink-muted">发送失败</span>
+              <span v-for="r in pushHealth.failReasons" :key="'fr' + r.category" class="rounded-full bg-danger/10 px-2 py-0.5 text-danger">
+                {{ r.category }} {{ r.count }}
+              </span>
+            </div>
+            <div v-if="pushHealth.skipReasons.length" class="flex flex-wrap items-center gap-1.5">
+              <span class="text-ink-muted">未发送（不计入送达率）</span>
+              <span v-for="r in pushHealth.skipReasons" :key="'sr' + r.category" class="rounded-full bg-amber/15 px-2 py-0.5 text-amber">
+                {{ r.category }} {{ r.count }}
+              </span>
+            </div>
+          </div>
+        </template>
+      </section>
+
       <!-- ============ 额度健康：分桶直方图 + 预警列表 ============ -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <section class="dash-card p-5 v-reveal delay-3">
@@ -461,6 +595,7 @@ import Icon from '@/components/Icon.vue'
 import { useAdminOverviewStore } from '@/stores/adminOverview'
 import { useThemeStore } from '@/stores/theme'
 import { taskTypeMeta } from '@/utils/accountType'
+import { channelDot, channelLabel } from '@/utils/pushChannels'
 
 // [权限判断] 本页仅管理员可达（分发见 DashboardView；路由守卫二次校验）。
 const store = useAdminOverviewStore()
@@ -476,6 +611,38 @@ const quota = computed(() => dash.value.quota)
 const scheduler = computed(() => dash.value.scheduler)
 const health = computed(() => dash.value.accountHealth)
 const riskUsers = computed(() => dash.value.riskUsers)
+
+// ===== 推送送达 =====
+// 接口缺字段时给空结构（后端未热重启时旧响应里没有该键），首帧渲染安全
+const PUSH_EMPTY = {
+  days: 7,
+  summary: { sent: 0, ok: 0, fail: 0, skipped: 0, rate: null, channels: 0 },
+  byChannel: [], failReasons: [], skipReasons: [],
+  signOkPushFail: { total: 0, list: [] },
+}
+const pushHealth = computed(() => dash.value.pushHealth || PUSH_EMPTY)
+const pushUndelivered = computed(() => pushHealth.value.summary.fail + pushHealth.value.summary.skipped)
+const pushEmpty = computed(() => !pushHealth.value.summary.sent && !pushHealth.value.summary.skipped)
+// 有真失败才算 danger；清一色「没发出去」是配置问题不是通道故障，用 amber 区分严重度
+const pushTone = computed(() => {
+  if (pushHealth.value.summary.fail > 0) return 'danger'
+  if (pushUndelivered.value > 0) return 'amber'
+  return 'success'
+})
+const PUSH_TONE = {
+  success: { cls: 'bg-success/10 text-success', dot: 'bg-success' },
+  amber: { cls: 'bg-amber/10 text-amber', dot: 'bg-amber' },
+  danger: { cls: 'bg-danger/10 text-danger', dot: 'bg-danger animate-pulse' },
+}
+const pushBadge = computed(() => {
+  const n = pushUndelivered.value
+  if (!n) return '全部送达'
+  return pushTone.value === 'danger' ? `${n} 条未送达` : `${n} 条未发送`
+})
+// 送达率分档：≥95 正常 / ≥80 留意 / 更低告警（无发送记录时不表态）
+const rateTextCls = (r) => (r === null ? 'text-ink-muted' : r >= 95 ? 'text-success' : r >= 80 ? 'text-amber' : 'text-danger')
+const rateBarCls = (r) => (r === null ? 'bg-ink/20' : r >= 95 ? 'bg-success' : r >= 80 ? 'bg-amber' : 'bg-danger')
+
 // 日志区：store 未单出 recentLogs，从聚合数据派生并兜底空结构（首帧渲染安全）
 const recentLogs = computed(() => dash.value.recentLogs || { items: [], total: 0, page: 1, page_size: 10 })
 const schedulesEnabled = computed(() => dash.value.schedulesEnabled || 0)

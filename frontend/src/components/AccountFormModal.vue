@@ -109,25 +109,47 @@
         <div class="mb-2 flex items-center gap-2">
           <span class="text-[11px] font-semibold tracking-wider text-ink-muted uppercase">推送去向</span>
           <span class="h-px flex-1 bg-ink/10" />
-          <!-- 落位刻度：三格自左向右对应下方三行通道，填充即该通道已有自己的推送目标 -->
-          <span
-            class="flex items-center gap-1"
-            role="img"
-            :aria-label="`${filledCount} / ${PUSH_CHANNELS.length} 个通道已落位`"
-          >
-            <span
-              v-for="ch in PUSH_CHANNELS"
-              :key="ch"
-              class="h-1.5 w-4 rounded-[2px] transition-colors duration-300"
-              :class="entryFilled(ch) ? 'bg-brand' : 'bg-ink/10'"
-              :title="channelLabel(ch)"
-            />
+          <!-- 状态只留一处：每行左侧的落位竖线已经逐通道说明了状态，这里不再放第二套指示器 -->
+          <span class="text-[11px] text-ink-muted">
+            {{ filledCount ? `已配置 ${filledCount} 个通道` : '未配置 · 跟随配置套' }}
           </span>
         </div>
 
         <ul class="divide-y divide-ink/5">
-          <li v-for="ch in PUSH_CHANNELS" :key="ch" class="cred-row relative py-3 pl-3.5">
-            <!-- 落位刻度线：已落位实线、未落位虚线，三行并排即可扫出哪几个还没配 -->
+          <li
+            v-for="ch in channelRows"
+            :key="ch"
+            :class="ch === GROUP_KEY ? 'py-3 pl-3.5' : 'cred-row relative py-3 pl-3.5'"
+          >
+            <!-- 其它通道组头：常驻一行摘要，收起时它就是这一组的状态；展开后才列出两行完整配置 -->
+            <button
+              v-if="ch === GROUP_KEY"
+              type="button"
+              class="flex w-full items-center gap-2.5 text-left"
+              :aria-expanded="secondaryOpen"
+              @click="secondaryOpen = !secondaryOpen"
+            >
+              <span class="flex shrink-0 gap-1">
+                <span
+                  v-for="sec in SECONDARY_CHANNELS"
+                  :key="'g' + sec"
+                  class="grid h-6 w-6 place-items-center rounded-md text-[10px] font-bold"
+                  :class="entryFilled(sec) ? channelTone(sec) : 'bg-ink/5 text-ink-muted'"
+                >{{ channelShort(sec) }}</span>
+              </span>
+              <span class="min-w-0 truncate text-[13px] text-ink-soft">{{ SECONDARY_NAMES }}</span>
+              <span
+                class="ml-auto shrink-0 text-[11px]"
+                :class="secondaryFilled ? 'text-ink-soft' : 'text-ink-muted'"
+              >{{ secondarySummary }}</span>
+              <span class="flex shrink-0 items-center gap-1 text-xs font-medium text-brand">
+                {{ secondaryOpen ? '收起' : '展开' }}
+                <Icon name="chevron-down" :size="12" :class="secondaryOpen && 'rotate-180'" />
+              </span>
+            </button>
+
+            <template v-else>
+            <!-- 落位刻度线：已落位实线、未落位虚线，配合组头摘要即可扫出哪几个还没配 -->
             <span
               aria-hidden="true"
               class="absolute inset-y-0 left-0 w-0 border-l-2"
@@ -176,20 +198,18 @@
               </button>
             </span>
 
-            <!-- 邮件收件人：与凭证选择正交，不绑凭证也能单独指定发给谁 -->
-            <div v-if="ch === 'email'" class="cred-row col-span-2 mt-2">
-              <span class="text-xs text-ink-muted">收件人</span>
-              <div class="min-w-0">
-                <input
-                  v-model.trim="form.pushCreds.email.to"
-                  type="text"
-                  autocomplete="off"
-                  placeholder="可填多个，逗号分隔"
-                  aria-label="邮件收件人"
-                  class="w-full rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
-                />
-                <p class="mt-1 text-xs" :class="recipientWarn ? 'text-warning' : 'text-ink-muted'">{{ recipientHint }}</p>
-              </div>
+            <!-- 收件人：与框内其它字段同构（标签在控件上方），与凭证选择正交——不绑凭证也能单独指定发给谁 -->
+            <div v-if="ch === 'email'" class="cred-sub">
+              <label class="mb-1.5 block text-sm font-medium text-ink-soft" for="acc-push-email-to">收件人</label>
+              <input
+                id="acc-push-email-to"
+                v-model.trim="form.pushCreds.email.to"
+                type="text"
+                autocomplete="off"
+                placeholder="可填多个，逗号分隔"
+                class="login-input"
+              />
+              <p class="mt-1 text-xs" :class="recipientWarn ? 'text-warning' : 'text-ink-muted'">{{ recipientHint }}</p>
             </div>
 
             <!-- 就地新建凭证：省掉「先去我的资源建好再回来下拉」这一趟，也不丢已填内容 -->
@@ -225,11 +245,15 @@
                 </button>
               </div>
             </div>
+            </template>
           </li>
         </ul>
 
-        <p class="mt-3 text-xs text-ink-muted">
-          未绑定的通道跟随配置套里的凭证；已绑定的通道各账号推自己的目标，批量套用不会串号。
+        <p class="mt-3 text-xs leading-relaxed text-ink-muted">
+          可以全部留空——签到照常执行，只是不发通知；留空的通道跟随配置套里的凭证。
+        </p>
+        <p class="mt-1 text-xs leading-relaxed text-ink-muted">
+          这里选的凭证只在任务凭证来源为「账号自带凭证」时生效，收件人不受这个限制。
         </p>
       </section>
 
@@ -345,7 +369,29 @@ const verifyMsg = ref('')
 
 const filledCount = computed(() => PUSH_CHANNELS.filter((ch) => entryFilled(ch)).length)
 
-// 该通道是否已有落位内容（绑了凭证或单独指定了收件人）——刻度线与刻度格共用同一判定
+// 版面把通道分两级：邮箱是绝大多数用户的主路径，占一整行；另外两个收进一组、默认收起。
+// 组头在渲染序列里占一个哨兵位，所以用 GROUP_KEY 而不是通道码——列表里出现的都是字符串 key。
+const PRIMARY_CHANNEL = 'email'
+const SECONDARY_CHANNELS = PUSH_CHANNELS.filter((ch) => ch !== PRIMARY_CHANNEL)
+const SECONDARY_NAMES = SECONDARY_CHANNELS.map(channelLabel).join(' · ')
+const GROUP_KEY = '__secondary__'
+const secondaryOpen = ref(false)
+
+// 渲染序列：主通道 → 组头 →（展开时）组内各行
+const channelRows = computed(() => (
+  secondaryOpen.value
+    ? [PRIMARY_CHANNEL, GROUP_KEY, ...SECONDARY_CHANNELS]
+    : [PRIMARY_CHANNEL, GROUP_KEY]
+))
+
+const secondaryFilled = computed(() => SECONDARY_CHANNELS.filter((ch) => entryFilled(ch)).length)
+// 收起时组头要能替代两行的信息：谁配过就直接点名，免得用户以为配置丢了
+const secondarySummary = computed(() => {
+  const hits = SECONDARY_CHANNELS.filter((ch) => entryFilled(ch))
+  return hits.length ? `已配置 ${hits.map(channelLabel).join('、')}` : '未配置'
+})
+
+// 该通道是否已有落位内容（绑了凭证或单独指定了收件人）——落位竖线与汇总计数共用同一判定
 function entryFilled(ch) {
   const e = form.pushCreds[ch]
   return !!(e.credId || e.to)
@@ -400,13 +446,17 @@ const emailFallback = computed(() => {
   return ((hit && hit.fields && hit.fields.emailTo) || '').trim()
 })
 
-const recipientHint = computed(() =>
-  emailFallback.value
-    ? `留空则发给凭证默认收件人（${emailFallback.value}）`
-    : '这个凭证没写默认收件人，留空时这里必填'
+// 提示分三态：没选凭证（留空＝跟随配置套）／选了且有默认收件人／选了但这份凭证没写默认收件人。
+// 此前三态压成一句「留空时这里必填」，没选凭证时也在报警示色，读起来像整块必填。
+const recipientHint = computed(() => {
+  if (!form.pushCreds.email.credId) return '留空则跟随配置套的邮件凭证'
+  if (emailFallback.value) return `留空则发给凭证默认收件人（${emailFallback.value}）`
+  return '这份凭证没填默认收件人，这里要填一个'
+})
+// 只有「选了凭证、凭证又没有默认收件人、这里也没填」才是真会发不出去，此时才转警示色
+const recipientWarn = computed(() =>
+  !!form.pushCreds.email.credId && !emailFallback.value && !form.pushCreds.email.to
 )
-// 没有默认收件人又没填，就是真会发不出去的情况，提示转成警示色
-const recipientWarn = computed(() => !emailFallback.value && !form.pushCreds.email.to)
 
 const verifyButtonText = computed(() => {
   if (verifyState.value === 'checking') return '校验中…'
@@ -433,6 +483,7 @@ function resetForm() {
   verifyMsg.value = ''
   inlineNew.value = null
   showPassword.value = false
+  secondaryOpen.value = false
   if (props.mode === 'edit' && props.account) {
     form.account = props.account.account || ''
     form.password = ''
@@ -559,7 +610,7 @@ defineExpose({ close })
   display: none;
 }
 
-/* 通道行两列：左列是通道标识（移动端按内容宽、sm 起固定宽以便三行对齐），右列是控件。
+/* 通道行两列：左列是通道标识（移动端按内容宽、sm 起固定宽以便各行对齐），右列是控件。
    标识与控件各占一格，"哪个通道 / 配了什么"在同一条水平线上对读。 */
 .cred-row {
   display: grid;
@@ -568,10 +619,21 @@ defineExpose({ close })
   column-gap: 0.75rem;
 }
 
-/* 收件人行复用同一模板：标签落在标识列、输入框与上行控件左缘对齐 */
+/* 收件人这类附属于某通道行的字段：跨两列自成一块，标签落在控件上方。
+   别把它放回左侧标识列参与居中——那一列是对着「控件 + 下方提示」整块居中的，
+   提示行一出现标签就整体下沉半行（实测差 10px），看着就是没对齐。 */
+.cred-sub {
+  grid-column: 1 / -1;
+  margin-top: 0.75rem;
+}
+
+/* sm 起标识列固定宽，附属块跟着缩进到控件列、与上方控件左缘对齐（缩进 = 7.5rem + 0.75rem） */
 @media (min-width: 640px) {
   .cred-row {
     grid-template-columns: 7.5rem minmax(0, 1fr);
+  }
+  .cred-sub {
+    margin-left: 8.25rem;
   }
 }
 </style>

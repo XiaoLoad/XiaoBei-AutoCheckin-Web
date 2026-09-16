@@ -29,7 +29,7 @@
               :key="`ty-${t.value}`"
               type="button"
               class="whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm font-medium transition"
-              :class="typeFilter === t.value ? 'bg-white text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
+              :class="typeFilter === t.value ? 'bg-elevated text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
               @click="store.setType(t.value)"
             >
               {{ t.label }}
@@ -46,7 +46,7 @@
               type="button"
               :title="s.title"
               class="whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm font-medium transition"
-              :class="statusFilter === s.value ? 'bg-white text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
+              :class="statusFilter === s.value ? 'bg-elevated text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
               @click="store.setStatus(s.value)"
             >
               {{ s.label }}
@@ -125,7 +125,7 @@
             <button
               type="button"
               class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition"
-              :class="viewMode === 'list' ? 'bg-white text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
+              :class="viewMode === 'list' ? 'bg-elevated text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
               @click="store.setView('list')"
             >
               <Icon name="records" :size="14" />列表
@@ -133,7 +133,7 @@
             <button
               type="button"
               class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition"
-              :class="viewMode === 'calendar' ? 'bg-white text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
+              :class="viewMode === 'calendar' ? 'bg-elevated text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
               @click="store.setView('calendar')"
             >
               <Icon name="calendar" :size="14" />日历
@@ -245,7 +245,7 @@
             <button
               type="button"
               class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition"
-              :class="viewMode === 'list' ? 'bg-white text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
+              :class="viewMode === 'list' ? 'bg-elevated text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
               @click="store.setView('list')"
             >
               <Icon name="records" :size="14" />列表
@@ -253,7 +253,7 @@
             <button
               type="button"
               class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition"
-              :class="viewMode === 'calendar' ? 'bg-white text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
+              :class="viewMode === 'calendar' ? 'bg-elevated text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
               @click="store.setView('calendar')"
             >
               <Icon name="calendar" :size="14" />日历
@@ -307,7 +307,7 @@
 
         <!-- 星期表头（周日起）：周末列更淡，压低视觉噪音 -->
         <div class="grid shrink-0 grid-cols-7 gap-1.5 px-3 pb-1.5 pt-2.5 text-center text-[11px] font-medium tracking-wide text-ink-muted sm:px-4">
-          <div v-for="(d, i) in weekHeads" :key="d" :class="i === 0 || i === 6 ? 'text-ink/35' : ''">{{ d }}</div>
+          <div v-for="(d, i) in weekHeads" :key="d" :class="i === 0 || i === 6 ? 'text-ink-muted' : ''">{{ d }}</div>
         </div>
 
         <!-- 日期网格：flex-1 自适应铺满，6 行等分，内部不滚动。
@@ -476,7 +476,7 @@ function cellClass(cell) {
   if (cell.state === 'signed') return 'border-success/30 bg-success/10 text-success'
   if (cell.state === 'unsigned') return 'border-danger/30 bg-danger/10 text-danger'
   // 当月无任务：安静但在场（白底 + 极浅边框），与占位日期一眼可分
-  return 'border-ink/[0.07] bg-white text-ink-soft'
+  return 'border-ink/[0.07] bg-elevated text-ink-soft'
 }
 
 // 环：选中态优先于今天，二者只取其一，避免两个 ring 工具类在 CSS 中互相覆盖

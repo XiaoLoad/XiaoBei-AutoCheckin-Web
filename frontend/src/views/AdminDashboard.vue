@@ -79,7 +79,7 @@
 
       <!-- ============ 账号健康卡（凭证异常 + 疑似漏签） ============ -->
       <section
-        class="relative overflow-hidden rounded-2xl dash-card bg-gradient-to-br from-white via-white to-brand/[0.04] p-5 sm:p-6 v-reveal delay-3"
+        class="relative overflow-hidden rounded-2xl dash-card bg-gradient-to-br from-card via-card to-brand/[0.04] p-5 sm:p-6 v-reveal delay-3"
       >
         <!-- 氛围光斑：品牌色/琥珀色极低透明模糊，增加层次不抢数据 -->
         <div class="pointer-events-none absolute -right-16 -top-24 h-56 w-56 rounded-full bg-brand/[0.07] blur-3xl"></div>
@@ -115,11 +115,11 @@
             <div class="flex flex-col items-center gap-2">
               <div class="relative h-[104px] w-[104px]">
                 <svg viewBox="0 0 100 100" class="h-full w-full -rotate-90">
-                  <circle cx="50" cy="50" r="47" fill="none" stroke="rgba(20,33,61,0.16)" stroke-width="1.6" stroke-dasharray="1.5 3.422" />
-                  <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(20,33,61,0.08)" stroke-width="8" />
+                  <circle cx="50" cy="50" r="47" fill="none" :stroke="CH.ring" stroke-width="1.6" stroke-dasharray="1.5 3.422" />
+                  <circle cx="50" cy="50" r="42" fill="none" :stroke="CH.ringTrack" stroke-width="8" />
                   <circle
                     ref="ringInvalid" cx="50" cy="50" r="42" fill="none" stroke-linecap="round" stroke-width="8"
-                    :stroke="invalidTotal > 0 ? RING_DANGER : RING_OK"
+                    :stroke="invalidTotal > 0 ? ringDanger : ringOk"
                     stroke-dasharray="263.9" stroke-dashoffset="263.9"
                     :style="{ filter: ringGlow(invalidTotal > 0, 'invalid') }"
                   />
@@ -137,11 +137,11 @@
             <div class="flex flex-col items-center gap-2">
               <div class="relative h-[104px] w-[104px]">
                 <svg viewBox="0 0 100 100" class="h-full w-full -rotate-90">
-                  <circle cx="50" cy="50" r="47" fill="none" stroke="rgba(20,33,61,0.16)" stroke-width="1.6" stroke-dasharray="1.5 3.422" />
-                  <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(20,33,61,0.08)" stroke-width="8" />
+                  <circle cx="50" cy="50" r="47" fill="none" :stroke="CH.ring" stroke-width="1.6" stroke-dasharray="1.5 3.422" />
+                  <circle cx="50" cy="50" r="42" fill="none" :stroke="CH.ringTrack" stroke-width="8" />
                   <circle
                     ref="ringStale" cx="50" cy="50" r="42" fill="none" stroke-linecap="round" stroke-width="8"
-                    :stroke="staleTotal > 0 ? RING_AMBER : RING_OK"
+                    :stroke="staleTotal > 0 ? ringAmber : ringOk"
                     stroke-dasharray="263.9" stroke-dashoffset="263.9"
                     :style="{ filter: ringGlow(staleTotal > 0, 'stale') }"
                   />
@@ -406,7 +406,7 @@
           </div>
           <div class="health-scroll overflow-y-auto lg:max-h-[340px]">
             <table class="w-full text-sm">
-              <thead class="sticky top-0 bg-white">
+              <thead class="sticky top-0 bg-elevated">
                 <tr class="text-left text-ink-muted border-b border-ink/5">
                   <th class="font-medium py-2.5 pr-4">用户</th>
                   <th class="font-medium py-2.5 pr-4 text-right">已用 / 上限</th>
@@ -489,7 +489,7 @@
                 v-model="fUser"
                 type="text"
                 placeholder="按用户名筛选…"
-                class="h-8 w-full rounded-lg border border-ink/10 bg-white pl-8 pr-2 text-xs text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/10"
+                class="h-8 w-full rounded-lg border border-ink/10 bg-elevated pl-8 pr-2 text-xs text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/10"
               />
             </div>
             <div class="w-32 sm:w-36">
@@ -647,7 +647,7 @@ import BaseChart from '@/components/BaseChart.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import Icon from '@/components/Icon.vue'
 import { useAdminOverviewStore } from '@/stores/adminOverview'
-import { useThemeStore } from '@/stores/theme'
+import { useThemeStore, withAlpha } from '@/stores/theme'
 import { taskTypeMeta } from '@/utils/accountType'
 import { channelDot, channelLabel } from '@/utils/pushChannels'
 
@@ -718,53 +718,72 @@ onUnmounted(() => clearTimeout(userTimer))
 
 const logTotalPages = computed(() => Math.max(1, Math.ceil(recentLogs.value.total / (recentLogs.value.page_size || 10))))
 
+// ===== 图表配色 =====
+// 与 UserDashboard 同：ECharts 不认 CSS 变量，色值取 theme store 的 chart（读计算样式真值）。
+// option 都是 computed，读写 CH.* 即建立依赖，切色相或切明暗后自动重算并重绘。
+// 命名避开 C——本文件下面的 C 是圆环周长常量。
+const CH = {
+  get ink() { return themeStore.chart.ink },
+  get grid() { return themeStore.chart.grid },
+  get axis() { return themeStore.chart.axis },
+  get ring() { return themeStore.chart.ring },
+  get ringTrack() { return themeStore.chart.ringTrack },
+  get border() { return themeStore.chart.border },
+  get brand() { return themeStore.chart.brand },
+  get brandLight() { return themeStore.chart.brandLight },
+  get success() { return themeStore.chart.success },
+  get warning() { return themeStore.chart.warning },
+  get danger() { return themeStore.chart.danger },
+  get neutral() { return themeStore.chart.neutral },
+  get categorical() { return themeStore.chart.categorical },
+}
+
 // ===== 趋势图 =====
 const trendSeries = computed(() => dash.value.trend[fRange.value] || [])
 const trendOption = computed(() => ({
   grid: { left: 8, right: 16, top: 36, bottom: 8, containLabel: true },
   tooltip: { trigger: 'axis' },
-  legend: { data: ['成功', '失败', '跳过'], top: 0, textStyle: { color: '#6b7280', fontSize: 11 } },
-  xAxis: { type: 'category', boundaryGap: false, data: trendSeries.value.map((d) => d.date), axisLine: { lineStyle: { color: '#e5e7eb' } } },
-  yAxis: { type: 'value', splitLine: { lineStyle: { color: '#f3f4f6' } } },
+  legend: { data: ['成功', '失败', '跳过'], top: 0, textStyle: { color: CH.ink, fontSize: 11 } },
+  xAxis: { type: 'category', boundaryGap: false, data: trendSeries.value.map((d) => d.date), axisLine: { lineStyle: { color: CH.axis } } },
+  yAxis: { type: 'value', splitLine: { lineStyle: { color: CH.grid } } },
   series: [
-    { name: '成功', type: 'line', smooth: true, symbolSize: 5, data: trendSeries.value.map((d) => d.success), itemStyle: { color: '#16a34a' }, areaStyle: { color: 'rgba(22,163,74,0.08)' } },
-    { name: '失败', type: 'line', smooth: true, symbolSize: 5, data: trendSeries.value.map((d) => d.fail), itemStyle: { color: '#dc2626' } },
-    { name: '跳过', type: 'line', smooth: true, symbolSize: 5, data: trendSeries.value.map((d) => d.skip), itemStyle: { color: '#d97706' } },
+    { name: '成功', type: 'line', smooth: true, symbolSize: 5, data: trendSeries.value.map((d) => d.success), itemStyle: { color: CH.success }, areaStyle: { color: withAlpha(CH.success, 0.08) } },
+    { name: '失败', type: 'line', smooth: true, symbolSize: 5, data: trendSeries.value.map((d) => d.fail), itemStyle: { color: CH.danger } },
+    { name: '跳过', type: 'line', smooth: true, symbolSize: 5, data: trendSeries.value.map((d) => d.skip), itemStyle: { color: CH.warning } },
   ],
 }))
 
 // ===== 失败原因分布（归类后） =====
 const failTotal = computed(() => dash.value.failCategories.reduce((n, c) => n + c.count, 0))
-const FAIL_COLORS = ['#dc2626', '#d97706', '#2563eb', '#7c3aed', '#0891b2', '#65a30d', '#db2777', '#9ca3af']
 const failOption = computed(() => ({
   tooltip: { trigger: 'item', formatter: '{b}: {c} 次（{d}%）' },
-  legend: { orient: 'vertical', right: 8, top: 'middle', textStyle: { color: '#6b7280', fontSize: 11 } },
+  legend: { orient: 'vertical', right: 8, top: 'middle', textStyle: { color: CH.ink, fontSize: 11 } },
   series: [{
     type: 'pie', radius: ['48%', '72%'], center: ['36%', '50%'],
-    itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
+    itemStyle: { borderRadius: 6, borderColor: CH.border, borderWidth: 2 },
     label: { show: false },
-    data: dash.value.failCategories.map((c, i) => ({ name: c.category, value: c.count, itemStyle: { color: FAIL_COLORS[i % FAIL_COLORS.length] } })),
+    data: dash.value.failCategories.map((c, i) => ({ name: c.category, value: c.count, itemStyle: { color: CH.categorical[i % CH.categorical.length] } })),
   }],
 }))
 
 // ===== 额度健康分桶 =====
-// 梯队中段两档（<50% / 50~79%）取当前主题的 light/brand 主色——额度充裕程度用
-// 主题色深浅表达、随主题切换自动重绘；未使用/预警/已满保持中性灰与语义色。
+// 梯队中段两档（<50% / 50~79%）取当前主题 brand 的两档——额度充裕程度用
+// 主题色深浅表达、随色相与明暗自动重绘；未使用/预警/已满保持中性档与语义色。
 const quotaOption = computed(() => {
   const b = quota.value.buckets
   const data = [
-    { name: '未使用', value: b.unused, itemStyle: { color: '#cbd5e1' } },
-    { name: '<50%', value: b.lt50, itemStyle: { color: themeStore.meta.light } },
-    { name: '50~79%', value: b.r50to79, itemStyle: { color: themeStore.meta.brand } },
-    { name: '80~99%', value: b.r80to99, itemStyle: { color: '#d97706' } },
-    { name: '已满', value: b.full, itemStyle: { color: '#dc2626' } },
+    { name: '未使用', value: b.unused, itemStyle: { color: CH.neutral } },
+    { name: '<50%', value: b.lt50, itemStyle: { color: CH.brandLight } },
+    { name: '50~79%', value: b.r50to79, itemStyle: { color: CH.brand } },
+    { name: '80~99%', value: b.r80to99, itemStyle: { color: CH.warning } },
+    { name: '已满', value: b.full, itemStyle: { color: CH.danger } },
   ]
   return {
     grid: { left: 8, right: 16, top: 30, bottom: 8, containLabel: true },
     tooltip: { trigger: 'axis', formatter: '{b}: {c} 人' },
-    xAxis: { type: 'category', data: data.map((d) => d.name), axisLine: { lineStyle: { color: '#e5e7eb' } } },
-    yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: '#f3f4f6' } } },
-    series: [{ type: 'bar', barWidth: 36, data, label: { show: true, position: 'top', color: '#6b7280' } }],
+    xAxis: { type: 'category', data: data.map((d) => d.name), axisLine: { lineStyle: { color: CH.axis } } },
+    yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: CH.grid } } },
+    series: [{ type: 'bar', barWidth: 36, data, label: { show: true, position: 'top', color: CH.ink } }],
   }
 })
 
@@ -783,17 +802,17 @@ const stalePct = computed(() => Math.round(staleRate.value * 100))
 const riskTotal = computed(() => invalidTotal.value + staleTotal.value)
 const hasRisk = computed(() => riskTotal.value > 0)
 
-// 环与条的取色对齐语义色 token（此前混用了 amber #F2A65A 与 Tailwind 默认 amber-500）
-const RING_OK = '#16a34a'
-const RING_DANGER = '#dc2626'
-const RING_AMBER = '#f59e0b'
+// 环与条的取色对齐语义色 token，并随明暗走（深色下语义色整体提亮），故取令牌真值
+const ringOk = computed(() => CH.success)
+const ringDanger = computed(() => CH.danger)
+const ringAmber = computed(() => CH.warning)
 
 // 环外发光随状态走：此前固定红色，账号全正常时绿环也发红光
 function ringGlow(active, kind) {
-  if (!active) return 'drop-shadow(0 0 6px rgba(22,163,74,0.16))'
+  if (!active) return `drop-shadow(0 0 6px ${withAlpha(CH.success, 0.16)})`
   return kind === 'stale'
-    ? 'drop-shadow(0 0 6px rgba(245,158,11,0.2))'
-    : 'drop-shadow(0 0 6px rgba(220,38,38,0.22))'
+    ? `drop-shadow(0 0 6px ${withAlpha(CH.warning, 0.2)})`
+    : `drop-shadow(0 0 6px ${withAlpha(CH.danger, 0.22)})`
 }
 
 // 漏签严重度条的量程：30 天记满格（更久也是满格）

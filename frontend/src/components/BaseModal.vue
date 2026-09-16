@@ -8,12 +8,12 @@
         aria-modal="true"
         :aria-labelledby="title ? 'xb-modal-title' : undefined"
       >
-        <div class="absolute inset-0 bg-ink/50 backdrop-blur-[2px]" @click="onOverlayClick" />
+        <div class="absolute inset-0 bg-scrim/50 backdrop-blur-[2px]" @click="onOverlayClick" />
 
         <div
           ref="panel"
           tabindex="-1"
-          class="modal-panel relative flex w-full flex-col overflow-hidden rounded-2xl bg-white shadow-2xl shadow-ink/20 max-sm:rounded-b-none max-sm:rounded-t-2xl max-sm:max-h-[90dvh] focus:outline-none"
+          class="modal-panel relative flex w-full flex-col overflow-hidden rounded-2xl bg-elevated shadow-2xl shadow-ink/20 max-sm:rounded-b-none max-sm:rounded-t-2xl max-sm:max-h-[90dvh] focus:outline-none"
           :class="[sizeClass, size === 'sm' ? 'max-h-[90vh]' : 'max-h-[92vh]']"
           @click.stop
         >

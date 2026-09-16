@@ -3,7 +3,7 @@
     <!-- 可输入（combobox）模式：触发器为输入框，既可下拉选择也可直接键入筛选/取值 -->
     <div
       v-if="editable"
-      class="xb-select-trigger flex w-full items-center justify-between gap-2 rounded-xl border border-ink/10 bg-white text-left text-sm text-ink outline-none transition focus-within:border-brand focus-within:ring-4 focus-within:ring-brand/10"
+      class="xb-select-trigger flex w-full items-center justify-between gap-2 rounded-xl border border-ink/10 bg-elevated text-left text-sm text-ink outline-none transition focus-within:border-brand focus-within:ring-4 focus-within:ring-brand/10"
       :class="size === 'sm' ? 'py-1.5 px-2.5' : 'py-2 px-3'"
     >
       <input
@@ -38,7 +38,7 @@
     <button
       v-else
       type="button"
-      class="xb-select-trigger flex w-full items-center justify-between gap-2 rounded-xl border border-ink/10 bg-white text-left text-sm text-ink-soft outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
+      class="xb-select-trigger flex w-full items-center justify-between gap-2 rounded-xl border border-ink/10 bg-elevated text-left text-sm text-ink-soft outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
       :class="size === 'sm' ? 'py-2 px-2.5' : 'py-2.5 px-3'"
       aria-haspopup="listbox"
       :aria-expanded="open"
@@ -60,7 +60,7 @@
         <div
           v-if="open"
           ref="panel"
-          class="xb-select-panel fixed z-[1000] overflow-hidden rounded-xl border border-ink/10 bg-white shadow-xl shadow-ink/10"
+          class="xb-select-panel fixed z-[1000] overflow-hidden rounded-xl border border-ink/10 bg-elevated shadow-xl shadow-ink/10"
           :style="panelStyle"
           :class="panelPlacement === 'top' ? 'origin-bottom' : 'origin-top'"
         >

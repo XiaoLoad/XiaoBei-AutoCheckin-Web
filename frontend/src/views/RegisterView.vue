@@ -1,6 +1,6 @@
 <template>
   <!-- 独立全屏注册页：与登录页同为 blank 布局，不挂载应用框架（侧边栏/顶栏） -->
-  <div class="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-brand/5 px-4">
+  <div class="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-surface to-brand/5 px-4">
     <div class="w-full max-w-md text-center">
       <div class="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-brand/10 text-brand">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">

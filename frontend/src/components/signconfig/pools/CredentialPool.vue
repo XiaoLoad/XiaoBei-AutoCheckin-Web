@@ -22,7 +22,7 @@
       <article
         v-for="c in store.credentials"
         :key="c.id"
-        class="cred-card group relative overflow-hidden rounded-xl border border-ink/10 bg-white p-3.5 transition duration-300 hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-md hover:shadow-ink/5"
+        class="cred-card group relative overflow-hidden rounded-xl border border-ink/10 bg-elevated p-3.5 transition duration-300 hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-md hover:shadow-ink/5"
       >
         <div class="flex items-start gap-3">
           <!-- 通道徽标：品牌化底色 + 通道缩写 -->

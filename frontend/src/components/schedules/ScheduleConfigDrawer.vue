@@ -2,12 +2,12 @@
   <Teleport to="body">
   <div class="fixed inset-0 z-50">
     <!-- 遮罩 -->
-    <div ref="overlay" class="absolute inset-0 bg-ink/40" @click="requestClose" />
+    <div ref="overlay" class="absolute inset-0 bg-scrim/40" @click="requestClose" />
 
     <!-- 右滑抽屉面板 -->
     <aside
       ref="panel"
-      class="absolute right-0 top-0 flex h-full w-full max-w-2xl flex-col bg-white shadow-2xl"
+      class="absolute right-0 top-0 flex h-full w-full max-w-2xl flex-col bg-elevated shadow-2xl"
       role="dialog"
       aria-modal="true"
       tabindex="-1"
@@ -46,7 +46,7 @@
               </div>
               <button
                 type="button"
-                class="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-ink/10 px-3 text-sm text-ink-soft transition hover:bg-white disabled:opacity-40"
+                class="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-ink/10 px-3 text-sm text-ink-soft transition hover:bg-elevated disabled:opacity-40"
                 :disabled="!bindPick || bindPick === (taskState.configSetId || '') || signConfigStore.saving"
                 @click="onBindApply"
               >
@@ -55,7 +55,7 @@
               <span class="mx-0.5 h-5 w-px bg-ink/10" />
               <button
                 type="button"
-                class="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg px-2.5 text-sm text-ink-soft transition hover:bg-white disabled:opacity-40"
+                class="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg px-2.5 text-sm text-ink-soft transition hover:bg-elevated disabled:opacity-40"
                 :disabled="signConfigStore.saving || !signConfigStore.isDirty"
                 @click="onReset"
               >
@@ -113,7 +113,7 @@
       class="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm"
       @click.self="showBindConfirm = false"
     >
-      <div class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+      <div class="w-full max-w-sm rounded-2xl bg-elevated p-5 shadow-xl">
         <h3 class="text-base font-semibold text-ink">套用配置套</h3>
         <p class="mt-2 text-sm leading-relaxed text-ink-muted">任务正在运行，套用后立即按新配置套执行。确定继续吗？</p>
         <div class="mt-5 flex items-center justify-end gap-2">
@@ -129,7 +129,7 @@
       class="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm"
       @click.self="showSaveConfirm = false"
     >
-      <div class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+      <div class="w-full max-w-sm rounded-2xl bg-elevated p-5 shadow-xl">
         <h3 class="text-base font-semibold text-ink">任务已启用</h3>
         <p class="mt-2 text-sm leading-relaxed text-ink-muted">该定时任务当前正在运行，保存将覆盖其配置并立即生效。确定继续保存吗？</p>
         <div class="mt-5 flex items-center justify-end gap-2">

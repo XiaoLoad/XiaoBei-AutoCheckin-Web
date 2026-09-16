@@ -83,7 +83,7 @@
     </aside>
 
     <!-- 右侧登录表单：PC 端为纯白实色面板（表单直接落位，不再悬浮卡片）；移动端为暖纸色 + 干净白卡 -->
-    <main class="flex flex-1 items-center justify-center bg-paper p-6 sm:p-10 lg:min-h-screen lg:bg-white lg:p-16">
+    <main class="flex flex-1 items-center justify-center bg-paper p-6 sm:p-10 lg:min-h-screen lg:bg-elevated lg:p-16">
       <div class="login-card w-full max-w-md overflow-hidden lg:overflow-visible lg:rounded-none lg:bg-transparent lg:shadow-none lg:ring-0">
         <div class="px-7 py-9 sm:px-10 sm:py-11">
           <p class="login-field text-xs font-semibold uppercase tracking-[0.22em] text-brand">

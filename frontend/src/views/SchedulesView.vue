@@ -43,7 +43,7 @@
             v-model="searchQuery"
             type="text"
             placeholder="搜索姓名 / 学号 / 班级"
-            class="h-9 w-full rounded-lg border border-ink/10 bg-white pl-9 pr-8 text-sm text-ink outline-none transition placeholder:text-ink-muted focus:border-brand/50 focus:ring-2 focus:ring-brand/15"
+            class="h-9 w-full rounded-lg border border-ink/10 bg-elevated pl-9 pr-8 text-sm text-ink outline-none transition placeholder:text-ink-muted focus:border-brand/50 focus:ring-2 focus:ring-brand/15"
           />
           <button
             v-if="searchQuery"
@@ -73,7 +73,7 @@
             :key="t.value"
             type="button"
             class="rounded-lg px-3 py-1.5 text-sm font-medium transition"
-            :class="typeFilter === t.value ? 'bg-white text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
+            :class="typeFilter === t.value ? 'bg-elevated text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
             @click="typeFilter = t.value"
           >
             {{ t.label }}

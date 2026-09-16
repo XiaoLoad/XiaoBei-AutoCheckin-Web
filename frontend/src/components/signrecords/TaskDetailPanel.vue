@@ -9,23 +9,23 @@
     <div v-else class="space-y-4">
       <!-- 任务要素：列表详情展示；「正在进行」卡片行内已含这些字段，传 show-facts=false 省略 -->
       <div v-if="showFacts && row" data-detail-item class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <div class="rounded-lg bg-white/70 px-2.5 py-2">
+        <div class="rounded-lg bg-elevated/70 px-2.5 py-2">
           <p class="text-[11px] text-ink-muted">日期</p>
           <p class="mt-0.5 truncate text-xs font-medium text-ink tabular-nums">
             {{ row.startDate }}<template v-if="row.endDate && row.endDate !== row.startDate"> ~ {{ row.endDate }}</template>
           </p>
         </div>
-        <div class="rounded-lg bg-white/70 px-2.5 py-2">
+        <div class="rounded-lg bg-elevated/70 px-2.5 py-2">
           <p class="text-[11px] text-ink-muted">时段</p>
           <p class="mt-0.5 truncate text-xs font-medium text-ink tabular-nums">
             {{ row.startTime || '—' }}<template v-if="row.endTime"> – {{ row.endTime }}</template>
           </p>
         </div>
-        <div class="rounded-lg bg-white/70 px-2.5 py-2">
+        <div class="rounded-lg bg-elevated/70 px-2.5 py-2">
           <p class="text-[11px] text-ink-muted">发起人</p>
           <p class="mt-0.5 truncate text-xs font-medium text-ink">{{ row.initiator || '—' }}</p>
         </div>
-        <div class="rounded-lg bg-white/70 px-2.5 py-2">
+        <div class="rounded-lg bg-elevated/70 px-2.5 py-2">
           <p class="text-[11px] text-ink-muted">拍照要求</p>
           <p class="mt-0.5 truncate text-xs font-medium" :class="row.needPhoto ? 'text-amber' : 'text-ink'">
             {{ row.needPhoto ? '需拍照' : '无需拍照' }}
@@ -63,14 +63,14 @@
             </div>
           </article>
         </div>
-        <p v-else class="mt-2 rounded-lg bg-white/70 px-2.5 py-2 text-xs text-ink-muted">该任务未设置地理围栏</p>
+        <p v-else class="mt-2 rounded-lg bg-elevated/70 px-2.5 py-2 text-xs text-ink-muted">该任务未设置地理围栏</p>
       </section>
 
       <!-- 签到凭证：一个任务只有一次签到，常态走单卡；多条仅作兜底 -->
       <section data-detail-item>
         <h4 class="text-[11px] font-medium uppercase tracking-wide text-ink-muted">签到凭证</h4>
 
-        <article v-if="logs.length === 1" class="mt-2 flex items-start gap-3.5 rounded-xl border border-ink/5 bg-white p-3">
+        <article v-if="logs.length === 1" class="mt-2 flex items-start gap-3.5 rounded-xl border border-ink/5 bg-elevated p-3">
           <!-- 签到照片：点击全屏查看；无图时保持同尺寸占位，避免与右侧文字错位 -->
           <button
             v-if="logs[0].imageUrl && !brokenImgs.has(imgKey(logs[0]))"
@@ -116,7 +116,7 @@
           <div
             v-for="log in logs"
             :key="log.id"
-            class="flex items-center gap-3 rounded-lg border border-ink/5 bg-white px-3 py-2"
+            class="flex items-center gap-3 rounded-lg border border-ink/5 bg-elevated px-3 py-2"
           >
             <div class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand/10 text-sm font-medium text-brand">
               {{ (log.studentName || '?').charAt(0) }}

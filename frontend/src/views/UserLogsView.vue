@@ -63,7 +63,7 @@
         </span>
         <button
           type="button"
-          class="ml-auto inline-flex shrink-0 items-center gap-1 rounded-lg px-1.5 py-1 text-xs font-medium text-brand transition hover:bg-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+          class="ml-auto inline-flex shrink-0 items-center gap-1 rounded-lg px-1.5 py-1 text-xs font-medium text-brand transition hover:bg-elevated/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
           @click="showAnomalies = !showAnomalies"
         >
           {{ showAnomalies ? '收起明细' : `展开 ${store.anomalies.length} 条明细` }}
@@ -79,7 +79,7 @@
              审计页上的叉极易被读成「清空这些记录」，而它其实只是「我看过了」。 -->
         <button
           type="button"
-          class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-ink/10 bg-white px-2.5 py-1 text-xs font-medium text-ink-soft transition hover:border-ink/20 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30 disabled:cursor-not-allowed disabled:opacity-60"
+          class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-ink/10 bg-elevated px-2.5 py-1 text-xs font-medium text-ink-soft transition hover:border-ink/20 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30 disabled:cursor-not-allowed disabled:opacity-60"
           :disabled="store.acking"
           @click="showAck = true"
         >
@@ -98,7 +98,7 @@
             :key="a.ip"
             data-detail-item
             type="button"
-            class="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-danger/15 bg-white px-2.5 py-1.5 text-left text-xs transition hover:border-danger/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+            class="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-danger/15 bg-elevated px-2.5 py-1.5 text-left text-xs transition hover:border-danger/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
             @click="onInspectIp(a.ip)"
           >
             <!-- ⚠️IP 同样不用 font-mono：与胶囊里其余文字（正文族）字形盒高度不同，
@@ -159,7 +159,7 @@
         <span
           v-for="a in store.ackedQuiet"
           :key="a.ip"
-          class="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-ink/10 bg-white px-2.5 py-1.5 text-xs"
+          class="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-ink/10 bg-elevated px-2.5 py-1.5 text-xs"
         >
           <span class="tabular-nums text-ink">{{ a.ip }}</span>
           <span class="text-ink/20">·</span>
@@ -190,12 +190,12 @@
             v-model="keywordDraft"
             type="text"
             placeholder="搜索用户名、IP 或事由"
-            class="h-9 w-full rounded-xl border border-ink/10 bg-white pl-9 pr-9 text-sm text-ink outline-none transition placeholder:text-ink/35 focus:border-brand focus:ring-4 focus:ring-brand/10"
+            class="h-9 w-full rounded-xl border border-ink/10 bg-elevated pl-9 pr-9 text-sm text-ink outline-none transition placeholder:text-ink-muted focus:border-brand focus:ring-4 focus:ring-brand/10"
           />
           <button
             v-if="keywordDraft"
             type="button"
-            class="absolute right-2 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded-md text-ink/35 transition hover:bg-cloud hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+            class="absolute right-2 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded-md text-ink-muted transition hover:bg-cloud hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
             aria-label="清除搜索"
             title="清除搜索"
             @click="onClearKeyword"
@@ -237,7 +237,7 @@
             class="whitespace-nowrap rounded-lg px-2 py-1.5 text-sm font-medium transition"
             :class="
               store.quickRange === q.key
-                ? 'bg-white text-brand shadow-sm'
+                ? 'bg-elevated text-brand shadow-sm'
                 : 'text-ink-muted hover:text-ink-soft'
             "
             @click="store.setQuickRange(q.key)"
@@ -250,7 +250,7 @@
           <button
             v-if="store.hasFilter"
             type="button"
-            class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl border border-ink/10 bg-white px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:border-ink/20 hover:text-ink"
+            class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl border border-ink/10 bg-elevated px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:border-ink/20 hover:text-ink"
             @click="onReset"
           >
             <Icon name="refresh" :size="14" />
@@ -258,7 +258,7 @@
           </button>
           <button
             type="button"
-            class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl border border-ink/10 bg-white px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:border-brand/30 hover:text-brand disabled:cursor-not-allowed disabled:opacity-60"
+            class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl border border-ink/10 bg-elevated px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:border-brand/30 hover:text-brand disabled:cursor-not-allowed disabled:opacity-60"
             :disabled="store.exporting"
             @click="onExport"
           >
@@ -286,7 +286,7 @@
             class="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition"
             :class="
               store.view === v.key
-                ? 'bg-white text-brand shadow-sm'
+                ? 'bg-elevated text-brand shadow-sm'
                 : 'text-ink-muted hover:text-ink-soft'
             "
             @click="onViewSwitch(v.key)"
@@ -335,7 +335,7 @@
           v-else-if="listCount === 0"
           class="flex min-h-[280px] flex-col items-center justify-center gap-2 py-8 text-center"
         >
-          <span class="grid h-11 w-11 place-items-center rounded-full bg-cloud text-ink/40">
+          <span class="grid h-11 w-11 place-items-center rounded-full bg-cloud text-ink-muted">
             <Icon name="shield" :size="20" />
           </span>
           <p class="text-sm font-medium text-ink">

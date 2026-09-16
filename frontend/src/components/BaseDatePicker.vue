@@ -7,7 +7,7 @@
       class="flex items-center gap-0.5 transition"
       :class="[
         block ? 'relative w-full' : 'rounded-lg',
-        !block && open ? 'bg-white shadow-sm ring-1 ring-ink/5' : '',
+        !block && open ? 'bg-elevated shadow-sm ring-1 ring-ink/5' : '',
       ]"
     >
       <button
@@ -18,14 +18,14 @@
           ? [
               'h-10 w-full justify-start rounded-xl border px-3 pr-10 text-sm',
               open
-                ? 'border-brand bg-white text-ink ring-4 ring-brand/15'
+                ? 'border-brand bg-elevated text-ink ring-4 ring-brand/15'
                 : 'border-ink/10 bg-cloud/70 hover:border-ink/20',
               hasValue ? 'text-ink' : 'text-ink-muted',
               'focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/15',
             ]
           : [
               'h-[30px] rounded-lg px-2 text-[13px]',
-              open || hasValue ? 'bg-white text-ink shadow-sm ring-1 ring-ink/5' : 'text-ink-muted hover:text-ink-soft',
+              open || hasValue ? 'bg-elevated text-ink shadow-sm ring-1 ring-ink/5' : 'text-ink-muted hover:text-ink-soft',
               open ? 'ring-brand/30' : '',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30',
             ]"
@@ -56,7 +56,7 @@
         <div
           v-if="open"
           ref="panel"
-          class="fixed z-[1000] w-[280px] rounded-2xl border border-ink/10 bg-white p-3 shadow-xl shadow-ink/10"
+          class="fixed z-[1000] w-[280px] rounded-2xl border border-ink/10 bg-elevated p-3 shadow-xl shadow-ink/10"
           role="dialog"
           :aria-label="range ? '选择日期范围' : '选择日期'"
           :style="panelStyle"

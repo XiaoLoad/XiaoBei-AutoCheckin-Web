@@ -9,7 +9,7 @@
         :value="modelValue[f.key] || ''"
         :placeholder="f.placeholder"
         autocomplete="off"
-        class="w-full rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
+        class="w-full rounded-xl border border-ink/10 bg-elevated px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
         @input="setField(f.key, $event.target.value)"
       />
       <p v-if="f.hint" class="mt-1 text-xs text-ink-muted">{{ f.hint }}</p>

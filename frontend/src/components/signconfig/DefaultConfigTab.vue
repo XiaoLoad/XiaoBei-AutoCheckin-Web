@@ -54,7 +54,7 @@
               :key="f.value"
               type="button"
               class="rounded-md px-2.5 py-1 text-[11px] font-medium transition"
-              :class="setTypeFilter === f.value ? 'bg-white text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
+              :class="setTypeFilter === f.value ? 'bg-elevated text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
               @click="setTypeFilter = f.value"
             >
               {{ f.label }}
@@ -98,7 +98,7 @@
               :ref="(el) => setRenameInput(el, s.id)"
               v-model="renameText"
               type="text"
-              class="min-w-0 flex-1 rounded-md border border-brand/40 bg-white px-2 py-0.5 text-sm text-ink outline-none focus:ring-2 focus:ring-brand/10"
+              class="min-w-0 flex-1 rounded-md border border-brand/40 bg-elevated px-2 py-0.5 text-sm text-ink outline-none focus:ring-2 focus:ring-brand/10"
               @keyup.enter="commitRename(s)"
               @keyup.esc="cancelRename"
               @blur="commitRename(s)"

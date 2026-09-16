@@ -2,12 +2,12 @@
   <Teleport to="body">
   <div class="fixed inset-0 z-50">
     <!-- 遮罩 -->
-    <div ref="overlay" class="absolute inset-0 bg-ink/40" @click="requestClose" />
+    <div ref="overlay" class="absolute inset-0 bg-scrim/40" @click="requestClose" />
 
     <!-- 右滑抽屉面板 -->
     <aside
       ref="panel"
-      class="absolute right-0 top-0 flex h-full w-full max-w-lg flex-col bg-white shadow-2xl"
+      class="absolute right-0 top-0 flex h-full w-full max-w-lg flex-col bg-elevated shadow-2xl"
       role="dialog"
       aria-modal="true"
       tabindex="-1"
@@ -28,7 +28,7 @@
       </header>
 
       <!-- 覆盖提示 -->
-      <div class="mx-5 mt-4 shrink-0 rounded-xl border-l-4 border-amber-400 bg-amber-50 px-3.5 py-2.5 text-xs leading-relaxed text-ink-soft">
+      <div class="mx-5 mt-4 shrink-0 rounded-xl border-l-4 border-amber/50 bg-amber/10 px-3.5 py-2.5 text-xs leading-relaxed text-ink-soft">
         套用会把本套完整配置<strong>覆盖复制</strong>到所选任务（任务转为独立持有该配置快照），不可撤销；已启用任务会立即按新配置重排下一次执行。
       </div>
 
@@ -40,7 +40,7 @@
             v-model="query"
             type="text"
             placeholder="搜索账号名称 / 学号 / 班级，空格分隔多关键词"
-            class="h-9 w-full rounded-lg border border-ink/10 bg-cloud/40 pl-9 pr-8 text-sm text-ink outline-none transition placeholder:text-ink-muted/70 focus:border-brand/40 focus:bg-white focus:ring-2 focus:ring-brand/10"
+            class="h-9 w-full rounded-lg border border-ink/10 bg-cloud/40 pl-9 pr-8 text-sm text-ink outline-none transition placeholder:text-ink-muted focus:border-brand/40 focus:bg-elevated focus:ring-2 focus:ring-brand/10"
           />
           <button
             v-if="query"
@@ -60,7 +60,7 @@
           <span class="text-[11px] text-ink-muted">批量：</span>
           <button
             type="button"
-            class="inline-flex h-7 items-center rounded-lg border border-ink/10 bg-white px-2.5 text-xs font-medium text-ink-soft transition hover:border-brand/30 hover:bg-brand/5 hover:text-brand disabled:opacity-50"
+            class="inline-flex h-7 items-center rounded-lg border border-ink/10 bg-elevated px-2.5 text-xs font-medium text-ink-soft transition hover:border-brand/30 hover:bg-brand/5 hover:text-brand disabled:opacity-50"
             :disabled="applyableAccounts.length === 0"
             @click="selectAllTasks"
           >
@@ -68,7 +68,7 @@
           </button>
           <button
             type="button"
-            class="inline-flex h-7 items-center rounded-lg border border-ink/10 bg-white px-2.5 text-xs font-medium text-ink-soft transition hover:border-brand/30 hover:bg-brand/5 hover:text-brand disabled:opacity-50"
+            class="inline-flex h-7 items-center rounded-lg border border-ink/10 bg-elevated px-2.5 text-xs font-medium text-ink-soft transition hover:border-brand/30 hover:bg-brand/5 hover:text-brand disabled:opacity-50"
             :disabled="applyableAccounts.length === 0"
             @click="invertSelection"
           >
@@ -83,7 +83,7 @@
             class="inline-flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition"
             :class="typeCounts[t.value]
               ? 'border-brand/30 bg-brand/10 text-brand'
-              : 'border-ink/10 bg-white text-ink-soft hover:border-brand/30 hover:bg-brand/5 hover:text-brand'"
+              : 'border-ink/10 bg-elevated text-ink-soft hover:border-brand/30 hover:bg-brand/5 hover:text-brand'"
             :title="brushTitle(t)"
             @click="selectByType(t.value)"
           >
@@ -113,13 +113,13 @@
         </div>
 
         <template v-else>
-          <div v-for="acc in visible" :key="acc.id" class="xb-apply-acc mb-2.5 rounded-xl border border-ink/10 bg-white/60 p-3">
+          <div v-for="acc in visible" :key="acc.id" class="xb-apply-acc mb-2.5 rounded-xl border border-ink/10 bg-elevated/60 p-3">
             <div class="flex items-center gap-2.5">
               <!-- 账号级勾选：一键勾/清该账号全部可应用任务 -->
               <button
                 type="button"
                 class="grid h-5 w-5 shrink-0 place-items-center rounded-md border transition"
-                :class="accChecked(acc.id) ? 'border-brand bg-brand text-white' : 'border-ink/25 bg-white text-transparent hover:border-brand/50'"
+                :class="accChecked(acc.id) ? 'border-brand bg-brand text-white' : 'border-ink/25 bg-elevated text-transparent hover:border-brand/50'"
                 :title="accChecked(acc.id) ? '取消勾选该账号全部任务' : '勾选该账号全部任务'"
                 :aria-label="`勾选 ${acc.name} 的全部任务`"
                 @click="toggleAccount(acc)"
@@ -151,13 +151,13 @@
                 :class="isChecked(acc.id, t.value)
                   ? 'border-brand bg-brand text-white'
                   : accEnabled(acc)
-                    ? 'border-ink/10 bg-white text-ink-soft hover:border-brand/30 hover:bg-brand/5'
-                    : 'border-ink/10 bg-white text-ink-muted opacity-60'"
+                    ? 'border-ink/10 bg-elevated text-ink-soft hover:border-brand/30 hover:bg-brand/5'
+                    : 'border-ink/10 bg-elevated text-ink-muted opacity-60'"
                 :disabled="!accEnabled(acc)"
                 :title="accEnabled(acc) ? '' : '账号未启用，无法套用'"
                 @click="toggleTask(acc.id, t.value)"
               >
-                <span class="h-1.5 w-1.5 rounded-full" :class="isChecked(acc.id, t.value) ? 'bg-white' : boundToSet(acc.id, t.value) ? 'bg-brand' : 'bg-ink/25'" />
+                <span class="h-1.5 w-1.5 rounded-full" :class="isChecked(acc.id, t.value) ? 'bg-elevated' : boundToSet(acc.id, t.value) ? 'bg-brand' : 'bg-ink/25'" />
                 <span>{{ t.label }}</span>
                 <span
                   v-if="!isChecked(acc.id, t.value) && boundToSet(acc.id, t.value)"

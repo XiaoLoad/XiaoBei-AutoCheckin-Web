@@ -212,7 +212,7 @@ import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import BaseChart from '@/components/BaseChart.vue'
 import { useDashboardStore } from '@/stores/dashboard'
-import { useThemeStore } from '@/stores/theme'
+import { useThemeStore, withAlpha } from '@/stores/theme'
 import { accountTypeMetaByCode, taskTypeMeta } from '@/utils/accountType'
 
 const store = useDashboardStore()
@@ -268,36 +268,33 @@ const visibleAccounts = computed(() => {
 // 头像首字：优先姓名，缺失回退登录账号
 const initialOf = (a) => (a.name || a.account || '?').charAt(0)
 
-// ===== 图表配色（与 App 设计令牌对齐：brand/success/danger/info/amber/ink）=====
-// brand 与 activity 均走 theme store：getter 形式保住 computed 的依赖追踪，切换主题时
-// 引用 C.brand / C.activity 的图表 option 会重新求值，BaseChart 的 deep watch 自动重绘。
-// 寝室系列取主题 brand、活动系列取 activity（默认即 info，撞色相的主题在色板单独覆盖），
-// 与两处徽标的取色口径一致——图表与徽标说的必须是同一种颜色。
+// ===== 图表配色（令牌真值见 stores/theme.js::chart）=====
+// ECharts 是 canvas 渲染、不解析 CSS 变量，故色值一律取 store 的 chart（读计算样式）。
+// getter 形式保住 computed 的依赖追踪：切色相或切明暗时引用 C.* 的 option 会重新求值，
+// BaseChart 的 deep watch 自动重绘。寝室系列取 brand、活动系列取 activity（默认即 info，
+// 撞色相的主题在色板单独覆盖），与两处徽标的取色口径一致——图表与徽标说的必须是同一种颜色。
 const C = {
-  success: '#16a34a',
-  fail:    '#dc2626',
-  skip:    '#F2A65A',
-  get brand() { return themeStore.brandHex },
-  get activity() { return themeStore.activityHex },
-  ink:     '#5B6478',
-  grid:    'rgba(91,100,120,0.10)',
-}
-// hex + alpha → rgba 字符串（用于渐变面积）
-const rgba = (hex, a) => {
-  const n = parseInt(hex.slice(1), 16)
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`
+  get success()  { return themeStore.chart.success },
+  get fail()     { return themeStore.chart.danger },
+  get skip()     { return themeStore.chart.amber },
+  get brand()    { return themeStore.chart.brand },
+  get activity() { return themeStore.chart.activity },
+  get ink()      { return themeStore.chart.ink },
+  get grid()     { return themeStore.chart.grid },
+  get axis()     { return themeStore.chart.axis },
+  get border()   { return themeStore.chart.border },
 }
 // 折线面积渐变（顶部稍浓、底部透明）
 const areaFill = (hex) => ({
   type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-  colorStops: [{ offset: 0, color: rgba(hex, 0.22) }, { offset: 1, color: rgba(hex, 0.02) }],
+  colorStops: [{ offset: 0, color: withAlpha(hex, 0.22) }, { offset: 1, color: withAlpha(hex, 0.02) }],
 })
 // 单条趋势线：圆润曲线 + 白色描边端点 + 柔和渐变 + hover 聚焦其余淡出
 function lineSeries(name, data, color) {
   return {
     name, type: 'line', smooth: true, symbol: 'circle', symbolSize: 7, showSymbol: true, data,
     lineStyle: { width: 2.5, color },
-    itemStyle: { color, borderColor: '#fff', borderWidth: 2 },
+    itemStyle: { color, borderColor: C.border, borderWidth: 2 },
     areaStyle: areaFill(color),
     emphasis: { focus: 'series' },
     animationDuration: 1100, animationEasing: 'cubicOut',
@@ -308,14 +305,14 @@ const trendOption = computed(() => ({
   grid: { left: 44, right: 18, top: 40, bottom: 28 },
   tooltip: {
     trigger: 'axis',
-    backgroundColor: rgba(themeStore.meta.panel, 0.92), borderWidth: 0, padding: [6, 10],
+    backgroundColor: withAlpha(themeStore.meta.panel, 0.92), borderWidth: 0, padding: [6, 10],
     textStyle: { color: '#fff', fontSize: 12 },
     axisPointer: { type: 'line', lineStyle: { color: C.brand, type: 'dashed' } }
   },
   legend: { top: 0, right: 0, icon: 'roundRect', itemWidth: 10, itemHeight: 10, textStyle: { color: C.ink, fontSize: 12 } },
   xAxis: {
     type: 'category', boundaryGap: false, data: activeTrend.value.map((p) => p.date),
-    axisLine: { lineStyle: { color: 'rgba(20,33,61,0.12)' } }, axisTick: { show: false },
+    axisLine: { lineStyle: { color: C.axis } }, axisTick: { show: false },
     axisLabel: { color: C.ink, fontSize: 12, interval: fRange.value === '30d' ? 4 : 0 }
   },
   yAxis: { type: 'value', min: 0, axisLabel: { color: C.ink, fontSize: 12 }, splitLine: { lineStyle: { color: C.grid, type: 'dashed' } } },
@@ -327,12 +324,12 @@ const trendOption = computed(() => ({
 }))
 
 const typeDistOption = computed(() => ({
-  tooltip: { trigger: 'item', backgroundColor: rgba(themeStore.meta.panel, 0.92), borderWidth: 0, textStyle: { color: '#fff', fontSize: 12 }, formatter: '{b}：{c} 次 ({d}%)' },
+  tooltip: { trigger: 'item', backgroundColor: withAlpha(themeStore.meta.panel, 0.92), borderWidth: 0, textStyle: { color: '#fff', fontSize: 12 }, formatter: '{b}：{c} 次 ({d}%)' },
   legend: { bottom: 0, textStyle: { color: C.ink, fontSize: 11 }, type: 'scroll' },
   series: [{
     type: 'pie', radius: ['46%', '70%'], center: ['50%', '42%'], avoidLabelOverlap: true,
     label: { show: false },
-    itemStyle: { borderColor: '#fff', borderWidth: 2, borderRadius: 6 },
+    itemStyle: { borderColor: C.border, borderWidth: 2, borderRadius: 6 },
     emphasis: { scale: true, scaleSize: 6 },
     data: [
       { value: me.value.typeDist?.activity || 0, name: '活动签到', itemStyle: { color: C.activity } },
@@ -342,7 +339,7 @@ const typeDistOption = computed(() => ({
 }))
 
 const taskOption = computed(() => ({
-  tooltip: { trigger: 'item', backgroundColor: rgba(themeStore.meta.panel, 0.92), borderWidth: 0, textStyle: { color: '#fff', fontSize: 12 }, formatter: '{b}：{c} 次 ({d}%)' },
+  tooltip: { trigger: 'item', backgroundColor: withAlpha(themeStore.meta.panel, 0.92), borderWidth: 0, textStyle: { color: '#fff', fontSize: 12 }, formatter: '{b}：{c} 次 ({d}%)' },
   title: {
     text: successRate.value + '%', subtext: '成功率',
     left: 'center', top: '37%',
@@ -353,7 +350,7 @@ const taskOption = computed(() => ({
   series: [{
     type: 'pie', radius: ['56%', '76%'], center: ['50%', '44%'], avoidLabelOverlap: true,
     label: { show: false },
-    itemStyle: { borderColor: '#fff', borderWidth: 2, borderRadius: 6 },
+    itemStyle: { borderColor: C.border, borderWidth: 2, borderRadius: 6 },
     emphasis: { scale: true, scaleSize: 6 },
     data: [
       { value: me.value.taskSummary?.success || 0, name: '成功', itemStyle: { color: C.success } },

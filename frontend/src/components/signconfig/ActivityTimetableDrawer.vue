@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <div ref="backdrop" class="fixed inset-0 z-40 flex justify-end bg-black/30 backdrop-blur-sm" @click.self="requestClose">
-      <aside ref="panel" class="flex h-full w-full max-w-3xl flex-col bg-white shadow-2xl" role="dialog" aria-label="课表与调度">
+      <aside ref="panel" class="flex h-full w-full max-w-3xl flex-col bg-elevated shadow-2xl" role="dialog" aria-label="课表与调度">
         <!-- 头部：学期 + 同步 -->
         <header class="flex shrink-0 flex-wrap items-center gap-2 border-b border-ink/10 px-5 py-3.5">
           <div class="min-w-0 flex-1">
@@ -466,5 +466,38 @@ watch([displayBlocks, periodRows], () => animateBlocks(), { flush: 'post' })
   background: rgba(255, 255, 255, 0.25);
   padding: 0 4px;
   font-size: 10px;
+}
+
+/* 深色：表头、时间列、空格子这几个是早期未走令牌的浅色硬编码，深色下会整块泛白。
+   在此集中覆盖，浅色一律不动（原值照旧）。
+   注：scoped 只会给最后一段简单选择器加 data-v，故 html[data-mode="dark"] 写在前面即生效。 */
+html[data-mode="dark"] .tt-head {
+  background: rgb(var(--colors-cloud));
+  color: rgb(var(--colors-ink-soft));
+}
+html[data-mode="dark"] .tt-time {
+  background: rgb(var(--colors-elevated));
+  color: rgb(var(--colors-ink-muted));
+}
+html[data-mode="dark"] .tt-time b {
+  color: rgb(var(--colors-ink));
+}
+html[data-mode="dark"] .tt-slot {
+  background: rgb(var(--colors-surface));
+}
+html[data-mode="dark"] .tt-slot-today {
+  background: rgb(var(--colors-brand) / 0.08);
+}
+html[data-mode="dark"] .tt-today-dot {
+  background: rgb(var(--colors-brand-ink));
+}
+html[data-mode="dark"] .tt-block {
+  box-shadow: 0 1px 3px rgb(var(--colors-shadow-ink) / 0.45);
+}
+html[data-mode="dark"] .tt-block:hover {
+  box-shadow: 0 4px 12px rgb(var(--colors-shadow-ink) / 0.5);
+}
+html[data-mode="dark"] .tt-block-selected {
+  outline-color: rgb(var(--colors-brand-ink));
 }
 </style>

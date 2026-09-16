@@ -13,7 +13,7 @@
             :key="t.value"
             type="button"
             class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition"
-            :class="effectiveTab === t.value ? 'bg-white text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
+            :class="effectiveTab === t.value ? 'bg-elevated text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
             @click="store.setActiveTab(t.value)"
           >
             <Icon :name="t.icon" :size="15" />{{ t.label }}

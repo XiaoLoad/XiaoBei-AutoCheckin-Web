@@ -2,12 +2,12 @@
   <Teleport to="body">
   <div class="fixed inset-0 z-50">
     <!-- 遮罩 -->
-    <div ref="overlay" class="absolute inset-0 bg-ink/40" @click="requestClose" />
+    <div ref="overlay" class="absolute inset-0 bg-scrim/40" @click="requestClose" />
 
     <!-- 右滑抽屉面板 -->
     <aside
       ref="panel"
-      class="absolute right-0 top-0 flex h-full w-full max-w-lg flex-col bg-white shadow-2xl"
+      class="absolute right-0 top-0 flex h-full w-full max-w-lg flex-col bg-elevated shadow-2xl"
       role="dialog"
       aria-modal="true"
       tabindex="-1"
@@ -52,7 +52,7 @@
         </div>
 
         <!-- 按账号分组的台账 -->
-        <div v-for="acc in detail" :key="acc.accountId" class="xb-usage-acc rounded-xl border border-ink/10 bg-white/60 p-3">
+        <div v-for="acc in detail" :key="acc.accountId" class="xb-usage-acc rounded-xl border border-ink/10 bg-elevated/60 p-3">
           <div class="flex items-center gap-2.5">
             <div class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand/10 text-sm font-semibold text-brand">
               {{ acc.accountName.charAt(0) }}
@@ -68,11 +68,11 @@
               v-for="t in acc.tasks"
               :key="t.taskType"
               type="button"
-              class="group inline-flex items-center gap-1.5 rounded-full border border-ink/10 bg-white px-2.5 py-1 text-xs text-ink-soft transition hover:border-brand/30 hover:bg-brand/5"
+              class="group inline-flex items-center gap-1.5 rounded-full border border-ink/10 bg-elevated px-2.5 py-1 text-xs text-ink-soft transition hover:border-brand/30 hover:bg-brand/5"
               :title="`查看 ${acc.accountName} 的${t.taskLabel}配置`"
               @click="goTo(acc.accountId, t.taskType)"
             >
-              <span class="h-1.5 w-1.5 rounded-full" :class="t.enabled ? 'bg-emerald-500' : 'bg-ink/25'" />
+              <span class="h-1.5 w-1.5 rounded-full" :class="t.enabled ? 'bg-success' : 'bg-ink/25'" />
               <span>{{ t.taskLabel }}</span>
               <Icon name="chevron-right" :size="12" class="text-ink-muted transition group-hover:translate-x-0.5 group-hover:text-brand" />
             </button>

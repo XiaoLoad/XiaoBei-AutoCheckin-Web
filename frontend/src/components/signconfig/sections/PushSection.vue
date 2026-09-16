@@ -37,7 +37,7 @@
             :key="s.value"
             type="button"
             class="rounded-lg px-3 py-1 font-medium transition"
-            :class="credSource === s.value ? 'bg-white text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
+            :class="credSource === s.value ? 'bg-elevated text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
             @click="credSource = s.value"
           >
             {{ s.label }}
@@ -133,7 +133,7 @@
             :key="t.value"
             type="button"
             class="rounded-lg px-3 py-1.5 text-sm font-medium transition"
-            :class="config.push.template === t.value ? 'bg-white text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
+            :class="config.push.template === t.value ? 'bg-elevated text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
             @click="config.push.template = t.value"
           >
             {{ t.label }}

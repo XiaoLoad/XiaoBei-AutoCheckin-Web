@@ -29,7 +29,7 @@
       <div v-if="delta !== null" class="flex items-center gap-1 text-xs" :class="deltaClass">
         <Icon :name="deltaIcon" :size="12" />
         <span class="font-medium">{{ delta }}</span>
-        <span class="text-ink-muted/70">· {{ deltaHint }}</span>
+        <span class="text-ink-muted">· {{ deltaHint }}</span>
       </div>
     </template>
   </div>

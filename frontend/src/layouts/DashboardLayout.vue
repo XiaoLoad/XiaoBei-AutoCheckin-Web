@@ -21,7 +21,7 @@
       <!-- 导航 -->
       <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-6 sidebar-scroll">
         <div v-for="group in navGroups" :key="group.title">
-          <p class="px-3 mb-2 text-[11px] font-semibold uppercase tracking-wider text-white/35">
+          <p class="px-3 mb-2 text-[11px] font-semibold uppercase tracking-wider text-white/50">
             {{ group.title }}
           </p>
           <div class="space-y-1">
@@ -44,12 +44,14 @@
       <!-- 用户区 -->
       <div class="border-t border-white/10 p-3">
         <div class="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-white/5 transition-colors">
-          <span class="grid place-items-center w-9 h-9 rounded-full bg-brand/20 text-brand font-semibold">
+          <!-- 头像压在恒深色的侧栏面板上（两态底都是深色），文字必须走亮色档：
+               用 text-brand 的话浅色下文字档是深蓝，压在 brand/20 的深底上只有 2.5 -->
+          <span class="grid place-items-center w-9 h-9 rounded-full bg-brand/20 text-brand-light font-semibold">
             {{ (auth.username || 'U').charAt(0).toUpperCase() }}
           </span>
           <div class="leading-tight flex-1 min-w-0">
             <p class="text-sm font-medium text-white truncate">{{ auth.username || '未登录' }}</p>
-            <p class="text-[11px] text-white/45 truncate">{{ roleLabel }}</p>
+            <p class="text-[11px] text-white/60 truncate">{{ roleLabel }}</p>
           </div>
           <!-- 主题色快捷切换：弹层向上展开，点击色板即换全站品牌色 -->
           <div ref="paletteWrap" class="relative shrink-0">
@@ -63,12 +65,14 @@
             >
               <Icon name="droplet" :size="17" />
             </button>
+            <!-- 宽度别超过 w-44：面板 right-0 对齐的是用户行最右侧那个按钮，它的右缘只在
+                 侧栏左缘 +192px 处（退出登录按钮还占着右边 44px），w-48 起左缘就贴到侧栏边了 -->
             <div
               v-if="paletteOpen"
               ref="palettePanel"
-              class="absolute bottom-full right-0 mb-2 w-44 rounded-xl bg-white p-1.5 shadow-[0_18px_40px_-20px_rgba(20,33,61,0.45)] ring-1 ring-ink/10"
+              class="absolute bottom-full right-0 mb-2 w-44 rounded-xl bg-elevated p-1.5 shadow-[0_18px_40px_-20px_rgba(20,33,61,0.45)] ring-1 ring-ink/10"
               role="menu"
-              aria-label="主题色"
+              aria-label="外观"
             >
               <p class="px-2.5 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">主题色</p>
               <button
@@ -87,6 +91,26 @@
                 <span class="flex-1 text-xs font-medium text-ink">{{ t.label }}</span>
                 <Icon v-if="themeStore.current === t.id" name="check" :size="13" class="shrink-0 text-brand" />
               </button>
+
+              <!-- 明暗与色相是两条独立的轴，故单独成组：换色相不影响明暗，反之亦然 -->
+              <div class="mt-1.5 border-t border-ink/5 px-1 pb-0.5 pt-2">
+                <p class="px-1.5 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">明暗</p>
+                <div class="flex gap-1" role="radiogroup" aria-label="选择明暗模式">
+                  <button
+                    v-for="m in MODES"
+                    :key="m.id"
+                    type="button"
+                    role="radio"
+                    :aria-checked="themeStore.mode === m.id"
+                    :title="m.hint"
+                    class="flex-1 rounded-lg px-1 py-1.5 text-[11px] font-medium transition"
+                    :class="themeStore.mode === m.id
+                      ? 'bg-brand/10 text-brand ring-1 ring-inset ring-brand/15'
+                      : 'text-ink-soft hover:bg-cloud/70'"
+                    @click="themeStore.setMode(m.id)"
+                  >{{ m.label }}</button>
+                </div>
+              </div>
             </div>
           </div>
           <button
@@ -104,7 +128,7 @@
 
     <!-- 移动端遮罩 -->
     <Transition name="fade">
-      <div v-if="open" class="fixed inset-0 z-30 bg-ink/40 lg:hidden" @click="open = false" />
+      <div v-if="open" class="fixed inset-0 z-30 bg-scrim/40 lg:hidden" @click="open = false" />
     </Transition>
 
     <!-- 退出登录二次确认弹窗（通用组件，可复用于其它危险操作） -->
@@ -179,6 +203,13 @@ const auth = useAuthStore()
 // 主题色快捷切换：色板清单来自单一事实源，选中态与切换动作走 theme store
 const themeStore = useThemeStore()
 const themes = THEME_PALETTE
+// 明暗三态：auto 跟随系统偏好，选中态比的是 store.mode（用户的选择）而非生效值，
+// 否则 auto 会被渲染成「浅色」或「深色」，用户看不出自己其实选的是自动
+const MODES = [
+  { id: 'auto', label: '自动', hint: '跟随系统设置' },
+  { id: 'light', label: '浅色', hint: '始终使用浅色' },
+  { id: 'dark', label: '深色', hint: '始终使用深色' }
+]
 const paletteOpen = ref(false)
 const paletteWrap = ref(null)
 const palettePanel = ref(null)

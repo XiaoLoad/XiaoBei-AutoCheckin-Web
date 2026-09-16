@@ -120,7 +120,7 @@
               <button
                 v-else
                 type="button"
-                class="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-ink/70 px-4 text-sm font-medium text-white transition hover:bg-ink disabled:opacity-50"
+                class="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-panel/70 px-4 text-sm font-medium text-white transition hover:bg-panel disabled:opacity-50"
                 :disabled="store.saving"
                 @click="onPause"
               >
@@ -204,7 +204,7 @@
         class="fixed inset-0 z-40 flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm"
         @click.self="showSaveConfirm = false"
       >
-        <div class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+        <div class="w-full max-w-sm rounded-2xl bg-elevated p-5 shadow-xl">
           <h3 class="text-base font-semibold text-ink">任务已启用</h3>
           <p class="mt-2 text-sm leading-relaxed text-ink-muted">该定时任务当前正在运行，保存将覆盖其配置并立即生效。确定继续保存吗？</p>
           <div class="mt-5 flex items-center justify-end gap-2">
@@ -222,7 +222,7 @@
         class="fixed inset-0 z-40 flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm"
         @click.self="showBindConfirm = false"
       >
-        <div class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+        <div class="w-full max-w-sm rounded-2xl bg-elevated p-5 shadow-xl">
           <h3 class="text-base font-semibold text-ink">换绑配置套</h3>
           <p class="mt-2 text-sm leading-relaxed text-ink-muted">任务正在运行，换绑后立即按新配置套执行。确定继续吗？</p>
           <div class="mt-5 flex items-center justify-end gap-2">

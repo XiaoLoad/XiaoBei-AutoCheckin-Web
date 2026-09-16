@@ -7,7 +7,7 @@
         :key="t.value"
         type="button"
         class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium transition"
-        :class="store.resourceSubTab === t.value ? 'bg-white text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
+        :class="store.resourceSubTab === t.value ? 'bg-elevated text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
         @click="store.setResourceSubTab(t.value)"
       >
         <Icon :name="t.icon" :size="15" />{{ t.label }}

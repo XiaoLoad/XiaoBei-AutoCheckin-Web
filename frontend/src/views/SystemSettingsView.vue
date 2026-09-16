@@ -64,7 +64,7 @@
             ></span>
 
             <div v-for="g in navGroups" :key="g.id" class="mb-4 last:mb-0">
-              <p class="mb-1.5 flex items-center gap-2 px-2.5 text-[11px] font-semibold uppercase tracking-wider text-ink/40">
+              <p class="mb-1.5 flex items-center gap-2 px-2.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
                 {{ g.title }}
                 <span
                   v-if="g.admin"
@@ -261,8 +261,8 @@
               <Icon name="droplet" :size="15" />
             </span>
             <div class="min-w-0">
-              <h3 id="sec-hd-theme" class="text-sm font-semibold text-ink">主题色</h3>
-              <p class="mt-0.5 text-xs leading-relaxed text-ink-muted">一键切换全站品牌色，即时生效；仅记忆在当前浏览器</p>
+              <h3 id="sec-hd-theme" class="text-sm font-semibold text-ink">主题色与明暗</h3>
+              <p class="mt-0.5 text-xs leading-relaxed text-ink-muted">两者互相独立：换色相不影响明暗，反之亦然；即时生效，仅记忆在当前浏览器</p>
             </div>
           </header>
 
@@ -276,7 +276,7 @@
               class="flex items-center gap-2 rounded-xl border px-3 py-2.5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
               :class="themeStore.current === t.id
                 ? 'border-brand/40 bg-brand/5 ring-1 ring-brand/15'
-                : 'border-ink/10 bg-white hover:border-ink/20 hover:bg-cloud/60'"
+                : 'border-ink/10 bg-elevated hover:border-ink/20 hover:bg-cloud/60'"
               @click="onPickTheme(t, $event)"
             >
               <span
@@ -286,6 +286,27 @@
               <span class="min-w-0 flex-1 truncate text-left text-xs font-medium" :class="themeStore.current === t.id ? 'text-ink' : 'text-ink-soft'">{{ t.label }}</span>
               <Icon v-if="themeStore.current === t.id" name="check" :size="13" class="shrink-0 text-brand" />
             </button>
+          </div>
+
+          <!-- 明暗单独一行：它是与色相互相独立的另一条轴，不放进上面那个单选组 -->
+          <div class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+            <span class="text-xs font-medium text-ink-soft">明暗</span>
+            <div class="flex gap-1.5" role="radiogroup" aria-label="选择明暗模式">
+              <button
+                v-for="m in MODES"
+                :key="m.id"
+                type="button"
+                role="radio"
+                :aria-checked="themeStore.mode === m.id"
+                class="rounded-xl border px-3 py-2 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+                :class="themeStore.mode === m.id
+                  ? 'border-brand/40 bg-brand/5 text-ink ring-1 ring-brand/15'
+                  : 'border-ink/10 bg-elevated text-ink-soft hover:border-ink/20 hover:bg-cloud/60'"
+                @click="themeStore.setMode(m.id)"
+              >
+                {{ m.label }}<span v-if="m.id === 'auto'" class="ml-1 font-normal text-ink-muted">（跟随系统）</span>
+              </button>
+            </div>
           </div>
         </section>
 
@@ -354,12 +375,12 @@
                 <div>
                   <dt class="text-[11px] font-semibold uppercase tracking-wider text-white/50">已运行时长</dt>
                   <dd class="mt-1 text-sm font-semibold tabular-nums text-white">{{ uptimeLabel }}</dd>
-                  <p v-if="startedAtLabel" class="mt-0.5 text-xs text-white/45">{{ startedAtLabel }}</p>
+                  <p v-if="startedAtLabel" class="mt-0.5 text-xs text-white/60">{{ startedAtLabel }}</p>
                 </div>
                 <div>
                   <dt class="text-[11px] font-semibold uppercase tracking-wider text-white/50">用户规模</dt>
                   <dd class="mt-1 text-sm font-semibold tabular-nums text-white">{{ usersTotal }} 人</dd>
-                  <p class="mt-0.5 text-xs text-white/45">管理员 {{ sysInfo?.users?.admins ?? '-' }} · 用户 {{ sysInfo?.users?.users ?? '-' }}</p>
+                  <p class="mt-0.5 text-xs text-white/60">管理员 {{ sysInfo?.users?.admins ?? '-' }} · 用户 {{ sysInfo?.users?.users ?? '-' }}</p>
                 </div>
               </dl>
             </div>
@@ -413,7 +434,7 @@
                     aria-hidden="true"
                     title="已修改，待保存"
                   ></span>
-                  <span v-if="item.type === 'int'" class="text-[11px] font-normal tabular-nums text-ink/40">
+                  <span v-if="item.type === 'int'" class="text-[11px] font-normal tabular-nums text-ink-muted">
                     {{ item.min }} ~ {{ item.max }}
                   </span>
                 </label>
@@ -708,7 +729,7 @@ const navGroups = computed(() => {
         { id: 'password', label: '修改密码' },
       ],
     },
-    { id: 'appearance', title: '外观', items: [{ id: 'theme', label: '主题色' }] },
+    { id: 'appearance', title: '外观', items: [{ id: 'theme', label: '主题色与明暗' }] },
   ]
   if (auth.isAdmin) {
     groups.push({ id: 'runtime', title: '系统运行', admin: true, items: [{ id: 'sysinfo', label: '运行状态' }] })
@@ -752,8 +773,15 @@ function goTo(id) {
 // 几何重算见下方 watch(navGroups)：watch 注册时即求一次旧值，写在这里会提前求值 navGroups
 // （其依赖 settingsLoading/PARAM_GROUPS 尚未初始化，触发 TDZ）
 
-// ==================== 区零：主题色（所有角色） ====================
+// ==================== 区零：主题色与明暗（所有角色） ====================
 const themeStore = useThemeStore()
+// 明暗三态：auto 跟随系统偏好。选中态比的是 store.mode（用户的选择）而非生效值，
+// 否则 auto 会被渲染成「浅色」或「深色」，用户看不出自己其实选的是自动
+const MODES = [
+  { id: 'auto', label: '自动' },
+  { id: 'light', label: '浅色' },
+  { id: 'dark', label: '深色' }
+]
 
 function onPickTheme(t, e) {
   if (themeStore.current === t.id) return

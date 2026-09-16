@@ -36,7 +36,7 @@
         :class="schedule.enabled ? 'bg-brand' : 'bg-ink/15'"
         @click.stop="$emit('toggle', schedule.id, !schedule.enabled)"
       >
-        <span ref="knob" class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow" />
+        <span ref="knob" class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-elevated shadow" />
       </button>
     </div>
 
@@ -88,7 +88,7 @@
         <button
           v-if="!confirming"
           type="button"
-          class="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-sm font-medium text-danger/80 transition hover:bg-danger/10"
+          class="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-sm font-medium text-danger transition hover:bg-danger/10"
           @click.stop="confirming = true"
         >
           <Icon name="trash" :size="14" />删除

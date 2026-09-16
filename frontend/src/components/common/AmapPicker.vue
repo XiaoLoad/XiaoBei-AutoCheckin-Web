@@ -25,7 +25,7 @@
         type="text"
         autocomplete="off"
         placeholder="搜索地点，如：学校名称 / 楼栋"
-        class="w-full rounded-xl border border-ink/10 bg-white py-2 pl-8 pr-3 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
+        class="w-full rounded-xl border border-ink/10 bg-elevated py-2 pl-8 pr-3 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
         @input="onKeywordInput"
         @keydown.enter.prevent="onSearchEnter"
         @focus="onFocusInput"
@@ -34,7 +34,7 @@
       <!-- 候选列表（唯一一个下拉：AMap 以无头模式调用，不再产生自带面板） -->
       <ul
         v-if="tips.length || searching"
-        class="absolute inset-x-0 top-full z-10 mt-1 max-h-52 overflow-y-auto rounded-xl border border-ink/10 bg-white py-1 shadow-lg shadow-ink/10"
+        class="absolute inset-x-0 top-full z-10 mt-1 max-h-52 overflow-y-auto rounded-xl border border-ink/10 bg-elevated py-1 shadow-lg shadow-ink/10"
       >
         <li v-if="searching" class="px-3 py-2 text-xs text-ink-muted">搜索中…</li>
         <li
@@ -55,16 +55,16 @@
       <div ref="mapEl" class="h-full w-full"></div>
       <div
         v-if="state === 'loading'"
-        class="absolute inset-0 grid place-items-center bg-white/70 text-xs text-ink-muted"
+        class="absolute inset-0 grid place-items-center bg-elevated/70 text-xs text-ink-muted"
       >地图加载中…</div>
-      <span class="pointer-events-none absolute bottom-2 left-2 rounded bg-white/90 px-1.5 py-0.5 text-[10px] text-ink-muted">
+      <span class="pointer-events-none absolute bottom-2 left-2 rounded bg-elevated/90 px-1.5 py-0.5 text-[10px] text-ink-muted">
         点击地图放置标记，可拖拽微调
       </span>
     </div>
 
     <!-- 当前坐标 + 地址（逆地理编码自动识别，回填到名称用） -->
     <div class="flex items-center gap-2 rounded-lg bg-cloud/70 px-2.5 py-1.5 text-xs">
-      <span class="shrink-0 rounded bg-white px-1.5 py-0.5 tabular-nums text-ink-soft">
+      <span class="shrink-0 rounded bg-elevated px-1.5 py-0.5 tabular-nums text-ink-soft">
         {{ point.lng ?? '—' }}, {{ point.lat ?? '—' }}
       </span>
       <span class="min-w-0 flex-1 truncate text-ink-muted" :title="addr || undefined">

@@ -39,7 +39,7 @@
             enterkeyhint="search"
             aria-label="搜索用户名"
             placeholder="搜索用户名…"
-            class="h-9 w-full rounded-xl border border-ink/10 bg-white pl-9 pr-8 text-sm text-ink outline-none transition placeholder:text-ink/35 focus:border-brand focus:ring-4 focus:ring-brand/10 sm:h-10"
+            class="h-9 w-full rounded-xl border border-ink/10 bg-elevated pl-9 pr-8 text-sm text-ink outline-none transition placeholder:text-ink-muted focus:border-brand focus:ring-4 focus:ring-brand/10 sm:h-10"
             @input="store.onKeywordInput"
           />
           <button
@@ -64,7 +64,7 @@
               role="tab"
               :aria-selected="roleFilter === opt.value"
               class="h-full rounded-[10px] px-2.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
-              :class="roleFilter === opt.value ? 'bg-white text-ink shadow-sm ring-1 ring-ink/5' : 'text-ink-muted hover:text-ink'"
+              :class="roleFilter === opt.value ? 'bg-elevated text-ink shadow-sm ring-1 ring-ink/5' : 'text-ink-muted hover:text-ink'"
               @click="setRole(opt.value)"
             >
               {{ opt.label }}
@@ -78,7 +78,7 @@
           <div class="ml-auto flex shrink-0 items-center gap-2 sm:ml-0">
             <button
               type="button"
-              class="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-ink/10 bg-white text-ink-muted transition hover:border-brand/30 hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30 disabled:opacity-50 sm:h-10 sm:w-10"
+              class="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-ink/10 bg-elevated text-ink-muted transition hover:border-brand/30 hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30 disabled:opacity-50 sm:h-10 sm:w-10"
               aria-label="刷新"
               :disabled="loading"
               @click="refresh"
@@ -137,12 +137,12 @@
           </colgroup>
           <thead>
             <tr class="border-b border-ink/10 text-ink-muted">
-              <th class="sticky top-0 z-10 bg-white px-3 py-2.5 align-middle font-medium whitespace-nowrap">用户</th>
-              <th class="sticky top-0 z-10 bg-white px-3 py-2.5 align-middle font-medium whitespace-nowrap">角色</th>
-              <th class="sticky top-0 z-10 bg-white px-3 py-2.5 align-middle font-medium whitespace-nowrap">状态</th>
-              <th class="sticky top-0 z-10 bg-white px-3 py-2.5 align-middle font-medium whitespace-nowrap">额度（已用 / 总额）</th>
-              <th class="sticky top-0 z-10 bg-white px-3 py-2.5 align-middle font-medium whitespace-nowrap">创建时间</th>
-              <th class="sticky top-0 z-10 bg-white pl-5 pr-3 py-2.5 align-middle text-left font-medium whitespace-nowrap">操作</th>
+              <th class="sticky top-0 z-10 bg-elevated px-3 py-2.5 align-middle font-medium whitespace-nowrap">用户</th>
+              <th class="sticky top-0 z-10 bg-elevated px-3 py-2.5 align-middle font-medium whitespace-nowrap">角色</th>
+              <th class="sticky top-0 z-10 bg-elevated px-3 py-2.5 align-middle font-medium whitespace-nowrap">状态</th>
+              <th class="sticky top-0 z-10 bg-elevated px-3 py-2.5 align-middle font-medium whitespace-nowrap">额度（已用 / 总额）</th>
+              <th class="sticky top-0 z-10 bg-elevated px-3 py-2.5 align-middle font-medium whitespace-nowrap">创建时间</th>
+              <th class="sticky top-0 z-10 bg-elevated pl-5 pr-3 py-2.5 align-middle text-left font-medium whitespace-nowrap">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -195,7 +195,8 @@
                       :class="quotaBarClass(item)"
                       :style="{ width: usagePercent(item) + '%' }"
                     />
-                    <!-- 阈值刻度：70% 警戒 / 90% 危险。压在填充之上，越接近上限越显眼 -->
+                    <!-- 阈值刻度：70% 警戒 / 90% 危险。压在填充之上，越接近上限越显眼；
+                         填充本身是实色令牌，故刻度在两态都用白线，不随明暗轴走 -->
                     <span class="pointer-events-none absolute inset-y-0 left-[70%] w-px bg-white/70" aria-hidden="true" />
                     <span class="pointer-events-none absolute inset-y-0 left-[90%] w-px bg-white/85" aria-hidden="true" />
                   </div>

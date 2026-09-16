@@ -61,7 +61,7 @@
               <div class="mt-1 text-[15px] font-semibold leading-none tabular-nums text-danger">{{ overview.unsigned }}</div>
             </div>
             <span class="my-1.5 w-px bg-ink/10" aria-hidden="true" />
-            <div class="bg-white/50 px-2.5 py-1 text-center sm:px-3">
+            <div class="bg-elevated/50 px-2.5 py-1 text-center sm:px-3">
               <div class="text-[10px] leading-tight text-ink-muted sm:text-[10.5px]">满勤率</div>
               <div class="mt-1 flex items-baseline justify-center gap-0.5">
                 <span class="text-[15px] font-bold leading-none tabular-nums text-brand">{{ overview.rate }}</span>
@@ -84,7 +84,7 @@
                 type="button"
                 :aria-pressed="typeFilter === t.value"
                 class="whitespace-nowrap rounded-lg px-2 py-1.5 text-[13px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
-                :class="typeFilter === t.value ? 'bg-white text-brand shadow-sm ring-1 ring-ink/5' : 'text-ink-muted hover:text-ink-soft'"
+                :class="typeFilter === t.value ? 'bg-elevated text-brand shadow-sm ring-1 ring-ink/5' : 'text-ink-muted hover:text-ink-soft'"
                 @click="store.setType(t.value)"
               >{{ t.label }}</button>
             </div>
@@ -98,7 +98,7 @@
                 :title="s.title"
                 :aria-pressed="statusFilter === s.value"
                 class="whitespace-nowrap rounded-lg px-2 py-1.5 text-[13px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
-                :class="statusFilter === s.value ? 'bg-white text-brand shadow-sm ring-1 ring-ink/5' : 'text-ink-muted hover:text-ink-soft'"
+                :class="statusFilter === s.value ? 'bg-elevated text-brand shadow-sm ring-1 ring-ink/5' : 'text-ink-muted hover:text-ink-soft'"
                 @click="store.setStatus(s.value)"
               >{{ s.label }}</button>
             </div>
@@ -107,7 +107,7 @@
           </div>
           <button
             type="button"
-            class="ml-auto grid h-9 w-9 place-items-center rounded-xl border border-ink/10 bg-white text-ink-muted transition hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30 disabled:opacity-50"
+            class="ml-auto grid h-9 w-9 place-items-center rounded-xl border border-ink/10 bg-elevated text-ink-muted transition hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30 disabled:opacity-50"
             aria-label="刷新"
             :disabled="loadingRecords"
             @click="store.refresh"

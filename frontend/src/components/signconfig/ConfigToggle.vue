@@ -8,7 +8,7 @@
     @click="toggle"
   >
     <span
-      class="inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform"
+      class="inline-block h-5 w-5 transform rounded-full bg-elevated shadow transition-transform"
       :class="modelValue ? 'translate-x-[22px]' : 'translate-x-0.5'"
     />
   </button>

@@ -30,7 +30,7 @@
         <button
           type="button"
           class="grid h-8 w-8 place-items-center rounded-lg text-sm font-medium transition"
-          :class="page <= 1 ? 'text-ink/30 cursor-not-allowed' : 'text-ink-muted hover:bg-white hover:text-ink'"
+          :class="page <= 1 ? 'text-ink/30 cursor-not-allowed' : 'text-ink-muted hover:bg-elevated hover:text-ink'"
           :disabled="disabled || page <= 1"
           aria-label="上一页"
           @click="go(page - 1)"
@@ -44,7 +44,7 @@
             v-else
             type="button"
             class="mx-0.5 inline-flex h-8 min-w-8 items-center justify-center rounded-lg px-2 text-sm font-medium transition"
-            :class="p === page ? 'bg-white text-brand shadow-sm' : 'text-ink-muted hover:bg-white hover:text-ink'"
+            :class="p === page ? 'bg-elevated text-brand shadow-sm' : 'text-ink-muted hover:bg-elevated hover:text-ink'"
             @click="go(p)"
           >
             {{ p }}
@@ -54,7 +54,7 @@
         <button
           type="button"
           class="grid h-8 w-8 place-items-center rounded-lg text-sm font-medium transition"
-          :class="page >= totalPages ? 'text-ink/30 cursor-not-allowed' : 'text-ink-muted hover:bg-white hover:text-ink'"
+          :class="page >= totalPages ? 'text-ink/30 cursor-not-allowed' : 'text-ink-muted hover:bg-elevated hover:text-ink'"
           :disabled="disabled || page >= totalPages"
           aria-label="下一页"
           @click="go(page + 1)"
@@ -71,14 +71,14 @@
             min="1"
             :max="totalPages"
             :disabled="disabled"
-            class="h-8 w-14 rounded-lg border border-ink/10 bg-white px-2 text-center text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10 disabled:opacity-50"
+            class="h-8 w-14 rounded-lg border border-ink/10 bg-elevated px-2 text-center text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10 disabled:opacity-50"
             @keyup.enter="onJump"
           />
           <span class="whitespace-nowrap">页</span>
           <button
             type="button"
             :disabled="disabled"
-            class="h-8 rounded-lg px-2 text-sm font-medium text-ink-soft transition hover:bg-white hover:text-ink disabled:opacity-50"
+            class="h-8 rounded-lg px-2 text-sm font-medium text-ink-soft transition hover:bg-elevated hover:text-ink disabled:opacity-50"
             @click="onJump"
           >
             确定

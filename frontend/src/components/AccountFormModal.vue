@@ -77,7 +77,7 @@
               :class="form.enabled ? 'bg-success' : 'bg-ink/25'"
             >
               <span
-                class="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all"
+                class="absolute top-0.5 h-4 w-4 rounded-full bg-elevated shadow transition-all"
                 :class="form.enabled ? 'left-[18px]' : 'left-0.5'"
               />
             </span>
@@ -228,7 +228,7 @@
                     autocomplete="off"
                     maxlength="64"
                     placeholder="如 我的 QQ 邮箱"
-                    class="w-full rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
+                    class="w-full rounded-xl border border-ink/10 bg-elevated px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
                   />
                 </div>
                 <PushCredentialFields v-model="inlineNew.fields" :channel="ch" />

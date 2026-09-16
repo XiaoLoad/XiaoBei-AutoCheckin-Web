@@ -63,7 +63,7 @@
         <div class="ml-auto flex flex-wrap items-center gap-2">
           <button
             type="button"
-            class="inline-flex items-center gap-1.5 rounded-xl border border-ink/10 bg-white px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:border-danger/30 hover:text-danger"
+            class="inline-flex items-center gap-1.5 rounded-xl border border-ink/10 bg-elevated px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:border-danger/30 hover:text-danger"
             @click="openPurge"
           >
             <Icon name="trash" :size="14" />
@@ -80,7 +80,7 @@
               class="whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm font-medium transition"
               :class="
                 typeFilter === t.value
-                  ? 'bg-white text-brand shadow-sm'
+                  ? 'bg-elevated text-brand shadow-sm'
                   : 'text-ink-muted hover:text-ink-soft'
               "
               @click="store.setType(t.value)"
@@ -100,7 +100,7 @@
               class="whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm font-medium transition"
               :class="
                 statusFilter === s.value
-                  ? 'bg-white text-brand shadow-sm'
+                  ? 'bg-elevated text-brand shadow-sm'
                   : 'text-ink-muted hover:text-ink-soft'
               "
               @click="store.setStatus(s.value)"
@@ -117,10 +117,10 @@
     <Transition name="fade">
       <div
         v-if="purgeOpen"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-scrim/40 px-4"
         @click.self="closePurge"
       >
-        <div class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+        <div class="w-full max-w-sm rounded-2xl bg-elevated p-5 shadow-xl">
           <h3 class="text-base font-semibold text-ink">清空我的执行日志</h3>
           <p class="mt-1.5 text-sm leading-relaxed text-ink-muted">
             将删除你名下、<span class="font-medium text-ink-soft">该日期之前</span>的全部执行日志（不可恢复）。系统仍会按保留策略自动清理更早记录。
@@ -232,7 +232,7 @@
                   <span>{{
                     row.initiator === "manual" ? "手动触发" : "系统触发"
                   }}</span>
-                  <span class="text-ink-muted/80">{{
+                  <span class="text-ink-muted">{{
                     store.isOpen(row.id) ? "收起配置" : "查看配置"
                   }}</span>
                 </div>
@@ -311,7 +311,7 @@
                   <!-- 配置套信息：折叠卡片，点击展开内部看完整配置快照 -->
                   <div
                     data-detail-item
-                    class="overflow-hidden rounded-xl border border-ink/5 bg-white"
+                    class="overflow-hidden rounded-xl border border-ink/5 bg-elevated"
                   >
                     <button
                       type="button"
@@ -365,7 +365,7 @@
                           任务自持配置，不随配置套变动
                         </span>
                         <span
-                          class="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald/10 px-2 py-0.5 text-[11px] text-emerald"
+                          class="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-[11px] text-success"
                         >
                           <Icon name="clock" :size="11" />执行时配置快照
                         </span>
@@ -377,7 +377,7 @@
                           v-for="s in detailSections(configOf(row))"
                           :key="s.key"
                           data-detail-item
-                          class="rounded-xl border border-ink/5 bg-white p-3"
+                          class="rounded-xl border border-ink/5 bg-elevated p-3"
                         >
                           <h4
                             class="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-ink-muted"
@@ -439,7 +439,7 @@
                 </template>
                 <div v-else class="py-7 text-center">
                   <p class="text-sm text-ink-muted">无配置快照</p>
-                  <p class="mt-1 text-xs text-ink-muted/80">
+                  <p class="mt-1 text-xs text-ink-muted">
                     该记录执行时未保存配置快照（升级前的历史日志）。
                   </p>
                 </div>
@@ -447,7 +447,7 @@
                 <!-- 推送结果：各通道本次执行的真实成败（来自 push_logs 落库，与执行日志关联） -->
                 <div
                   data-detail-item
-                  class="rounded-xl border border-ink/5 bg-white p-3"
+                  class="rounded-xl border border-ink/5 bg-elevated p-3"
                 >
                   <h4
                     class="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-ink-muted"
@@ -513,7 +513,7 @@
                 <!-- 提交参数：本次尝试提交的真实载荷（含 10m 抖动后坐标/实际备注/平台任务 ID 等） -->
                 <div
                   data-detail-item
-                  class="rounded-xl border border-ink/5 bg-white p-3"
+                  class="rounded-xl border border-ink/5 bg-elevated p-3"
                 >
                   <h4
                     class="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-ink-muted"

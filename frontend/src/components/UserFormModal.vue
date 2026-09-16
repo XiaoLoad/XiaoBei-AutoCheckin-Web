@@ -66,7 +66,7 @@
               :class="form.enabled ? 'bg-success' : 'bg-ink/25'"
             >
               <span
-                class="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all"
+                class="absolute top-0.5 h-4 w-4 rounded-full bg-elevated shadow transition-all"
                 :class="form.enabled ? 'left-[18px]' : 'left-0.5'"
               />
             </span>

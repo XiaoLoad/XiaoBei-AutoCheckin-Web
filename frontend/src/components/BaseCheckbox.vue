@@ -12,7 +12,7 @@
         @change="$emit('update:modelValue', $event.target.checked)"
       />
       <span
-        class="pointer-events-none absolute inset-0 rounded-[5px] border-2 border-ink/25 bg-white transition-[background-color,border-color] duration-200 ease-out peer-checked:border-brand peer-checked:bg-brand peer-focus-visible:ring-[3px] peer-focus-visible:ring-brand/40"
+        class="pointer-events-none absolute inset-0 rounded-[5px] border-2 border-ink/25 bg-elevated transition-[background-color,border-color] duration-200 ease-out peer-checked:border-brand peer-checked:bg-brand peer-focus-visible:ring-[3px] peer-focus-visible:ring-brand/40"
       ></span>
       <svg
         class="check-mark pointer-events-none relative h-3 w-3 text-white"

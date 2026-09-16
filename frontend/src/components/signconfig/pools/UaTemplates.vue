@@ -11,7 +11,7 @@
         <input
           v-model="query"
           type="text"
-          class="w-full rounded-xl border border-ink/10 bg-white py-2 pl-9 pr-3 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
+          class="w-full rounded-xl border border-ink/10 bg-elevated py-2 pl-9 pr-3 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
           placeholder="搜索机型名称"
           @input="onQuery"
         />
@@ -111,7 +111,7 @@
           <label class="mb-1.5 block text-sm font-medium text-ink-soft">机型名称</label>
           <input
             v-model="form.name"
-            class="w-full rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
+            class="w-full rounded-xl border border-ink/10 bg-elevated px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
             placeholder="模板名称（如 iPhone 15）"
           />
         </div>
@@ -120,7 +120,7 @@
           <textarea
             v-model="form.ua"
             rows="3"
-            class="w-full resize-y rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
+            class="w-full resize-y rounded-xl border border-ink/10 bg-elevated px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
             placeholder="User-Agent 字符串"
           />
         </div>

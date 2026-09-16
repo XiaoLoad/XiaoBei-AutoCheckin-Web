@@ -35,12 +35,12 @@
       <Transition name="fade">
         <div
           v-if="open && thumbUrl"
-          class="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-scrim/60 p-4"
           @click.self="open = false"
         >
           <img
             :src="thumbUrl"
-            class="max-h-[85vh] max-w-[90vw] rounded-2xl bg-white shadow-2xl"
+            class="max-h-[85vh] max-w-[90vw] rounded-2xl bg-elevated shadow-2xl"
             alt="签到图片大图"
           />
         </div>

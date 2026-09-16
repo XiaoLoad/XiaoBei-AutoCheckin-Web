@@ -2,12 +2,12 @@
   <Teleport to="body">
   <div class="fixed inset-0 z-50">
     <!-- 遮罩 -->
-    <div ref="overlay" class="absolute inset-0 bg-ink/40" @click="requestClose" />
+    <div ref="overlay" class="absolute inset-0 bg-scrim/40" @click="requestClose" />
 
     <!-- 右滑抽屉面板：主从双列（左轨模式/配置套，右列搜索/工具/账号列表），加宽到 3xl 换列表高度 -->
     <aside
       ref="panel"
-      class="absolute right-0 top-0 flex h-full w-full max-w-3xl flex-col bg-white shadow-2xl"
+      class="absolute right-0 top-0 flex h-full w-full max-w-3xl flex-col bg-elevated shadow-2xl"
       role="dialog"
       aria-modal="true"
       tabindex="-1"
@@ -87,7 +87,7 @@
                       v-for="t in g.tasks"
                       :key="t"
                       class="rounded-full border px-2.5 py-0.5 text-[11px] leading-4"
-                      :class="result.action === 'disable' ? 'border-warning/25 bg-white text-warning' : 'border-success/25 bg-white text-success'"
+                      :class="result.action === 'disable' ? 'border-warning/25 bg-elevated text-warning' : 'border-success/25 bg-elevated text-success'"
                     >{{ t }}</span>
                   </div>
                 </div>
@@ -155,7 +155,7 @@
                   class="flex flex-col items-start gap-0.5 rounded-xl border px-3 py-2.5 text-left transition"
                   :class="mode === 'enable'
                     ? 'border-brand/40 bg-brand/5 ring-1 ring-brand/15'
-                    : 'border-ink/10 bg-white hover:border-brand/30'"
+                    : 'border-ink/10 bg-elevated hover:border-brand/30'"
                   @click="setMode('enable')"
                 >
                   <span class="inline-flex items-center gap-1.5 text-sm font-medium" :class="mode === 'enable' ? 'text-brand' : 'text-ink-soft'">
@@ -168,7 +168,7 @@
                   class="flex flex-col items-start gap-0.5 rounded-xl border px-3 py-2.5 text-left transition"
                   :class="mode === 'disable'
                     ? 'border-warning/40 bg-warning/5 ring-1 ring-warning/15'
-                    : 'border-ink/10 bg-white hover:border-brand/30'"
+                    : 'border-ink/10 bg-elevated hover:border-brand/30'"
                   @click="setMode('disable')"
                 >
                   <span class="inline-flex items-center gap-1.5 text-sm font-medium" :class="mode === 'disable' ? 'text-warning' : 'text-ink-soft'">
@@ -200,7 +200,7 @@
                   type="text"
                   placeholder="搜索账号名称 / 学号 / 班级"
                   title="支持空格分隔多关键词，取交集匹配"
-                  class="h-9 w-full rounded-lg border border-ink/10 bg-cloud/40 pl-9 pr-8 text-sm text-ink outline-none transition placeholder:text-ink-muted/70 focus:border-brand/40 focus:bg-white focus:ring-2 focus:ring-brand/10"
+                  class="h-9 w-full rounded-lg border border-ink/10 bg-cloud/40 pl-9 pr-8 text-sm text-ink outline-none transition placeholder:text-ink-muted focus:border-brand/40 focus:bg-elevated focus:ring-2 focus:ring-brand/10"
                 />
                 <button
                   v-if="query"
@@ -218,7 +218,7 @@
                 class="inline-flex h-9 shrink-0 items-center gap-1 rounded-lg border px-2.5 text-xs font-medium transition"
                 :class="onlyRunning
                   ? 'border-warning/40 bg-warning/10 text-warning'
-                  : 'border-ink/10 bg-white text-ink-soft hover:border-brand/30 hover:bg-brand/5 hover:text-brand'"
+                  : 'border-ink/10 bg-elevated text-ink-soft hover:border-brand/30 hover:bg-brand/5 hover:text-brand'"
                 @click="onlyRunning = !onlyRunning"
               >
                 {{ onlyRunning ? '显示全部账号' : '只看运行中' }}
@@ -232,7 +232,7 @@
                 class="inline-flex h-7 items-center rounded-lg border px-2.5 text-xs font-medium transition"
                 :class="allSelected
                   ? 'border-brand bg-brand text-white'
-                  : 'border-ink/10 bg-white text-ink-soft hover:border-brand/30 hover:bg-brand/5 hover:text-brand'"
+                  : 'border-ink/10 bg-elevated text-ink-soft hover:border-brand/30 hover:bg-brand/5 hover:text-brand'"
                 :disabled="applyablePairs.length === 0"
                 @click="selectAllTasks"
               >
@@ -240,7 +240,7 @@
               </button>
               <button
                 type="button"
-                class="inline-flex h-7 items-center rounded-lg border border-ink/10 bg-white px-2.5 text-xs font-medium text-ink-soft transition hover:border-brand/30 hover:bg-brand/5 hover:text-brand disabled:opacity-50"
+                class="inline-flex h-7 items-center rounded-lg border border-ink/10 bg-elevated px-2.5 text-xs font-medium text-ink-soft transition hover:border-brand/30 hover:bg-brand/5 hover:text-brand disabled:opacity-50"
                 :disabled="applyablePairs.length === 0"
                 @click="invertSelection"
               >
@@ -254,7 +254,7 @@
                 class="inline-flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition"
                 :class="typeCounts[t.value]
                   ? 'border-brand/30 bg-brand/10 text-brand'
-                  : 'border-ink/10 bg-white text-ink-soft hover:border-brand/30 hover:bg-brand/5 hover:text-brand'"
+                  : 'border-ink/10 bg-elevated text-ink-soft hover:border-brand/30 hover:bg-brand/5 hover:text-brand'"
                 :title="brushTitle(t)"
                 @click="selectByType(t.value)"
               >
@@ -303,7 +303,7 @@
                       :class="accChecked(acc.id)
                         ? 'border-brand bg-brand text-white'
                         : accountSelectable(acc)
-                          ? 'border-ink/25 bg-white text-transparent hover:border-brand/50'
+                          ? 'border-ink/25 bg-elevated text-transparent hover:border-brand/50'
                           : 'border-ink/15 bg-cloud/60 text-transparent cursor-not-allowed'"
                       :disabled="!accountSelectable(acc)"
                       :title="accountSelectable(acc) ? (accChecked(acc.id) ? '取消勾选该账号全部任务' : '勾选该账号全部任务') : accountDisabledTitle(acc)"
@@ -338,15 +338,15 @@
                         :class="isChecked(acc.id, t.value)
                           ? 'border-brand bg-brand text-white'
                           : taskSelectable(acc, t.value)
-                            ? 'border-ink/10 bg-white text-ink-soft hover:border-brand/30'
-                            : 'cursor-not-allowed border-ink/10 bg-white text-ink-muted opacity-55'"
+                            ? 'border-ink/10 bg-elevated text-ink-soft hover:border-brand/30'
+                            : 'cursor-not-allowed border-ink/10 bg-elevated text-ink-muted opacity-55'"
                         :disabled="!taskSelectable(acc, t.value)"
                         :title="taskSelectable(acc, t.value) ? '' : taskDisabledTitle(acc, t.value)"
                         @click="toggleTask(acc.id, t.value)"
                       >
                         <span
                           class="h-1.5 w-1.5 rounded-full"
-                          :class="isChecked(acc.id, t.value) ? 'bg-white' : (taskRunning(acc.id, t.value) ? 'bg-success' : 'bg-ink/25')"
+                          :class="isChecked(acc.id, t.value) ? 'bg-elevated' : (taskRunning(acc.id, t.value) ? 'bg-success' : 'bg-ink/25')"
                         />
                         <span>{{ t.label }}</span>
                         <span v-if="taskRunning(acc.id, t.value)" class="text-[10px] opacity-70">运行中</span>
@@ -434,7 +434,7 @@
                   <span
                     v-for="e in alreadyEnabled"
                     :key="e.accId + ':' + e.type"
-                    class="rounded-full border border-amber/25 bg-white px-2 py-0.5 text-[10px] leading-4 text-amber"
+                    class="rounded-full border border-amber/25 bg-elevated px-2 py-0.5 text-[10px] leading-4 text-amber"
                   >{{ e.name }} · {{ e.taskLabel }}</span>
                 </div>
               </div>

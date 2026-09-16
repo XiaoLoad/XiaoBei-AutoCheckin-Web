@@ -39,7 +39,7 @@
             v-model.number="config.time.randomDelayMax"
             type="number"
             min="0"
-            class="w-28 rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
+            class="w-28 rounded-xl border border-ink/10 bg-elevated px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
           />
           <span class="text-sm text-ink-muted">分钟</span>
         </div>
@@ -70,7 +70,7 @@
             :key="m.value"
             type="button"
             class="rounded-lg px-3 py-1.5 text-sm font-medium transition"
-            :class="config.time.mode === m.value ? 'bg-white text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
+            :class="config.time.mode === m.value ? 'bg-elevated text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
             @click="config.time.mode = m.value"
           >
             {{ m.label }}

@@ -10,7 +10,7 @@
             :key="m.value"
             type="button"
             class="rounded-lg px-3 py-1.5 text-sm font-medium transition"
-            :class="config.activity.strategy === m.value ? 'bg-white text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
+            :class="config.activity.strategy === m.value ? 'bg-elevated text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
             @click="onStrategy(m.value)"
           >
             {{ m.label }}
@@ -51,7 +51,7 @@
                   type="text"
                   inputmode="numeric"
                   placeholder="教务学号"
-                  class="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
+                  class="w-full rounded-lg border border-ink/10 bg-elevated px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
                 />
               </div>
               <div class="min-w-0 flex-1">
@@ -60,7 +60,7 @@
                   type="password"
                   autocomplete="new-password"
                   placeholder="教务系统登录密码"
-                  class="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
+                  class="w-full rounded-lg border border-ink/10 bg-elevated px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
                 />
               </div>
               <button
@@ -80,7 +80,7 @@
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-soft">
               <span>学号 <b class="font-medium text-ink">{{ overview.account.studentNo }}</b></span>
               <span v-if="className" class="text-ink-muted">{{ className }}</span>
-              <span v-if="overview.semester" class="rounded-md bg-white px-1.5 py-0.5 font-mono text-[11px] text-ink-soft">{{ overview.semester.semester }}</span>
+              <span v-if="overview.semester" class="rounded-md bg-elevated px-1.5 py-0.5 font-mono text-[11px] text-ink-soft">{{ overview.semester.semester }}</span>
               <span v-if="overview.timetableSyncedAt" class="text-ink-muted">同步于 {{ overview.timetableSyncedAt }}</span>
               <span v-if="overview.account.lastError" class="text-warning">{{ overview.account.lastError }}</span>
             </div>
@@ -95,7 +95,7 @@
               </button>
               <button
                 type="button"
-                class="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-sm text-ink-muted transition hover:bg-white disabled:opacity-40"
+                class="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-sm text-ink-muted transition hover:bg-elevated disabled:opacity-40"
                 :disabled="isSyncing"
                 @click="onUnbind"
               >
@@ -114,7 +114,7 @@
               <input
                 v-model.number="config.activity.course.leadMinutes"
                 type="number" min="0" max="120"
-                class="w-20 rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
+                class="w-20 rounded-xl border border-ink/10 bg-elevated px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
               />
               <span class="text-xs text-ink-muted">分钟开始留意</span>
             </div>
@@ -123,7 +123,7 @@
               <input
                 v-model.number="config.activity.course.tailMinutes"
                 type="number" min="0" max="120"
-                class="w-20 rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
+                class="w-20 rounded-xl border border-ink/10 bg-elevated px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
               />
               <span class="text-xs text-ink-muted">分钟</span>
             </div>
@@ -148,7 +148,7 @@
               <input
                 v-model.number="config.activity.course.pollIntervalSec"
                 type="number" min="30" max="1800" step="30"
-                class="w-20 rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
+                class="w-20 rounded-xl border border-ink/10 bg-elevated px-3 py-2 text-sm text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
               />
               <span class="text-xs text-ink-muted">秒检查一次（默认 120 秒，一般无需修改）</span>
             </div>

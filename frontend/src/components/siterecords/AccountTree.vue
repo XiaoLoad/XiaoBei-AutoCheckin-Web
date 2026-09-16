@@ -6,14 +6,14 @@
         <h3 class="text-sm font-semibold text-ink">账号树</h3>
         <span class="text-[11.5px] tabular-nums text-ink-muted">{{ treeCounts.users }} 位用户 · {{ treeCounts.accounts }} 个账号</span>
       </div>
-      <div class="mt-2.5 flex items-center gap-2 rounded-xl bg-cloud/60 px-3 py-2 ring-1 ring-inset ring-ink/5 transition focus-within:bg-white focus-within:ring-2 focus-within:ring-brand/30">
+      <div class="mt-2.5 flex items-center gap-2 rounded-xl bg-cloud/60 px-3 py-2 ring-1 ring-inset ring-ink/5 transition focus-within:bg-elevated focus-within:ring-2 focus-within:ring-brand/30">
         <Icon name="search" :size="15" class="shrink-0 text-ink-muted" />
         <input
           :value="keyword"
           type="text"
           placeholder="搜索用户名 / B 平台账号…"
           aria-label="搜索用户名或 B 平台账号"
-          class="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-muted/60"
+          class="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-muted"
           @input="keyword = $event.target.value"
         />
         <button
@@ -166,11 +166,13 @@ function toggleNode(id) {
   expanded.value = next
 }
 
-// 头像配色：按用户 id 稳定散列到四套柔和底色，列表扫读时可区分
+// 头像配色：按用户 id 稳定散列到四套柔和底色，列表扫读时可区分。
+// 四套都走语义令牌——默认调色板的 violet-600 在浅底 5.04 达标、深底只有 1.86，
+// 而一个色值不可能两态都达标（同 text-brand 的拆档问题），交给明暗轴换值最省事。
 const AVATAR_CLS = [
   'bg-brand/10 text-brand',
   'bg-success/10 text-success',
-  'bg-violet-500/10 text-violet-600',
+  'bg-info/10 text-info',
   'bg-amber/15 text-amber',
 ]
 function avatarCls(node) {

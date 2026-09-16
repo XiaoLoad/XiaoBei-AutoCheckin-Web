@@ -3,6 +3,147 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==========================================================================
+   颜色令牌 · 明暗轴
+   --------------------------------------------------------------------------
+   色相轴（brand 三档 + surface / card / panel）由 tailwindcss-themer 生成，
+   不在这里；本文件负责与明暗相关的令牌：
+     浅色值 = 令牌变量化之前的字面值，故浅色模式视觉零变化；
+     深色值按「跟着色相走」推导 —— 表面以各主题 panel 为锚向白提亮，
+     文字与语义色保持中性（彩字压彩底伤可读性），语义色统一按**最亮的**
+     表面（6 套里白度最高的 elevated，即 #384F49）校准，保证 6 套全部达标。
+   层次两态一致：panel(侧栏) < surface(页面底) < cloud(浅底) < card(卡片) < elevated(浮层/输入框)
+   推导与对比度核算见本文件末尾注释。
+   ========================================================================== */
+:root {
+  color-scheme: light;
+  --colors-ink: 20 33 61;          /* #14213D */
+  --colors-ink-soft: 39 50 79;     /* #27324F */
+  --colors-ink-muted: 91 100 120;  /* #5B6478 */
+  --colors-paper: 251 247 240;     /* #FBF7F0 */
+  --colors-cloud: 238 242 249;     /* #EEF2F9 */
+  --colors-elevated: 255 255 255;  /* #FFFFFF */
+  --colors-scrim: 20 33 61;        /* #14213D 遮罩：与旧 bg-ink/40 同值 */
+  --colors-amber: 242 166 90;      /* #F2A65A */
+  --colors-amber-soft: 248 197 138; /* #F8C58A */
+  --colors-success: 22 163 74;     /* #16a34a */
+  --colors-success-soft: 220 252 231; /* #dcfce7 */
+  --colors-warning: 217 119 6;     /* #d97706 */
+  --colors-warning-soft: 254 243 199; /* #fef3c7 */
+  --colors-danger: 220 38 38;      /* #dc2626 */
+  --colors-danger-soft: 254 226 226; /* #fee2e2 */
+  --colors-info: 14 165 233;       /* #0ea5e9 */
+  --colors-info-soft: 224 242 254; /* #e0f2fe */
+  /* 语义色的**文字专用档**：上面那些是填充档，直接当文字用会不达标
+     （success 画白底 3.30、warning 3.19、info 2.77、amber 2.02、danger 压自身淡底 4.13）。
+     文字档统一取同色系的深档，对白/对自身 /10 淡底均 ≥4.5（括号内为两者实测值）。 */
+  --colors-success-ink: 22 101 52;  /* #166534  7.13 / 6.14 */
+  --colors-warning-ink: 146 64 14;  /* #92400E  7.09 / 6.08 */
+  --colors-danger-ink: 185 28 28;   /* #B91C1C  6.47 / 5.45 */
+  --colors-info-ink: 3 105 161;     /* #0369A1  5.93 / 5.13 */
+  --colors-amber-ink: 180 57 12;    /* #B4390C  5.95 / 5.11 */
+  --colors-neutral: 203 213 225;   /* #CBD5E1 图表中性档（未使用/其它），仅 canvas 图表读取，无对应 Tailwind 类 */
+  --colors-shadow-ink: 20 33 61;   /* 阴影基色：浅色下用墨蓝投影 */
+  --colors-scrollbar: 20 33 61;    /* 滚动条基色：浅色下用墨色滑块 */
+}
+
+/* 深色 · 默认主题（ocean，不挂 class）+ 全部共享中性 */
+html[data-mode="dark"] {
+  color-scheme: dark;
+  --colors-ink: 230 235 243;        /* #E6EBF3 */
+  --colors-ink-soft: 195 203 218;   /* #C3CBDA */
+  --colors-ink-muted: 180 188 201;  /* #B4BCC9 */
+  --colors-paper: 26 31 42;         /* #1A1F2A */
+  --colors-scrim: 0 0 0;            /* 遮罩：深色下压黑，不翻成浅色 */
+  --colors-amber: 242 166 90;       /* #F2A65A 本就够亮，深色下沿用 */
+  --colors-amber-soft: 58 44 28;    /* #3A2C1C */
+  --colors-success: 74 222 128;     /* #4ADE80 对最亮表面 5.06:1 */
+  --colors-success-soft: 22 48 31;  /* #16301F */
+  --colors-warning: 251 191 36;     /* #FBBF24 5.28:1 */
+  --colors-warning-soft: 58 42 12;  /* #3A2A0C */
+  --colors-danger: 252 165 165;     /* #FCA5A5 4.64:1 */
+  --colors-danger-soft: 58 29 29;   /* #3A1D1D */
+  --colors-info: 88 200 249;        /* #58C8F9 4.64:1 */
+  --colors-info-soft: 16 40 58;     /* #10283A */
+  /* 文字档：深色下提亮档**本身就是**文字档（对最亮表面 4.8~5.5），
+     与浅色相反——浅色下填充档偏亮、文字档偏深，深色下填充与文字共用亮档。
+     amber 例外：原值压在自带 /10 淡底上只有 4.19/4.40，再提亮一档到 5.47。 */
+  --colors-success-ink: 74 222 128;  /* #4ADE80 */
+  --colors-warning-ink: 251 191 36;  /* #FBBF24 */
+  --colors-danger-ink: 255 179 179;  /* #FFB3B3 压在暖色主题的淡底上才够（#FCA5A5 只有 4.40） */
+  --colors-info-ink: 88 200 249;     /* #58C8F9 */
+  --colors-amber-ink: 247 184 119;   /* #F7B877 */
+  --colors-neutral: 82 98 121;      /* #526279 对最亮表面 1.42:1，与浅色档相对底的 1.48 对应 */
+  --colors-shadow-ink: 0 0 0;       /* 深色下投影必须压黑 */
+  --colors-scrollbar: 255 255 255;  /* 深色下滚动条用浅色滑块 */
+  /* 染色表面：ocean 的 panel 为锚 */
+  --colors-surface: 33 45 72;
+  --colors-cloud: 40 52 77;
+  --colors-card: 45 56 81;
+  --colors-elevated: 61 72 95;
+  /* brand 填充与浅色同值（六套主题都如此；ocean 压暗过一档才压得住白字），
+     文字档换成提亮色 */
+  --colors-brand: 18 102 226;        /* #1266E2 白字 5.22（原 #1674F8 只有 4.30） */
+  --colors-brand-dark: 55 135 249;   /* 深色下 hover 向亮，与浅色的「向暗」相反 */
+  --colors-brand-ink: 141 191 255;
+  --colors-brand-ink-strong: 141 191 255;
+}
+
+html.theme-jade[data-mode="dark"] {
+  --colors-surface: 27 54 46;
+  --colors-cloud: 34 60 53;
+  --colors-card: 39 64 57;
+  --colors-elevated: 56 79 73;
+  --colors-brand: 4 120 87;
+  --colors-brand-dark: 39 139 111;
+  --colors-brand-ink: 56 212 155;
+  --colors-brand-ink-strong: 103 222 178;
+}
+
+html.theme-violet[data-mode="dark"] {
+  --colors-surface: 45 39 67;
+  --colors-cloud: 52 45 73;
+  --colors-card: 56 50 77;
+  --colors-elevated: 72 66 91;
+  --colors-brand: 124 58 237;
+  --colors-brand-dark: 142 86 240;
+  --colors-brand-ink: 196 177 252;
+  --colors-brand-ink-strong: 196 177 251;
+}
+
+html.theme-coral[data-mode="dark"] {
+  --colors-surface: 60 44 39;
+  --colors-cloud: 67 51 45;
+  --colors-card: 71 55 50;
+  --colors-elevated: 85 71 66;
+  --colors-brand: 194 65 12;
+  --colors-brand-dark: 203 92 46;
+  --colors-brand-ink: 252 169 101;
+  --colors-brand-ink-strong: 252 173 109;
+}
+
+html.theme-teal[data-mode="dark"] {
+  --colors-surface: 25 51 62;
+  --colors-cloud: 33 57 68;
+  --colors-card: 38 62 72;
+  --colors-elevated: 55 77 87;
+  --colors-brand: 14 116 144;
+  --colors-brand-dark: 48 135 160;
+  --colors-brand-ink: 34 211 238;
+  --colors-brand-ink-strong: 89 222 242;
+}
+
+html.theme-blossom[data-mode="dark"] {
+  --colors-surface: 60 31 43;
+  --colors-cloud: 67 38 50;
+  --colors-card: 71 43 55;
+  --colors-elevated: 85 59 70;
+  --colors-brand: 219 39 119;
+  --colors-brand-dark: 224 69 138;
+  --colors-brand-ink: 248 161 206;
+  --colors-brand-ink-strong: 248 161 206;
+}
+
 /* 自定义基础样式（可选） */
 @layer base {
   html,
@@ -12,7 +153,7 @@
   }
 
   body {
-    @apply bg-surface text-gray-800 antialiased;
+    @apply bg-surface text-ink antialiased;
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
   }
@@ -20,10 +161,10 @@
 
 /* 统一滚动条样式（全站单一来源，替代各组件散落的 ::-webkit-scrollbar 块）
    - 细圆角滑块，墨色低透明，悬停加深；过渡放在滑块上，悬停即平滑变化
-   - 深色容器（侧边栏 bg-ink / 登录品牌面板 brand-panel）用浅色滑块保证对比 */
+   - 深色容器（侧边栏 bg-panel / 登录品牌面板 brand-panel）用浅色滑块保证对比 */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(20, 33, 61, 0.18) transparent;
+  scrollbar-color: rgb(var(--colors-scrollbar) / 0.18) transparent;
 }
 *::-webkit-scrollbar {
   width: 8px;
@@ -33,26 +174,23 @@
   background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background-color: rgba(20, 33, 61, 0.18);
+  background-color: rgb(var(--colors-scrollbar) / 0.18);
   border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: padding-box;
   transition: background-color 0.2s ease;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(20, 33, 61, 0.32);
+  background-color: rgb(var(--colors-scrollbar) / 0.32);
 }
-.bg-ink,
 .bg-panel,
 .brand-panel {
   scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
 }
-.bg-ink *::-webkit-scrollbar-thumb,
 .bg-panel *::-webkit-scrollbar-thumb,
 .brand-panel *::-webkit-scrollbar-thumb {
   background-color: rgba(255, 255, 255, 0.22);
 }
-.bg-ink *::-webkit-scrollbar-thumb:hover,
 .bg-panel *::-webkit-scrollbar-thumb:hover,
 .brand-panel *::-webkit-scrollbar-thumb:hover {
   background-color: rgba(255, 255, 255, 0.4);
@@ -61,12 +199,13 @@
 /* 登录卡片：干净白卡 + 柔和投影，替代毛玻璃渐变 */
 @layer components {
   .login-card {
-    @apply rounded-[28px] bg-white shadow-[0_30px_80px_-40px_rgba(20,33,61,0.5)] ring-1 ring-ink/5;
+    @apply rounded-[28px] bg-elevated ring-1 ring-ink/5;
+    box-shadow: 0 30px 80px -40px rgb(var(--colors-shadow-ink) / 0.5);
   }
   .login-input {
     @apply w-full rounded-xl border border-ink/10 bg-cloud/70 px-4 py-3 text-[15px] text-ink
-           placeholder:text-ink/35 transition duration-200
-           focus:border-brand focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand/15;
+           placeholder:text-ink-muted transition duration-200
+           focus:border-brand focus:bg-elevated focus:outline-none focus:ring-4 focus:ring-brand/15;
   }
   .brand-panel {
     @apply bg-panel text-white relative overflow-hidden;
@@ -77,7 +216,8 @@
 @layer components {
   .dash-card {
     @apply rounded-2xl bg-card border border-ink/5;
-    box-shadow: 0 1px 2px rgba(20, 33, 61, 0.04), 0 10px 28px -16px rgba(20, 33, 61, 0.18);
+    box-shadow: 0 1px 2px rgb(var(--colors-shadow-ink) / 0.04),
+                0 10px 28px -16px rgb(var(--colors-shadow-ink) / 0.18);
   }
 }
 
@@ -142,3 +282,25 @@ html.is-theme-tweening *::before,
 html.is-theme-tweening *::after {
   transition-duration: 0s;
 }
+
+/* ==========================================================================
+   深色值推导与对比度核算（改色板时按此重新推导）
+   --------------------------------------------------------------------------
+   表面（以各主题 panel 为锚向白混合，比例固定）：
+     surface 5.5% / cloud 8.5% / card 10.5% / elevated 17.5%
+   brand：填充保持主题原值（白字压得住）；brand-dark（悬停）原值压白 14%
+     （深色下悬停要变亮，不能像浅色那样再压深）；
+     brand-ink / brand-ink-strong 取主题的 light 档再压白到对最亮表面达标。
+   对比度（基准 = 各主题自己的 elevated，即最坏情况；目标 ≥4.5）：
+     主题      最亮表面   ink  soft  muted  b-ink  strong  succ  warn  dang  info
+     ocean    #3D485F   7.66  5.62  4.79   4.81   4.81   5.26  5.49  4.83  4.82
+     jade     #384F49   7.36  5.40  4.61   4.64   5.32   5.06  5.28  4.64  4.64
+     violet   #48425B   7.95  5.84  4.98   5.01   5.00   5.46  5.70  5.02  5.01
+     coral    #554742   7.41  5.44  4.64   4.65   4.79   5.09  5.32  4.68  4.67
+     teal     #374D57   7.43  5.45  4.65   4.92   5.57   5.10  5.33  4.69  4.68
+     blossom  #553B46   8.35  6.13  5.23   5.23   5.23   5.74  5.99  5.27  5.26
+   白字压在 brand 填充上（深色下 brand 不变量，与浅色一致）：
+     ocean 4.30 / jade 5.48 / violet 5.70 / coral 5.18 / teal 5.36 / blossom 4.60
+     ⚠️ocean 的 4.30 略低于 4.5：这是它浅色下本来就有的值，深色未引入新缺陷；
+       若要补齐得单独调 ocean 的 brand，会连带改动浅色观感，故保持不动。
+   ========================================================================== */

@@ -1,6 +1,6 @@
 <template>
   <!-- 完全独立的全屏 404 页面：经 BlankLayout 渲染，不挂载任何应用框架（侧边栏/顶栏） -->
-  <div class="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-brand/5 px-4">
+  <div class="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-surface to-brand/5 px-4">
     <div class="w-full max-w-md text-center">
       <div class="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-brand/10 text-brand">
         <!-- 问号占位图标 -->

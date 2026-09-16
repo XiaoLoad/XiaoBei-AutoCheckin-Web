@@ -7,7 +7,7 @@
         :key="s.value"
         type="button"
         class="rounded-lg px-3 py-1.5 font-medium transition"
-        :class="scope === s.value ? 'bg-white text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
+        :class="scope === s.value ? 'bg-elevated text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
         @click="scope = s.value"
       >
         {{ s.label }}
@@ -21,7 +21,7 @@
         <input
           v-model="query"
           type="text"
-          class="w-full rounded-xl border border-ink/10 bg-white py-2 pl-9 pr-3 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
+          class="w-full rounded-xl border border-ink/10 bg-elevated py-2 pl-9 pr-3 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
           placeholder="搜索名称或地址"
           @input="onQuery"
         />
@@ -45,7 +45,7 @@
       <article
         v-for="loc in paged"
         :key="loc.id"
-        class="loc-card group relative overflow-hidden rounded-xl border border-ink/10 bg-white p-3.5 transition duration-300 hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-md hover:shadow-ink/5"
+        class="loc-card group relative overflow-hidden rounded-xl border border-ink/10 bg-elevated p-3.5 transition duration-300 hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-md hover:shadow-ink/5"
       >
         <div class="flex items-start gap-2.5">
           <span
@@ -123,7 +123,7 @@
     <BaseModal v-model="showModal" :title="editingId ? '编辑位置' : '添加位置'" :size="pickerMode === 'map' ? '2xl' : 'md'">
       <!-- 名称（两模式共用）：地图拾取会把识别到的地址回填到这里，用户可编辑 -->
       <div class="mb-3">
-        <label class="mb-1.5 block text-sm font-medium text-ink-soft">名称 <span class="text-red-500">*</span></label>
+        <label class="mb-1.5 block text-sm font-medium text-ink-soft">名称 <span class="text-danger">*</span></label>
         <input v-model="form.name" class="login-input" placeholder="对此位置的描述，如：3栋502寝室" @input="onNameInput" />
       </div>
 
@@ -157,13 +157,13 @@
         />
         <div class="mt-3">
           <label class="mb-1.5 block text-sm font-medium text-ink-soft">
-            地址号 <span class="text-red-500">*</span>
+            地址号 <span class="text-danger">*</span>
             <span class="font-normal text-ink-muted">（学校签到所需参数）</span>
           </label>
           <input v-model="form.address" class="login-input" placeholder="如：1388号" />
         </div>
         <div class="mt-2.5 flex items-center gap-1.5 rounded-lg bg-cloud/70 px-2.5 py-1.5 text-xs">
-          <span class="shrink-0 rounded bg-white px-1.5 py-0.5 tabular-nums text-ink-soft">
+          <span class="shrink-0 rounded bg-elevated px-1.5 py-0.5 tabular-nums text-ink-soft">
             {{ pickedPoint ? `${pickedPoint.lng}, ${pickedPoint.lat}` : '—, —' }}
           </span>
           <span v-if="!pickedPoint" class="text-warning">请先在地图上拾取位置（点击地图或搜索地点）</span>
@@ -174,17 +174,17 @@
       <div v-else class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div class="sm:col-span-2">
           <label class="mb-1.5 block text-sm font-medium text-ink-soft">
-            地址号 <span class="text-red-500">*</span>
+            地址号 <span class="text-danger">*</span>
             <span class="font-normal text-ink-muted">（学校签到所需参数）</span>
           </label>
           <input v-model="form.address" class="login-input" placeholder="如：1388号" />
         </div>
         <div>
-          <label class="mb-1.5 block text-sm font-medium text-ink-soft">纬度 <span class="text-red-500">*</span></label>
+          <label class="mb-1.5 block text-sm font-medium text-ink-soft">纬度 <span class="text-danger">*</span></label>
           <input v-model="form.lat" class="login-input" placeholder="纬度（必填）" />
         </div>
         <div>
-          <label class="mb-1.5 block text-sm font-medium text-ink-soft">经度 <span class="text-red-500">*</span></label>
+          <label class="mb-1.5 block text-sm font-medium text-ink-soft">经度 <span class="text-danger">*</span></label>
           <input v-model="form.lng" class="login-input" placeholder="经度（必填）" />
         </div>
       </div>

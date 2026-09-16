@@ -8,7 +8,7 @@
 export const OP_CATEGORY_META = {
   auth: { label: '认证', icon: 'shield', dot: 'bg-brand', cls: 'bg-brand/10 text-brand' },
   user: { label: '变更', icon: 'users', dot: 'bg-warning', cls: 'bg-warning/10 text-warning' },
-  pool: { label: '配置', icon: 'sliders', dot: 'bg-ink/40', cls: 'bg-ink/5 text-ink-muted' },
+  pool: { label: '配置', icon: 'sliders', dot: 'bg-scrim/40', cls: 'bg-ink/5 text-ink-muted' },
 }
 
 export const OP_RESULT_META = {

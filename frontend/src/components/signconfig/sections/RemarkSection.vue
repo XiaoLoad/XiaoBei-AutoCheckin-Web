@@ -1,6 +1,6 @@
 <template>
   <ConfigSection title="备注列表" icon="file" :source="source" :error="error" :required="required">
-    <p class="mb-2 text-xs text-ink-muted">签到时后台随机选取一条提交；支持占位符 <code class="rounded bg-white px-1">{username}</code>（自动替换为该账号的 B 平台姓名），例如「{username}已完成签到」会按各账号姓名分别提交。</p>
+    <p class="mb-2 text-xs text-ink-muted">签到时后台随机选取一条提交；支持占位符 <code class="rounded bg-elevated px-1">{username}</code>（自动替换为该账号的 B 平台姓名），例如「{username}已完成签到」会按各账号姓名分别提交。</p>
 
     <p v-if="config.remarks.length === 0" class="rounded-xl border border-dashed border-ink/15 px-3 py-3 text-center text-xs text-ink-muted">
       暂无备注，点击下方「添加备注」新增一条
@@ -11,7 +11,7 @@
         <input
           :ref="(el) => setInputRef(el, i)"
           v-model="config.remarks[i]"
-          class="flex-1 rounded-xl border bg-white px-3 py-2 text-sm text-ink outline-none transition"
+          class="flex-1 rounded-xl border bg-elevated px-3 py-2 text-sm text-ink outline-none transition"
           :class="hintIndex === i ? 'border-danger ring-4 ring-danger/10' : 'border-ink/10 focus:border-brand focus:ring-4 focus:ring-brand/10'"
           placeholder="输入备注内容"
           @blur="onRemarkBlur(i)"
@@ -41,7 +41,7 @@
     </div>
 
     <div v-if="previewList.length" class="mt-3 space-y-1 rounded-xl border border-ink/10 bg-cloud/50 px-3 py-2 text-xs">
-      <p class="font-medium text-ink-muted">提交预览（<code class="rounded bg-white px-1">{username}</code> 自动替换为对应账号的 B 平台姓名）</p>
+      <p class="font-medium text-ink-muted">提交预览（<code class="rounded bg-elevated px-1">{username}</code> 自动替换为对应账号的 B 平台姓名）</p>
       <p v-for="(item, i) in previewList" :key="i" class="text-ink-soft">
         <span class="text-ink-muted">配置：</span>{{ item.raw }}
         <span class="mx-1 text-ink-muted">→</span>

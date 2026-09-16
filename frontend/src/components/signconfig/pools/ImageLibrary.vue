@@ -58,7 +58,7 @@
             <input
               v-model="editingName"
               type="text"
-              class="min-w-0 flex-1 rounded-lg border border-ink/10 bg-white px-2 py-1.5 text-xs text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/10"
+              class="min-w-0 flex-1 rounded-lg border border-ink/10 bg-elevated px-2 py-1.5 text-xs text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/10"
               @keyup.enter="confirmRename"
               @click.stop
             />
@@ -94,7 +94,7 @@
             v-model="newName"
             type="text"
             placeholder="分组名，如 3栋507"
-            class="w-full rounded-lg border border-ink/10 bg-white px-2.5 py-2 text-xs text-ink outline-none transition placeholder:text-ink-muted focus:border-brand focus:ring-2 focus:ring-brand/10"
+            class="w-full rounded-lg border border-ink/10 bg-elevated px-2.5 py-2 text-xs text-ink outline-none transition placeholder:text-ink-muted focus:border-brand focus:ring-2 focus:ring-brand/10"
             @keyup.enter="confirmCreate"
             @keyup.esc="creating = false"
           />
@@ -106,7 +106,7 @@
             >保存</button>
             <button
               type="button"
-              class="flex-1 rounded-lg border border-ink/15 bg-white px-3 py-2 text-xs font-medium text-ink-soft transition hover:bg-cloud active:scale-[0.98]"
+              class="flex-1 rounded-lg border border-ink/15 bg-elevated px-3 py-2 text-xs font-medium text-ink-soft transition hover:bg-cloud active:scale-[0.98]"
               @click="creating = false"
             >取消</button>
           </div>
@@ -152,7 +152,7 @@
             :key="v.value"
             type="button"
             class="rounded-lg px-3 py-1.5 font-medium transition"
-            :class="view === v.value ? 'bg-white text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
+            :class="view === v.value ? 'bg-elevated text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
             @click="view = v.value"
           >
             {{ v.label }}
@@ -187,14 +187,14 @@
           <span>已选 <span class="font-medium text-brand">{{ selectedIds.size }}</span> 张</span>
         </label>
         <div class="ml-auto flex flex-wrap items-center gap-1.5">
-          <button type="button" class="rounded-lg border border-ink/15 bg-white px-2.5 py-1.5 text-xs text-ink-soft transition hover:bg-cloud" @click="selectAll">全选</button>
-          <button type="button" class="rounded-lg border border-ink/15 bg-white px-2.5 py-1.5 text-xs text-ink-soft transition hover:bg-cloud" @click="invertSelect">反选</button>
-          <button type="button" class="rounded-lg border border-ink/15 bg-white px-2.5 py-1.5 text-xs text-ink-soft transition hover:bg-cloud" @click="clearSelect">取消选择</button>
+          <button type="button" class="rounded-lg border border-ink/15 bg-elevated px-2.5 py-1.5 text-xs text-ink-soft transition hover:bg-cloud" @click="selectAll">全选</button>
+          <button type="button" class="rounded-lg border border-ink/15 bg-elevated px-2.5 py-1.5 text-xs text-ink-soft transition hover:bg-cloud" @click="invertSelect">反选</button>
+          <button type="button" class="rounded-lg border border-ink/15 bg-elevated px-2.5 py-1.5 text-xs text-ink-soft transition hover:bg-cloud" @click="clearSelect">取消选择</button>
           <span class="mx-0.5 hidden h-4 w-px bg-ink/15 sm:inline-block" />
           <template v-if="view === 'trash'">
             <button
               type="button"
-              class="inline-flex items-center gap-1 rounded-lg border border-ink/15 bg-white px-2.5 py-1.5 text-xs text-ink-soft transition hover:bg-cloud disabled:cursor-not-allowed disabled:opacity-50"
+              class="inline-flex items-center gap-1 rounded-lg border border-ink/15 bg-elevated px-2.5 py-1.5 text-xs text-ink-soft transition hover:bg-cloud disabled:cursor-not-allowed disabled:opacity-50"
               :disabled="batchRunning"
               @click="batchRestore"
             >
@@ -212,7 +212,7 @@
           <template v-else>
             <button
               type="button"
-              class="inline-flex items-center gap-1 rounded-lg border border-ink/15 bg-white px-2.5 py-1.5 text-xs text-ink-soft transition hover:bg-cloud disabled:cursor-not-allowed disabled:opacity-50"
+              class="inline-flex items-center gap-1 rounded-lg border border-ink/15 bg-elevated px-2.5 py-1.5 text-xs text-ink-soft transition hover:bg-cloud disabled:cursor-not-allowed disabled:opacity-50"
               :disabled="batchRunning"
               @click="openBatchMove"
             >
@@ -220,7 +220,7 @@
             </button>
             <button
               type="button"
-              class="inline-flex items-center gap-1 rounded-lg border border-ink/15 bg-white px-2.5 py-1.5 text-xs text-ink-soft transition hover:bg-cloud disabled:cursor-not-allowed disabled:opacity-50"
+              class="inline-flex items-center gap-1 rounded-lg border border-ink/15 bg-elevated px-2.5 py-1.5 text-xs text-ink-soft transition hover:bg-cloud disabled:cursor-not-allowed disabled:opacity-50"
               :disabled="batchRunning"
               @click="confirmBatchTrash"
             >
@@ -229,7 +229,7 @@
             <button
               v-if="view === 'active'"
               type="button"
-              class="inline-flex items-center gap-1 rounded-lg border border-ink/15 bg-white px-2.5 py-1.5 text-xs text-ink-soft transition hover:bg-cloud disabled:cursor-not-allowed disabled:opacity-50"
+              class="inline-flex items-center gap-1 rounded-lg border border-ink/15 bg-elevated px-2.5 py-1.5 text-xs text-ink-soft transition hover:bg-cloud disabled:cursor-not-allowed disabled:opacity-50"
               :disabled="batchRunning"
               @click="batchMarkUsed"
             >
@@ -238,7 +238,7 @@
             <button
               v-if="view === 'used'"
               type="button"
-              class="inline-flex items-center gap-1 rounded-lg border border-ink/15 bg-white px-2.5 py-1.5 text-xs text-ink-soft transition hover:bg-cloud disabled:cursor-not-allowed disabled:opacity-50"
+              class="inline-flex items-center gap-1 rounded-lg border border-ink/15 bg-elevated px-2.5 py-1.5 text-xs text-ink-soft transition hover:bg-cloud disabled:cursor-not-allowed disabled:opacity-50"
               :disabled="batchRunning"
               @click="batchRestore"
             >
@@ -252,7 +252,7 @@
 
       <input ref="fileInput" type="file" accept="image/jpeg,image/png,image/webp" multiple class="hidden" @change="onFilePicked" />
 
-      <p class="text-[11px] leading-relaxed text-ink-muted/80">
+      <p class="text-[11px] leading-relaxed text-ink-muted">
         上传自动压缩至 ≤180KB（B 平台提交口径）；也可将图片直接拖拽到此处批量上传；轮回使用的图片消费后进入「已使用」保留不删；图库中「删除」会移入回收站，回收站内「删除」才永久移除（保留 7 天后也会自动清除）；点击图片打开灯箱预览，可缩放、左右切换。
       </p>
 
@@ -273,7 +273,7 @@
         <div
           v-for="img in pagedList"
           :key="img.id"
-          class="group overflow-hidden rounded-xl border bg-white"
+          class="group overflow-hidden rounded-xl border bg-elevated"
           :class="isSelected(img) ? 'border-brand ring-2 ring-brand/40' : 'border-ink/10'"
           :draggable="!img.inTrash"
           @dragstart="onDragStart(img, $event)"
@@ -284,7 +284,7 @@
             <button
               type="button"
               class="absolute left-1.5 top-1.5 z-10 grid h-6 w-6 place-items-center rounded-md border transition"
-              :class="isSelected(img) ? 'border-brand bg-brand text-white' : 'border-white/70 bg-white/80 text-transparent hover:bg-white'"
+              :class="isSelected(img) ? 'border-brand bg-brand text-white' : 'border-white/70 bg-elevated/80 text-transparent hover:bg-elevated'"
               :aria-pressed="isSelected(img)"
               :title="isSelected(img) ? '取消选择' : '选择'"
               @click.stop="onToggleSelect(img, $event)"
@@ -306,7 +306,7 @@
             >
               <button
                 type="button"
-                class="inline-flex items-center gap-1 rounded-lg bg-white/90 px-2.5 py-1 text-xs text-ink shadow-sm hover:bg-white"
+                class="inline-flex items-center gap-1 rounded-lg bg-elevated/90 px-2.5 py-1 text-xs text-ink shadow-sm hover:bg-elevated"
                 @click.stop="openPreview(img)"
               >
                 <Icon name="search" :size="13" />预览
@@ -472,11 +472,11 @@
             v-model="newGroupName"
             type="text"
             placeholder="新分组名"
-            class="min-w-0 flex-1 rounded-lg border border-ink/10 bg-white px-2.5 py-2 text-xs text-ink outline-none transition placeholder:text-ink-muted focus:border-brand focus:ring-2 focus:ring-brand/10"
+            class="min-w-0 flex-1 rounded-lg border border-ink/10 bg-elevated px-2.5 py-2 text-xs text-ink outline-none transition placeholder:text-ink-muted focus:border-brand focus:ring-2 focus:ring-brand/10"
             @keyup.enter="createAndSelectGroup"
           />
           <button type="button" class="rounded-lg bg-brand px-3 py-2 text-xs font-medium text-white transition hover:bg-brand-dark" @click="createAndSelectGroup">确定</button>
-          <button type="button" class="rounded-lg border border-ink/15 bg-white px-3 py-2 text-xs text-ink-soft transition hover:bg-cloud" @click="creatingGroup = false; newGroupName = ''">取消</button>
+          <button type="button" class="rounded-lg border border-ink/15 bg-elevated px-3 py-2 text-xs text-ink-soft transition hover:bg-cloud" @click="creatingGroup = false; newGroupName = ''">取消</button>
         </div>
         <button v-else type="button" class="text-xs text-brand hover:underline" @click="creatingGroup = true">+ 新建分组</button>
       </div>

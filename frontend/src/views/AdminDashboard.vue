@@ -85,31 +85,43 @@
         <div class="pointer-events-none absolute -right-16 -top-24 h-56 w-56 rounded-full bg-brand/[0.07] blur-3xl"></div>
         <div class="pointer-events-none absolute -left-12 -bottom-28 h-56 w-56 rounded-full bg-amber/[0.08] blur-3xl"></div>
 
-        <div class="relative flex flex-wrap items-center justify-between gap-3 mb-6">
+        <!-- 分母写在副标题里：环下方的百分比只有配上分母才读得出量级 -->
+        <div class="relative flex flex-wrap items-start justify-between gap-3 mb-5">
           <div>
             <h3 class="font-semibold text-ink">账号健康</h3>
-            <p class="mt-0.5 text-xs text-ink-muted">全站 B 平台账号体检 · 凭证状态与漏签风险</p>
+            <p class="mt-0.5 text-xs text-ink-muted">
+              全站 <span class="tabular-nums text-ink-soft">{{ summary.accounts }}</span> 个账号
+              · <span class="tabular-nums text-ink-soft">{{ summary.accountsEnabled }}</span> 个启用中
+              · <span class="tabular-nums text-ink-soft">{{ schedulesEnabled }}</span> 个启用任务
+            </p>
           </div>
+          <!-- 二元徽标升级为带计数：此前 1 项异常与 50 项异常显示同一句话 -->
           <span
             class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
-            :class="allHealthy ? 'bg-success/10 text-success' : 'bg-amber/10 text-amber'"
+            :class="hasRisk ? 'bg-amber/10 text-warning' : 'bg-success/10 text-success'"
           >
-            <span class="h-1.5 w-1.5 rounded-full" :class="allHealthy ? 'bg-success' : 'bg-amber animate-pulse'"></span>
-            {{ allHealthy ? '全部正常' : '需要关注' }}
+            <span class="h-1.5 w-1.5 rounded-full" :class="hasRisk ? 'bg-amber animate-pulse' : 'bg-success'"></span>
+            {{ hasRisk ? `${riskTotal} 项待处理` : '全部正常' }}
           </span>
         </div>
 
         <div class="relative grid gap-6 lg:grid-cols-[auto_minmax(0,1fr)]">
-          <!-- 左：双环仪表（GSAP 数字滚动 + 圆环补间） -->
-          <div class="flex items-center justify-center gap-8">
+          <!-- 左：双环（GSAP 数字滚动 + 圆环补间）。
+               最外一圈 60 格刻度是满量程参照——只有光秃圆环时，「占 4%」这个比例
+               只能靠读环下那行小字，图形本身不表达量级。
+               ⚠️ stroke-dashoffset 的初值必须走 SVG 属性而非 :style：GSAP 直接改
+               inline style，而 :style 绑定在重渲染时会把它写回初值、抹掉补间进度。 -->
+          <div class="flex items-center justify-center gap-7 sm:gap-9">
             <div class="flex flex-col items-center gap-2">
-              <div class="relative h-[108px] w-[108px]">
+              <div class="relative h-[104px] w-[104px]">
                 <svg viewBox="0 0 100 100" class="h-full w-full -rotate-90">
+                  <circle cx="50" cy="50" r="47" fill="none" stroke="rgba(20,33,61,0.16)" stroke-width="1.6" stroke-dasharray="1.5 3.422" />
                   <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(20,33,61,0.08)" stroke-width="8" />
                   <circle
                     ref="ringInvalid" cx="50" cy="50" r="42" fill="none" stroke-linecap="round" stroke-width="8"
-                    :stroke="invalidTotal > 0 ? '#ef4444' : '#10b981'" stroke-dasharray="263.9"
-                    style="stroke-dashoffset: 263.9px; filter: drop-shadow(0 0 6px rgba(239,68,68,0.22))"
+                    :stroke="invalidTotal > 0 ? RING_DANGER : RING_OK"
+                    stroke-dasharray="263.9" stroke-dashoffset="263.9"
+                    :style="{ filter: ringGlow(invalidTotal > 0, 'invalid') }"
                   />
                 </svg>
                 <div class="absolute inset-0 flex flex-col items-center justify-center">
@@ -117,17 +129,21 @@
                   <span class="mt-0.5 text-[10px] text-ink-muted">凭证异常</span>
                 </div>
               </div>
-              <p class="text-[11px] text-ink-muted">占全站账号 {{ invalidPct }}%</p>
+              <p class="text-[11px] text-ink-muted">
+                占 <span class="tabular-nums text-ink-soft">{{ invalidPct }}</span>%
+              </p>
             </div>
 
             <div class="flex flex-col items-center gap-2">
-              <div class="relative h-[108px] w-[108px]">
+              <div class="relative h-[104px] w-[104px]">
                 <svg viewBox="0 0 100 100" class="h-full w-full -rotate-90">
+                  <circle cx="50" cy="50" r="47" fill="none" stroke="rgba(20,33,61,0.16)" stroke-width="1.6" stroke-dasharray="1.5 3.422" />
                   <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(20,33,61,0.08)" stroke-width="8" />
                   <circle
                     ref="ringStale" cx="50" cy="50" r="42" fill="none" stroke-linecap="round" stroke-width="8"
-                    :stroke="staleTotal > 0 ? '#f59e0b' : '#10b981'" stroke-dasharray="263.9"
-                    style="stroke-dashoffset: 263.9px; filter: drop-shadow(0 0 6px rgba(245,158,11,0.2))"
+                    :stroke="staleTotal > 0 ? RING_AMBER : RING_OK"
+                    stroke-dasharray="263.9" stroke-dashoffset="263.9"
+                    :style="{ filter: ringGlow(staleTotal > 0, 'stale') }"
                   />
                 </svg>
                 <div class="absolute inset-0 flex flex-col items-center justify-center">
@@ -135,15 +151,25 @@
                   <span class="mt-0.5 text-[10px] text-ink-muted">疑似漏签</span>
                 </div>
               </div>
-              <p class="text-[11px] text-ink-muted">占启用任务 {{ stalePct }}%</p>
+              <p class="text-[11px] text-ink-muted">
+                占 <span class="tabular-nums text-ink-soft">{{ stalePct }}</span>%
+              </p>
             </div>
           </div>
 
-          <!-- 右：两列明细 -->
+          <!-- 右：两列明细。
+               两列都是三行式卡片且第三行固定 16px 高：左列第三行是文字、右列是细条，
+               不定高的话两列行高会差 7px 并随条数累积错位。
+               列表限高 240px = 三条整（实测单行 76px + 间距 6px），改成 max-h-52 只露得出半条。 -->
           <div class="grid min-w-0 gap-4 sm:grid-cols-2">
             <div class="min-w-0">
-              <p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">凭证异常账号</p>
-              <ul class="health-scroll space-y-1.5 overflow-y-auto pr-1 lg:max-h-44">
+              <div class="mb-2 flex items-baseline justify-between gap-2">
+                <p class="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">凭证异常账号</p>
+                <span v-if="health.invalidCredentials.total" class="shrink-0 text-[11px] tabular-nums text-ink-muted">
+                  共 {{ health.invalidCredentials.total }}
+                </span>
+              </div>
+              <ul class="health-scroll space-y-1.5 overflow-y-auto pr-1 lg:max-h-60">
                 <li
                   v-for="row in health.invalidCredentials.list"
                   :key="'ic' + row.account"
@@ -153,13 +179,20 @@
                        两列列表共用同一结构，行内各列左右缘才会跨行跨列对齐
                        （此前账号 flex-1 + 尾随 shrink-0 项宽度不定，中间那列会随内容左右飘） -->
                   <div class="flex items-center gap-2">
-                    <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500"></span>
-                    <span class="min-w-0 flex-1 truncate font-medium text-ink">{{ row.account }}</span>
-                    <span class="shrink-0 rounded-full bg-red-500/10 px-1.5 py-0.5 text-[10px] text-red-600">
+                    <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="row.verifyStatus === 'unverified' ? 'bg-warning' : 'bg-danger'"></span>
+                    <span class="min-w-0 flex-1 truncate font-medium text-ink tabular-nums">{{ row.account }}</span>
+                    <span
+                      class="shrink-0 rounded-full px-1.5 py-0.5 text-[10px]"
+                      :class="row.verifyStatus === 'unverified' ? 'bg-warning/10 text-warning' : 'bg-danger/10 text-danger'"
+                    >
                       {{ row.verifyStatus === 'unverified' ? '未校验' : '已失效' }}
                     </span>
                   </div>
                   <p class="mt-1 truncate pl-3.5 text-[11px] text-ink-muted">{{ row.username || '未绑定用户' }}</p>
+                  <p class="mt-1 flex h-4 items-center gap-1 pl-3.5 text-[10px] text-ink-muted">
+                    <span class="shrink-0">校验于</span>
+                    <span class="min-w-0 truncate tabular-nums text-ink-soft">{{ row.checkedAt || '从未校验' }}</span>
+                  </p>
                 </li>
                 <li v-if="!health.invalidCredentials.list.length" class="rounded-lg bg-success/10 px-2.5 py-2 text-xs text-success">
                   全部账号凭证正常
@@ -167,17 +200,26 @@
               </ul>
             </div>
             <div class="min-w-0">
-              <p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">疑似漏签任务</p>
-              <ul class="health-scroll space-y-1.5 overflow-y-auto pr-1 lg:max-h-44">
+              <div class="mb-2 flex items-baseline justify-between gap-2">
+                <p class="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">疑似漏签任务</p>
+                <!-- 总量与量程都要写：条形的量程不写出来，读者无从判断「一半长」意味着一半什么 -->
+                <span v-if="health.staleSign.total" class="shrink-0 text-[11px] tabular-nums text-ink-muted">
+                  共 {{ health.staleSign.total }} · 刻度 {{ STALE_BAR_DAYS }} 天
+                </span>
+              </div>
+              <ul class="health-scroll space-y-1.5 overflow-y-auto pr-1 lg:max-h-60">
                 <li
                   v-for="row in health.staleSign.list"
                   :key="'st' + row.account + row.taskType"
                   class="health-row rounded-lg bg-cloud/70 px-2.5 py-2 text-xs"
                 >
                   <div class="flex items-center gap-2">
-                    <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"></span>
-                    <span class="min-w-0 flex-1 truncate font-medium text-ink">{{ row.account }}</span>
-                    <span class="shrink-0 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-600">
+                    <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="row.days === null ? 'bg-danger' : 'bg-amber'"></span>
+                    <span class="min-w-0 flex-1 truncate font-medium text-ink tabular-nums">{{ row.account }}</span>
+                    <span
+                      class="shrink-0 rounded-full px-1.5 py-0.5 text-[10px]"
+                      :class="row.days === null ? 'bg-danger/10 text-danger' : 'bg-amber/15 text-warning'"
+                    >
                       {{ row.days === null ? '从未签到' : `${row.days} 天未签` }}
                     </span>
                   </div>
@@ -186,6 +228,17 @@
                     <span class="min-w-0 truncate">{{ row.username || '未绑定用户' }}</span>
                     <span class="shrink-0">· {{ taskTypeMeta(row.taskType).label }}</span>
                   </p>
+                  <!-- 严重度条：长度 = 未签天数 / 30，一眼比得出谁更久；从未签到取满格
+                       ——它是质变（这条任务根本没跑通），不是「比 30 天还久」。 -->
+                  <div class="mt-1 flex h-4 items-center pl-3.5">
+                    <div class="h-[3px] w-full overflow-hidden rounded-full bg-ink/[0.07]">
+                      <div
+                        class="h-full rounded-full"
+                        :class="row.days === null ? 'bg-danger' : 'bg-amber'"
+                        :style="{ width: staleBarPct(row) + '%' }"
+                      ></div>
+                    </div>
+                  </div>
                 </li>
                 <li v-if="!health.staleSign.list.length" class="rounded-lg bg-success/10 px-2.5 py-2 text-xs text-success">
                   无漏签风险任务
@@ -444,7 +497,8 @@
             </div>
           </div>
         </div>
-        <div class="health-scroll overflow-y-auto lg:max-h-[420px]">
+        <!-- 容器高度 = 表头 41 + 行高 45 × 每页 10 条 = 491：一页正好一屏，翻页后不必再补滚 -->
+        <div class="health-scroll overflow-y-auto lg:max-h-[491px]">
           <table class="w-full text-sm">
             <thead>
               <tr class="text-left text-ink-muted border-b border-ink/5">
@@ -725,7 +779,30 @@ const staleRate = computed(() => {
 })
 const invalidPct = computed(() => Math.round(invalidRate.value * 100))
 const stalePct = computed(() => Math.round(staleRate.value * 100))
-const allHealthy = computed(() => invalidTotal.value === 0 && staleTotal.value === 0)
+// 待处理总数：右上徽标从「需要关注」升级为带计数（1 项与 50 项此前显示同一句话）
+const riskTotal = computed(() => invalidTotal.value + staleTotal.value)
+const hasRisk = computed(() => riskTotal.value > 0)
+
+// 环与条的取色对齐语义色 token（此前混用了 amber #F2A65A 与 Tailwind 默认 amber-500）
+const RING_OK = '#16a34a'
+const RING_DANGER = '#dc2626'
+const RING_AMBER = '#f59e0b'
+
+// 环外发光随状态走：此前固定红色，账号全正常时绿环也发红光
+function ringGlow(active, kind) {
+  if (!active) return 'drop-shadow(0 0 6px rgba(22,163,74,0.16))'
+  return kind === 'stale'
+    ? 'drop-shadow(0 0 6px rgba(245,158,11,0.2))'
+    : 'drop-shadow(0 0 6px rgba(220,38,38,0.22))'
+}
+
+// 漏签严重度条的量程：30 天记满格（更久也是满格）
+const STALE_BAR_DAYS = 30
+
+function staleBarPct(row) {
+  if (row.days === null || row.days === undefined) return 100
+  return Math.min(100, Math.round((row.days / STALE_BAR_DAYS) * 100))
+}
 
 const ringInvalid = ref(null)
 const ringStale = ref(null)

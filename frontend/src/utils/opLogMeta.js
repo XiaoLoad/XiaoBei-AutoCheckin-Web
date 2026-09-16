@@ -26,7 +26,10 @@ export const OP_CLOSE_META = {
   orphan: { label: '无登录记录', cls: 'bg-ink/5 text-ink-muted' },
 }
 
-// 动作表：label 用于筛选下拉；category 供跨表推导（后端已回 category，此处仅作兜底）
+// 动作表：label 用于筛选下拉；category 供跨表推导（后端已回 category，此处仅作兜底）。
+// 键必须与后端 backend/app/services/op_log.py 的 ACTION_* 常量一一对应——
+// 那是动作码的唯一事实源，这里只是给它配中文。后端新增动作而这里没跟上时，
+// opActionMeta 会走下面的兜底把码值（如 pool.create）原样显示给管理员。
 export const OP_ACTION_META = {
   'auth.login': { label: '登录', category: 'auth' },
   'auth.logout': { label: '退出登录', category: 'auth' },
@@ -36,6 +39,18 @@ export const OP_ACTION_META = {
   'user.enable': { label: '启用用户', category: 'user' },
   'user.disable': { label: '禁用用户', category: 'user' },
   'user.delete': { label: '删除用户', category: 'user' },
+}
+
+// 筛选下拉里动作的排列顺序＝上表的声明顺序（认证组在前、用户变更组在后）。
+// 不按字母序：那会把 auth.* 与 user.* 交错排开，读起来没有业务含义，
+// 而这张表本来就是按类别分段写的，顺序现成。
+const OP_ACTION_ORDER = Object.keys(OP_ACTION_META)
+
+// 未登记的动作排到最后（它们本身也是「该回来补这张表」的信号）。
+// 同档内再按码值字典序兜底，保证结果与输入顺序无关。
+export function opActionSortKey(code) {
+  const i = OP_ACTION_ORDER.indexOf(code)
+  return i === -1 ? OP_ACTION_ORDER.length : i
 }
 
 // 变更明细的字段名（detail.changes[].field）
@@ -58,6 +73,8 @@ export function opCloseMeta(code) {
   return OP_CLOSE_META[code] || OP_CLOSE_META.orphan
 }
 
+// 兜底刻意原样吐码值：这是「后端加了动作、这张表没跟上」的唯一可见症状。
+// 硬翻成半中半英反而像翻译出错，不如让它显眼。
 export function opActionMeta(code) {
   return OP_ACTION_META[code] || { label: code || '未知操作', category: '' }
 }

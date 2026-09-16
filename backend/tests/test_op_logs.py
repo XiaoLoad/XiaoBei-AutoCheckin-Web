@@ -298,3 +298,30 @@ def test_op_logs_filter_and_paging(app_ctx, admin_headers, audit_cleanup):
     meta = client.get('/api/op-logs/meta', headers=admin_headers).get_json()['data']
     assert {'categories', 'actions'} <= set(meta)
     assert any(a['value'] == 'auth.login' for a in meta['actions'])
+    # 返回次序必须是契约的一部分：不 ORDER BY 时 MySQL 给出什么顺序取决于执行计划，
+    # 同一份数据换了版本或索引就会排出不同次序，下拉项看起来就是「乱跳」。
+    # 前端还会按中文表重排，但那不能替代接口自身的确定性。
+    acts = [a['value'] for a in meta['actions']]
+    assert acts == sorted(acts)
+    assert any(c['value'] == 'auth' for c in meta['categories'])
+
+
+def test_meta_merges_category_drift(app_ctx, admin_headers, audit_cleanup):
+    """同一动作的分类若历史上改过值，界面只该看到一个动作、计数是两侧之和。
+    分成两行会让筛选下拉出现两个「登录」，用户无从选择。
+    分类同理：动作并了，两侧的类别都还要在。"""
+    client = app_ctx.test_client()
+    for cat in ('auth', 'legacy'):
+        row = OpLog(action='auth.login', category=cat, result='success',
+                    username='tc_audit_target', role='admin', ip='127.0.0.1',
+                    summary='分类漂移样例 tc_audit_target')
+        row.set_detail({})
+        db.session.add(row)
+    db.session.commit()
+
+    meta = client.get('/api/op-logs/meta', headers=admin_headers).get_json()['data']
+    hit = [a for a in meta['actions'] if a['value'] == 'auth.login']
+    assert len(hit) == 1, '同一动作不能因分类不同而裂成两项'
+    assert hit[0]['count'] >= 2
+    cats = {c['value'] for c in meta['categories']}
+    assert {'auth', 'legacy'} <= cats, '并动作不等于丢掉类别，两侧都该留着'

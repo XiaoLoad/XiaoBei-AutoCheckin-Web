@@ -19,6 +19,8 @@ from app.extensions import db
 from app.models.op_log import OpAnomalyAck, OpLog
 from app.models.system_config import get_setting
 from app.models.user import now_cst
+from app.services.op_log import (ACTION_AUTH_LOGIN, ACTION_AUTH_LOGOUT,
+                                 ACTION_AUTH_PASSWORD)
 from app.utils.auth import admin_required
 from app.utils.response import error, success
 
@@ -173,7 +175,7 @@ def _build_sessions(rows):
             open_by_user.pop(uid, None)
             cur = None
 
-        if r.action == 'auth.login' and r.result == 'success':
+        if r.action == ACTION_AUTH_LOGIN and r.result == 'success':
             if cur is not None:
                 cur['reason'] = 'superseded'
             cur = _new_session(r)
@@ -189,7 +191,7 @@ def _build_sessions(rows):
         cur['lastAt'] = ts
         if not cur['ip'] and r.ip:
             cur['ip'] = r.ip
-        if r.action == 'auth.logout':
+        if r.action == ACTION_AUTH_LOGOUT:
             cur['reason'] = 'logout'
             open_by_user.pop(uid, None)
 
@@ -286,13 +288,13 @@ def _ongoing_count(ttl_hours):
     rows = (OpLog.query
             .filter(OpLog.created_at >= window_start,
                     OpLog.user_id.isnot(None),
-                    OpLog.action.in_(('auth.login', 'auth.logout')))
+                    OpLog.action.in_((ACTION_AUTH_LOGIN, ACTION_AUTH_LOGOUT)))
             .order_by(OpLog.created_at.asc(), OpLog.id.asc()).all())
     latest = {}
     for r in rows:
         latest[r.user_id] = r
     return sum(1 for r in latest.values()
-               if r.action == 'auth.login' and r.result == 'success'
+               if r.action == ACTION_AUTH_LOGIN and r.result == 'success'
                and r.created_at >= now - timedelta(hours=ttl_hours))
 
 
@@ -310,7 +312,7 @@ def _anomaly_groups(viewer_id, since):
                              func.min(OpLog.created_at), func.max(OpLog.created_at),
                              func.coalesce(func.max(acks.c.acked), 0).label('acked'))
             .outerjoin(acks, acks.c.ip == OpLog.ip)
-            .filter(OpLog.action == 'auth.login', OpLog.result == 'fail',
+            .filter(OpLog.action == ACTION_AUTH_LOGIN, OpLog.result == 'fail',
                     OpLog.ip != '', OpLog.created_at >= since)
             .group_by(OpLog.ip)
             .order_by(func.count(OpLog.id).desc())
@@ -323,7 +325,7 @@ def _with_accounts(groups, since):
     if not groups:
         return []
     rows = (OpLog.query
-            .filter(OpLog.action == 'auth.login', OpLog.result == 'fail',
+            .filter(OpLog.action == ACTION_AUTH_LOGIN, OpLog.result == 'fail',
                     OpLog.ip != '', OpLog.created_at >= since,
                     OpLog.ip.in_([g.ip for g in groups]))
             .order_by(OpLog.created_at.desc()).limit(200).all())
@@ -393,15 +395,15 @@ def op_log_summary():
 
     return success({
         'metrics': {
-            'loginToday': _count(OpLog.action == 'auth.login', OpLog.result == 'success',
+            'loginToday': _count(OpLog.action == ACTION_AUTH_LOGIN, OpLog.result == 'success',
                                  OpLog.created_at >= today_start),
-            'loginFailToday': _count(OpLog.action == 'auth.login', OpLog.result == 'fail',
+            'loginFailToday': _count(OpLog.action == ACTION_AUTH_LOGIN, OpLog.result == 'fail',
                                      OpLog.created_at >= today_start),
             # 「权限与额度变更」= 用户管理类操作 + 改密：两者都在改「谁能做什么」
             'userChangeToday': _count(OpLog.result == 'success',
                                       OpLog.created_at >= today_start,
                                       or_(OpLog.category == 'user',
-                                          OpLog.action == 'auth.password')),
+                                          OpLog.action == ACTION_AUTH_PASSWORD)),
             'ongoingSessions': _ongoing_count(ttl_hours),
         },
         'anomalies': anomalies,
@@ -439,7 +441,7 @@ def op_log_anomaly_ack():
 
     since = now_cst() - timedelta(days=_ANOMALY_WINDOW_DAYS)
     counts = dict(db.session.query(OpLog.ip, func.count(OpLog.id))
-                  .filter(OpLog.action == 'auth.login', OpLog.result == 'fail',
+                  .filter(OpLog.action == ACTION_AUTH_LOGIN, OpLog.result == 'fail',
                           OpLog.ip.in_(ips), OpLog.created_at >= since)
                   .group_by(OpLog.ip).all())
 
@@ -468,12 +470,30 @@ def op_log_meta():
 
     计数按「全表现存记录」算而非当前筛选结果——筛选条本身是筛选条件的来源，
     不能随筛选结果收缩，否则选中一项后其余项全部消失、无法回退。
+
+    也不加时间窗：项一旦从候选里落下去，用户就再没法按它筛出更早那段时间的记录。
+
+    一次 GROUP BY (action, category) 同时算出两组候选：动作在先，分类随它推导。
+    原先分两遍扫全表，而 op_logs 只增不减（保留 365 天），同样的扫描做两遍没有意义。
+    按 action 聚拢后由 Python 累加出分类计数，顺带把「同一动作的分类漂移」并成一行
+    （若某动作的分类改过值，界面只会看到一个动作，计数是两侧之和）。
+
+    显式 ORDER BY action：不排时 MySQL 的返回顺序随执行计划变，同一份数据在不同版本
+    或索引下会排出不同次序，下拉项看起来就是「乱跳」。
+    当前规模（万行量级）全表聚合在毫秒级，暂不为它加索引；真到十万行再上
+    (action, category) 联合索引——那正好覆盖这个查询。
     """
-    cat_rows = (db.session.query(OpLog.category, func.count(OpLog.id))
-                .group_by(OpLog.category).all())
-    act_rows = (db.session.query(OpLog.action, func.count(OpLog.id))
-                .group_by(OpLog.action).all())
+    rows = (db.session.query(OpLog.action, OpLog.category, func.count(OpLog.id))
+            .group_by(OpLog.action, OpLog.category)
+            .order_by(OpLog.action).all())
+    actions, categories = {}, {}
+    for action, category, n in rows:
+        n = int(n)
+        if action:
+            actions[action] = actions.get(action, 0) + n
+        if category:
+            categories[category] = categories.get(category, 0) + n
     return success({
-        'categories': [{'value': c, 'count': int(n)} for c, n in cat_rows if c],
-        'actions': [{'value': a, 'count': int(n)} for a, n in act_rows if a],
+        'actions': [{'value': a, 'count': n} for a, n in actions.items()],
+        'categories': [{'value': c, 'count': n} for c, n in categories.items()],
     })

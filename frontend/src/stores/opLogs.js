@@ -73,7 +73,9 @@ export const useOpLogsStore = defineStore('opLogs', () => {
   // 展开态的唯一真相：同一时刻至多展开一条（手风琴），条目上不另存 open 标记
   const expandedId = ref(null)
   let seq = 0
-  let metaLoaded = false
+  // 筛选项只做「请求在飞去重」，不做会话内一次性缓存：一次性门闩会把项集合与
+  // 「（计数）」冻结在首次进页面那一刻，管理员刚删了用户再回到本页，下拉里的数字还是旧的。
+  let metaInflight = null
 
   const isSession = computed(() => view.value === 'session')
 
@@ -197,13 +199,17 @@ export const useOpLogsStore = defineStore('opLogs', () => {
   }
 
   async function loadMeta() {
-    if (metaLoaded) return
-    try {
-      meta.value = await fetchOpLogMeta()
-      metaLoaded = true
-    } catch (e) {
-      /* 筛选项取不到不影响浏览，保留空候选 */
-    }
+    if (metaInflight) return metaInflight
+    metaInflight = (async () => {
+      try {
+        meta.value = await fetchOpLogMeta()
+      } catch (e) {
+        /* 筛选项取不到不影响浏览，保留上一次的候选 */
+      } finally {
+        metaInflight = null
+      }
+    })()
+    return metaInflight
   }
 
   // 任一筛选变化都要回到第一页，否则会停在越界页拿到空列表
@@ -280,12 +286,14 @@ export const useOpLogsStore = defineStore('opLogs', () => {
     }
   }
 
+  // 进页面与手动刷新走同一条路径：两者都该拿到「此刻最新」的筛选项与指标。
+  // 曾经 init 拉 meta 而 refresh 不拉——刷新后列表是最新的，下拉里的计数却还是旧的。
   async function refresh() {
-    await Promise.all([loadSummary(), loadCurrent()])
+    await Promise.all([loadMeta(), loadSummary(), loadCurrent()])
   }
 
   async function init() {
-    await Promise.all([loadMeta(), loadSummary(), loadCurrent()])
+    await refresh()
   }
 
   return {

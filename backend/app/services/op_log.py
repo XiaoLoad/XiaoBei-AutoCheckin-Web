@@ -24,6 +24,21 @@ CATEGORY_USER = 'user'
 RESULT_SUCCESS = 'success'
 RESULT_FAIL = 'fail'
 
+# 动作码（op_logs.action 的取值域）。集中定义而非就地写字符串：拼错一个动作码不会报任何错，
+# 日志照样落库、界面照样显示，只是筛选下拉里多出一个谁也不认识的项——这类错误没有运行时反馈，
+# 只能靠「只有一处能写错」来防。查询侧（routes/op_logs.py 的统计与聚合）同样引用这里，
+# 免得写入端改了码值、读取端还在按旧值统计，数字静默归零。
+# ⚠️ 新增动作必须同步前端的中文表 frontend/src/utils/opLogMeta.js::OP_ACTION_META，
+# 否则筛选下拉会把码值（如 pool.create）原样显示给管理员。
+ACTION_AUTH_LOGIN = 'auth.login'
+ACTION_AUTH_LOGOUT = 'auth.logout'
+ACTION_AUTH_PASSWORD = 'auth.password'
+ACTION_USER_CREATE = 'user.create'
+ACTION_USER_UPDATE = 'user.update'
+ACTION_USER_ENABLE = 'user.enable'
+ACTION_USER_DISABLE = 'user.disable'
+ACTION_USER_DELETE = 'user.delete'
+
 
 def client_ip():
     """客户端 IP。反代（nginx）下 remote_addr 恒为代理地址，故优先取转发头，
@@ -119,7 +134,7 @@ def _on_user_changed(sender, **kw):
 
     if kind == 'users.status' and user is not None:
         enabled = bool(user.enabled)
-        record('user.enable' if enabled else 'user.disable', CATEGORY_USER,
+        record(ACTION_USER_ENABLE if enabled else ACTION_USER_DISABLE, CATEGORY_USER,
                summary=f'{"启用" if enabled else "禁用"}用户「{user.username}」',
                detail={'targetUserId': user.id, 'targetUsername': user.username,
                        'changes': [{'field': 'enabled', 'from': not enabled, 'to': enabled}]},
@@ -137,7 +152,7 @@ def _on_user_changed(sender, **kw):
         name = target.username if target is not None else ''
         # users.delete 目前是桩接口（返回成功但不销毁数据）。日志照实记，不粉饰：
         # 否则管理员看到一条「删除用户」会以为人真的没了。桩实现落地后去掉这句后缀。
-        record('user.delete', CATEGORY_USER,
+        record(ACTION_USER_DELETE, CATEGORY_USER,
                summary=(f'删除用户「{name}」（桩接口未实际销毁）' if name
                         else f'删除用户（ID {target_id}，桩接口未实际销毁）'),
                detail={'targetUserId': target_id, 'targetUsername': name, 'stub': True},
@@ -148,7 +163,7 @@ def _on_user_changed(sender, **kw):
         return
 
     if kind == 'users.create':
-        record('user.create', CATEGORY_USER,
+        record(ACTION_USER_CREATE, CATEGORY_USER,
                summary=f'新建用户「{user.username}」（角色 {user.role}，额度 {user.quota}）',
                detail={'targetUserId': user.id, 'targetUsername': user.username,
                        'role': user.role, 'enabled': bool(user.enabled), 'quota': user.quota},
@@ -157,7 +172,7 @@ def _on_user_changed(sender, **kw):
 
     if kind == 'users.update':
         changes = _changes(payload, kw.get('before'), user)
-        record('user.update', CATEGORY_USER,
+        record(ACTION_USER_UPDATE, CATEGORY_USER,
                summary=f'修改用户「{user.username}」',
                detail={'targetUserId': user.id, 'targetUsername': user.username,
                        'changes': changes, 'passwordChanged': bool(kw.get('password_changed'))},
@@ -172,24 +187,24 @@ def _on_auth_login(sender, **kw):
     if kw.get('result') == RESULT_FAIL:
         who = kw.get('username') or '未知账号'
         reason = kw.get('reason') or '登录失败'
-        record('auth.login', CATEGORY_AUTH, result=RESULT_FAIL,
+        record(ACTION_AUTH_LOGIN, CATEGORY_AUTH, result=RESULT_FAIL,
                summary=f'登录失败「{who}」：{reason}',
                detail={'account': who, 'reason': reason})
         return
     user = kw.get('user')
-    record('auth.login', CATEGORY_AUTH, summary='登录成功',
+    record(ACTION_AUTH_LOGIN, CATEGORY_AUTH, summary='登录成功',
            detail={'account': getattr(user, 'username', '') or kw.get('username', '')},
            user=user)
 
 
 def _on_logout(sender, **kw):
     user = kw.get('user') or _actor()
-    record('auth.logout', CATEGORY_AUTH, summary='退出登录', user=user)
+    record(ACTION_AUTH_LOGOUT, CATEGORY_AUTH, summary='退出登录', user=user)
 
 
 def _on_password_changed(sender, **kw):
     user = kw.get('user') or _actor()
-    record('auth.password', CATEGORY_AUTH, summary='修改登录密码', user=user)
+    record(ACTION_AUTH_PASSWORD, CATEGORY_AUTH, summary='修改登录密码', user=user)
 
 
 _connected = False

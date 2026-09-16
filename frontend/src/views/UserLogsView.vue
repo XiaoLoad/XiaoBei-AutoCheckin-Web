@@ -207,7 +207,7 @@
           <BaseSelect
             :model-value="store.filters.action"
             :options="actionOptions"
-            :searchable="false"
+            :searchable="true"
             size="sm"
             @update:model-value="(v) => store.applyFilter({ action: v })"
           />
@@ -430,7 +430,7 @@ import OpLogEntry from '@/components/userlogs/OpLogEntry.vue'
 import OpSessionCard from '@/components/userlogs/OpSessionCard.vue'
 import { useOpLogsStore } from '@/stores/opLogs'
 import { useCollapseTransition } from '@/composables/useCollapseTransition'
-import { buildOpCsv, opActionMeta } from '@/utils/opLogMeta'
+import { buildOpCsv, opActionMeta, opActionSortKey } from '@/utils/opLogMeta'
 import { toast } from '@/utils/toast'
 
 const store = useOpLogsStore()
@@ -451,13 +451,21 @@ const listCount = computed(() => (store.isSession ? store.sessionTotal : store.t
 // 指标行直接读这四张卡的取值（口径见后端 /op-logs/summary，恒为「今日」）
 const metrics = computed(() => store.metrics)
 
-// 动作下拉只列库里真实出现过的动作，并带上计数：没数据的项不必占位
+// 动作下拉只列库里真实出现过的动作，并带上计数：没数据的项不必占位。
+// 顺序按中文表的声明顺序（认证组、用户变更组各自聚在一起），不跟接口的返回次序走——
+// 那个次序只是「确定」，并没有业务含义。
+// 下拉常开模糊搜索（复用 BaseSelect 的 searchable）：项数会随功能增长，而它同时匹配
+// label 与 value，搜中文「登录」和搜码值「auth」都能命中。不按项数开关——
+// 同一个控件的行为不该随数据量变化，多一行搜索框的代价远小于「有时能搜有时不能」。
 const actionOptions = computed(() => [
   { value: '', label: '全部动作' },
-  ...store.meta.actions.map((a) => ({
-    value: a.value,
-    label: `${opActionMeta(a.value).label}（${a.count}）`,
-  })),
+  ...[...store.meta.actions]
+    .sort((a, b) =>
+      opActionSortKey(a.value) - opActionSortKey(b.value) || a.value.localeCompare(b.value))
+    .map((a) => ({
+      value: a.value,
+      label: `${opActionMeta(a.value).label}（${a.count}）`,
+    })),
 ])
 
 const resultOptions = [

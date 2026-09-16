@@ -12,11 +12,17 @@ export function useCollapseTransition(isReduced, { pad = 16, duration = 0.36 } =
       done()
       return
     }
+    // ⚠️补间目标必须是**归零 padding 之前**量到的实际盒高，不能用 height:'auto'：
+    // GSAP 是在 from 生效之后才解析 'auto' 的，那时 padding 已被归零，量出来的是内容高；
+    // 而 Tailwind preflight 全局 box-sizing:border-box 会把这个数当盒高用，于是补间走到
+    // 内容高便结束，clearProps 交还 padding 的瞬间盒子突然弹高 2×pad（实测 28px 的跳变）。
+    // 先量再补间，终点与交还 padding 后的自然高度完全一致，没有任何跳变。
+    const target = el.getBoundingClientRect().height
     gsap.fromTo(
       el,
       { height: 0, paddingTop: 0, paddingBottom: 0, autoAlpha: 0 },
       {
-        height: 'auto',
+        height: target,
         paddingTop: pad,
         paddingBottom: pad,
         autoAlpha: 1,

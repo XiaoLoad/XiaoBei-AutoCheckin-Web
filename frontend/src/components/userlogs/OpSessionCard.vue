@@ -22,12 +22,13 @@
       </span>
     </header>
 
-    <ol class="mt-2.5">
+    <ol ref="listRef" class="mt-2.5">
       <li
         v-for="(e, i) in visibleEvents"
         :key="e.id"
         class="flex items-start gap-2.5"
         :class="i === visibleEvents.length - 1 ? '' : 'pb-2.5'"
+        :data-fresh="i >= PREVIEW_COUNT ? '' : null"
       >
         <!-- 轴列：自撑满行高，圆点上下各接半段，首条只向下、末条只向上；
              圆点套 ring-card 让线在圆点处断开，读起来是一串事件而不是一条连续线 -->
@@ -59,19 +60,25 @@
       </li>
     </ol>
 
-    <button
-      v-if="hiddenCount > 0"
-      type="button"
-      class="mt-2 w-full rounded-lg py-1 text-xs font-medium text-brand transition hover:bg-brand/5"
-      @click="expanded = true"
-    >
-      展开其余 {{ hiddenCount }} 项操作
-    </button>
+    <!-- 展开出口的塌陷与列表的增长同属一次操作，两边节奏要对上：
+         按钮若凭空消失、列表却还在长，卡片的底边会连着跳两次 -->
+    <Transition :css="false" @enter="onMoreEnter" @leave="onMoreLeave">
+      <button
+        v-if="hiddenCount > 0"
+        type="button"
+        class="mt-2 w-full rounded-lg py-1 text-xs font-medium text-brand transition hover:bg-brand/5"
+        @click="expandAll"
+      >
+        展开其余 {{ hiddenCount }} 项操作
+      </button>
+    </Transition>
   </article>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { gsap } from 'gsap'
+import { useCollapseTransition } from '@/composables/useCollapseTransition'
 import {
   opCategoryMeta,
   opCloseMeta,
@@ -103,4 +110,69 @@ const duration = computed(() =>
   opDurationText(props.session.durationSeconds, props.session.running)
 )
 const closeMeta = computed(() => opCloseMeta(props.session.closeReason))
+
+const listRef = ref(null)
+const reduceMotion = ref(false)
+let mm = null
+
+// 展开出口自身的塌陷补间（pad 与按钮的 py-1 对齐）
+const { onEnter: onMoreEnter, onLeave: onMoreLeave } = useCollapseTransition(
+  () => reduceMotion.value,
+  { pad: 4, duration: 0.22 }
+)
+
+// 展开其余操作：列表高度从旧值补间到新值，新出现的行错峰淡入。
+// 这里不用 useCollapseTransition——那个面向「元素挂载/卸载」的折叠，
+// 而本处容器一直都在、只是内容变多，所以前后各量一次高度自己补间。
+// 光补间高度不淡入新行，行会随容器「瞬间长出来」，看着像卡了一下。
+async function expandAll() {
+  const el = listRef.value
+  if (expanded.value || !el) return
+  if (reduceMotion.value) {
+    expanded.value = true
+    return
+  }
+  const from = el.getBoundingClientRect().height
+  expanded.value = true
+  await nextTick()
+  const to = el.getBoundingClientRect().height
+  gsap.fromTo(
+    el,
+    { height: from, overflow: 'hidden' },
+    {
+      height: to,
+      duration: 0.3,
+      ease: 'power2.out',
+      onComplete: () => gsap.set(el, { clearProps: 'height,overflow' }),
+    }
+  )
+  gsap.fromTo(
+    el.querySelectorAll('li[data-fresh]'),
+    { autoAlpha: 0, y: 6 },
+    {
+      autoAlpha: 1,
+      y: 0,
+      duration: 0.26,
+      stagger: 0.045,
+      delay: 0.06,
+      ease: 'power2.out',
+      clearProps: 'opacity,transform',
+    }
+  )
+}
+
+onMounted(() => {
+  mm = gsap.matchMedia()
+  mm.add('(prefers-reduced-motion: reduce)', () => {
+    reduceMotion.value = true
+    return () => {
+      reduceMotion.value = false
+    }
+  })
+})
+
+onUnmounted(() => {
+  mm?.revert()
+  gsap.killTweensOf(listRef.value || [])
+})
 </script>

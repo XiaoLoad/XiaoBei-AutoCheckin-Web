@@ -77,29 +77,36 @@
       </div>
 
       <!-- 明细：每条一个胶囊，横向流动，通常两三行内看完；
-           点一下就按该 IP 反查流水，把告警变成可追查的入口 -->
-      <div v-if="showAnomalies" class="mt-2.5 flex flex-wrap gap-2">
-        <button
-          v-for="a in store.anomalies"
-          :key="a.ip"
-          type="button"
-          class="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-danger/15 bg-white px-2.5 py-1.5 text-left text-xs transition hover:border-danger/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
-          @click="onInspectIp(a.ip)"
-        >
-          <span class="font-mono tabular-nums text-ink">{{ a.ip }}</span>
-          <span class="text-ink/20">·</span>
-          <span class="tabular-nums text-ink-muted">{{ a.firstAt }} → {{ a.lastAt }}</span>
-          <span class="text-ink/20">·</span>
-          <span class="text-ink-muted">
-            失败 <b class="tabular-nums text-danger">{{ a.count }}</b> 次
-          </span>
-          <template v-if="a.accounts.length">
+           点一下就按该 IP 反查流水，把告警变成可追查的入口。
+           胶囊数量随数据变，展开时按高度补间而不是瞬时弹开——骤然的位移会把刚读到的行顶走 -->
+      <Transition :css="false" @enter="onAnomalyEnter" @leave="onAnomalyLeave">
+        <div v-if="showAnomalies" class="mt-2.5 flex flex-wrap gap-2">
+          <button
+            v-for="a in store.anomalies"
+            :key="a.ip"
+            data-detail-item
+            type="button"
+            class="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-danger/15 bg-white px-2.5 py-1.5 text-left text-xs transition hover:border-danger/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+            @click="onInspectIp(a.ip)"
+          >
+            <!-- ⚠️IP 同样不用 font-mono：与胶囊里其余文字（正文族）字形盒高度不同，
+                 同一行高下基线会错开约 1px（详见 OpSessionCard.vue 同处注释），
+                 tabular-nums 已足够让点位对齐 -->
+            <span class="tabular-nums text-ink">{{ a.ip }}</span>
             <span class="text-ink/20">·</span>
-            <span class="truncate text-ink-muted">尝试账号 {{ a.accounts.join('、') }}</span>
-          </template>
-          <span class="font-medium text-brand">筛选该 IP</span>
-        </button>
-      </div>
+            <span class="tabular-nums text-ink-muted">{{ a.firstAt }} → {{ a.lastAt }}</span>
+            <span class="text-ink/20">·</span>
+            <span class="text-ink-muted">
+              失败 <b class="tabular-nums text-danger">{{ a.count }}</b> 次
+            </span>
+            <template v-if="a.accounts.length">
+              <span class="text-ink/20">·</span>
+              <span class="truncate text-ink-muted">尝试账号 {{ a.accounts.join('、') }}</span>
+            </template>
+            <span class="font-medium text-brand">筛选该 IP</span>
+          </button>
+        </div>
+      </Transition>
     </section>
 
     <!-- 筛选：单行铺开（窄屏自然折行）。
@@ -217,7 +224,7 @@
                 ? 'bg-white text-brand shadow-sm'
                 : 'text-ink-muted hover:text-ink-soft'
             "
-            @click="store.setView(v.key)"
+            @click="onViewSwitch(v.key)"
           >
             {{ v.label }}
           </button>
@@ -233,7 +240,7 @@
         </p>
       </header>
 
-      <div class="px-4 py-3 sm:px-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+      <div ref="bodyRef" class="px-4 py-3 sm:px-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
         <!-- 首屏骨架：形态与真实内容一致，数据到位时列表不整体跳动 -->
         <div v-if="store.loading" class="flex flex-col gap-3">
           <template v-if="store.isSession">
@@ -325,7 +332,8 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { gsap } from 'gsap'
 import StatCard from '@/components/StatCard.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import BaseDatePicker from '@/components/BaseDatePicker.vue'
@@ -334,6 +342,7 @@ import Icon from '@/components/Icon.vue'
 import OpLogEntry from '@/components/userlogs/OpLogEntry.vue'
 import OpSessionCard from '@/components/userlogs/OpSessionCard.vue'
 import { useOpLogsStore } from '@/stores/opLogs'
+import { useCollapseTransition } from '@/composables/useCollapseTransition'
 import { buildOpCsv, opActionMeta } from '@/utils/opLogMeta'
 import { toast } from '@/utils/toast'
 
@@ -376,6 +385,17 @@ const keywordDraft = ref(store.filters.keyword)
 // 明细最多 5 条、按胶囊横排，占用高度可控
 const showAnomalies = ref(true)
 
+// 动效统一挂在这一处开关上：命中系统「减少动态效果」时所有补间直接落终态
+const reduceMotion = ref(false)
+let mm = null
+const bodyRef = ref(null)
+
+// 告警明细没有纵向内边距（靠 mt-2.5 拉开间距），故 pad 给 0，只补间高度
+const { onEnter: onAnomalyEnter, onLeave: onAnomalyLeave } = useCollapseTransition(
+  () => reduceMotion.value,
+  { pad: 0, duration: 0.3 }
+)
+
 function onDateChange({ from, to }) {
   store.applyFilter({ dateFrom: from || '', dateTo: to || '' })
 }
@@ -391,11 +411,40 @@ function onClearKeyword() {
   if (store.filters.keyword) store.applyFilter({ keyword: '' })
 }
 
+// 视图切换要等新数据落地再播动画：切的那一刻屏上还是旧投影（或还没到的新数据），
+// 那时候动的是错的东西。这里只记下「切了」，等列表换了引用再播。
+let pendingView = ''
+
+function onViewSwitch(key) {
+  if (key === store.view) return
+  pendingView = key
+  store.setView(key)
+}
+
+// 列表入场：会话 ⇄ 流水是换一种看法，值得一次明确的转场；
+// 翻页与改筛选刻意不播——那是换一屏数据，每翻一页重放动画只会把浏览节奏拖慢。
+function playBodyEnter() {
+  const el = bodyRef.value
+  if (!el || reduceMotion.value) return
+  gsap.fromTo(
+    el,
+    { autoAlpha: 0, y: 8 },
+    {
+      autoAlpha: 1,
+      y: 0,
+      duration: 0.3,
+      ease: 'power2.out',
+      overwrite: true,
+      onComplete: () => gsap.set(el, { clearProps: 'opacity,visibility,transform' }),
+    }
+  )
+}
+
 // 点异常行即按该 IP 反查流水：告警条不只是提示，还得能顺着点进去。
 // 先切视图再改筛选，末次请求才是最终状态的请求（竞态守卫只采纳最新一次）。
 function onInspectIp(ip) {
   keywordDraft.value = ip
-  store.setView('flow')
+  onViewSwitch('flow')
   store.applyFilter({ keyword: ip })
 }
 
@@ -435,7 +484,21 @@ async function onExport() {
   }
 }
 
-onMounted(() => store.init())
+onMounted(() => {
+  mm = gsap.matchMedia()
+  mm.add('(prefers-reduced-motion: reduce)', () => {
+    reduceMotion.value = true
+    return () => {
+      reduceMotion.value = false
+    }
+  })
+  store.init()
+})
+
+onUnmounted(() => {
+  mm?.revert()
+  gsap.killTweensOf(bodyRef.value || [])
+})
 
 // watch 一律写在脚本末尾：注册时即求一次源值，写在依赖声明之前会触发 TDZ，
 // 整个 setup 抛错导致页面白屏（eslint/build 都查不出）
@@ -448,5 +511,14 @@ watch(keywordDraft, (v) => {
     if (kw === store.filters.keyword) return
     store.applyFilter({ keyword: kw })
   }, 400)
+})
+
+// 两个列表各自的引用就是「新数据到了」的信号（loadCurrent 每次都整段替换数组）。
+// pendingView 为空说明这次变动来自翻页或筛选，不播动画。
+watch([() => store.sessions, () => store.logs], (next, prev) => {
+  if (!pendingView) return
+  if (next[0] === prev[0] && next[1] === prev[1]) return
+  pendingView = ''
+  nextTick(playBodyEnter)
 })
 </script>

@@ -100,14 +100,31 @@
             <!-- 账号 -->
             <div class="login-field">
               <label for="account" class="mb-1.5 block text-sm font-medium text-ink-soft">账号</label>
-              <input
-                id="account"
-                v-model="form.account"
-                type="text"
-                autocomplete="username"
-                placeholder="请输入学号 / 手机号"
-                class="login-input"
-              />
+              <div class="relative">
+                <input
+                  id="account"
+                  ref="accountInput"
+                  v-model="form.account"
+                  type="text"
+                  autocomplete="username"
+                  placeholder="请输入学号 / 手机号"
+                  class="login-input pr-11"
+                />
+                <!-- 一键清除：右侧内边距常驻（不随按钮显隐变化），
+                     否则首个字符一敲、按钮冒出来的同时文字会被挤着横跳一下。
+                     mousedown.prevent 让输入框在点按钮时不失焦：既省掉一次 blur→focus 的
+                     字段上下浮动，也避免焦点被抢走后再交还。 -->
+                <button
+                  v-if="form.account"
+                  type="button"
+                  class="login-clear right-3"
+                  aria-label="清除账号"
+                  @mousedown.prevent
+                  @click="clearField('account')"
+                >
+                  <Icon name="close" :size="13" :stroke-width="2.4" />
+                </button>
+              </div>
             </div>
 
             <!-- 密码 -->
@@ -116,12 +133,24 @@
               <div class="relative">
                 <input
                   id="password"
+                  ref="passwordInput"
                   v-model="form.password"
                   :type="showPassword ? 'text' : 'password'"
                   autocomplete="current-password"
                   placeholder="请输入密码"
-                  class="login-input pr-16"
+                  class="login-input pwd-input pr-[5.75rem]"
                 />
+                <!-- 清除钮排在「显示 / 隐藏」左侧，与它留 4px 间隔；两者共占右侧 5.75rem -->
+                <button
+                  v-if="form.password"
+                  type="button"
+                  class="login-clear right-[3.75rem]"
+                  aria-label="清除密码"
+                  @mousedown.prevent
+                  @click="clearField('password')"
+                >
+                  <Icon name="close" :size="13" :stroke-width="2.4" />
+                </button>
                 <button
                   type="button"
                   class="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg px-2 py-1 text-sm text-ink-muted transition hover:bg-cloud hover:text-brand focus:text-brand focus:outline-none"
@@ -185,10 +214,13 @@ import { useAuthStore } from '@/stores/auth'
 import { useLoginAnimations } from '@/composables/useLoginAnimations'
 import BaseCheckbox from '@/components/BaseCheckbox.vue'
 import MessageModal from '@/components/MessageModal.vue'
+import Icon from '@/components/Icon.vue'
 
 const root = ref(null)
 const loading = ref(false)
 const showPassword = ref(false)
+const accountInput = ref(null)
+const passwordInput = ref(null)
 
 const router = useRouter()
 const route = useRoute()
@@ -205,6 +237,13 @@ const form = reactive({
   password: '',
   remember: false
 })
+
+// 一键清除：清空后把焦点交还输入框，省去再点一次才能接着输入
+function clearField(key) {
+  form[key] = ''
+  const el = key === 'account' ? accountInput.value : passwordInput.value
+  el?.focus()
+}
 
 // 登录结果提示：统一走通用模态框（替代原生 alert）
 const loginMsg = reactive({ show: false, type: 'info', title: '', message: '' })

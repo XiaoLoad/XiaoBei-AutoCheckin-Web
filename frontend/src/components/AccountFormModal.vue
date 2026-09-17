@@ -603,12 +603,8 @@ defineExpose({ close })
 </script>
 
 <style scoped>
-/* 关掉浏览器自带的密码显示按钮（Edge 的 ::-ms-reveal），避免与字段内的开关
-   并排成两只眼睛；只作用于本弹窗的密码框，不动其它页面的原生行为 */
-.pwd-input::-ms-reveal,
-.pwd-input::-ms-clear {
-  display: none;
-}
+/* 密码框关掉浏览器自带的显示按钮：规则已提到 assets/main.css 的 `.pwd-input`，
+   与登录页共用一份；在自带显示开关的密码框上加这个类即可。 */
 
 /* 通道行两列：左列是通道标识（移动端按内容宽、sm 起固定宽以便各行对齐），右列是控件。
    标识与控件各占一格，"哪个通道 / 配了什么"在同一条水平线上对读。 */

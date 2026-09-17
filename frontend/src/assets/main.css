@@ -207,6 +207,29 @@ html.theme-blossom[data-mode="dark"] {
            placeholder:text-ink-muted transition duration-200
            focus:border-brand focus:bg-elevated focus:outline-none focus:ring-4 focus:ring-brand/15;
   }
+  /* 关掉浏览器自带的密码揭示按钮（Edge 的 ::-ms-reveal、旧 IE 的 ::-ms-clear）。
+     ⚠️只在**自带显示开关**的密码框上加 `pwd-input`：其它密码框（用户弹窗、系统设置、
+     推送凭证那些）没有自己的开关，原生的眼睛就是唯一查看途径，不能一并关掉。 */
+  .pwd-input::-ms-reveal,
+  .pwd-input::-ms-clear {
+    display: none;
+  }
+  /* 输入框一键清除钮：叠在右侧的圆形小叉，横向位置由调用处的 right-* 决定。
+     默认不可见、也**不进 Tab 序列**（visibility 而非仅 opacity），
+     只在所在字段获得焦点时露出——见下面 .login-field:focus-within。 */
+  .login-clear {
+    @apply absolute top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full
+           bg-ink/10 text-ink-muted opacity-0 invisible
+           hover:bg-ink/20 hover:text-ink focus:outline-none focus:ring-2 focus:ring-brand/30;
+    /* 过渡只收这四个属性，且用手写值而不是 @apply transition-*：
+       带上 transform 会把 -translate-y-1/2 的居中偏移也一起补间，按钮按下时会晃一下；
+       visibility 与 opacity 同长，隐去时才会先淡出再收，不然会「啪」地消失。 */
+    transition: color 0.15s ease, background-color 0.15s ease, opacity 0.15s ease, visibility 0.15s ease;
+  }
+  /* 焦点落在本字段的任一元素上（输入框，或键盘 Tab 到清除钮自己）时露出 */
+  .login-field:focus-within .login-clear {
+    @apply opacity-100 visible;
+  }
   .brand-panel {
     @apply bg-panel text-white relative overflow-hidden;
   }

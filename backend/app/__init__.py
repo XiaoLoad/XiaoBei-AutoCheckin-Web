@@ -28,6 +28,7 @@ from app.routes.me import bp as me_bp
 from app.routes.admin import bp as admin_bp
 from app.routes.map import bp as map_bp
 from app.routes.op_logs import bp as op_logs_bp
+from app.routes.group_push import bp as group_push_bp
 from app.services.scheduler import init_scheduler
 from app.services.op_log import connect_handlers
 
@@ -78,6 +79,7 @@ def create_app(env_name=None):
     app.register_blueprint(admin_bp)          # /api/admin（管理员仪表盘聚合：全站视角）
     app.register_blueprint(map_bp)            # /api/map（地图服务配置：地图拾取用）
     app.register_blueprint(op_logs_bp)        # /api/op-logs（用户日志：平台操作审计）
+    app.register_blueprint(group_push_bp)      # /api/group-push（班级/寝室分组合并推送）
 
     # 操作审计订阅者：把 app/events.py 发出的用户/认证信号落成 op_logs 流水。
     # 与蓝图注册同批完成，保证任何请求进来之前订阅关系已就绪（进程级幂等）

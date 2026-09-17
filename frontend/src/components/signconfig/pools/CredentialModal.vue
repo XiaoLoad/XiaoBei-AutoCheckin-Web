@@ -49,12 +49,13 @@ const store = useSignConfigStore()
 const typeOptions = [
   { label: 'Server酱', value: 'serverchan' },
   { label: 'PushPlus', value: 'pushplus' },
+  { label: 'PushPlus开放（群推送）', value: 'pushplus-open' },
   { label: '邮件', value: 'email' }
 ]
 const isEdit = computed(() => !!props.credential)
 const saving = computed(() => store.saving)
 
-const blankFields = () => ({ serverchanKey: '', pushplusToken: '', emailSmtp: '', emailFrom: '', emailPass: '', emailTo: '' })
+const blankFields = () => ({ serverchanKey: '', pushplusToken: '', token: '', emailSmtp: '', emailFrom: '', emailPass: '', emailTo: '' })
 const form = reactive({ id: '', name: '', type: 'serverchan', fields: blankFields() })
 
 // 打开时回填（新增=清空，编辑=载入凭证脱敏字段；密文占位由后端识别为「未修改」）

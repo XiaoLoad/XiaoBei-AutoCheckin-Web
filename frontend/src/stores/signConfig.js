@@ -940,9 +940,9 @@ export const useSignConfigStore = defineStore('signConfig', () => {
       saving.value = false
     }
   }
-  // 测试推送：真实发送一条样例消息到该凭证通道，验证可用性
-  async function testPushCredential(id, template = 'html') {
-    await api.testPushCredential(id, template)
+  // 测试推送：真实发送一条样例消息到该凭证通道，验证可用性。qqCode 选填（QQ 群通道）
+  async function testPushCredential(id, template = 'html', qqCode = '') {
+    await api.testPushCredential(id, template, qqCode)
   }
 
   // ── 资源池：UA 模板（系统级，管理员维护） ──

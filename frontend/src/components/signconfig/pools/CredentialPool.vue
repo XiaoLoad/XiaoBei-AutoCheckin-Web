@@ -85,6 +85,18 @@
             </template>
           </div>
         </div>
+
+        <!-- 群配置编码（仅 pushplus-open 群推送凭证）：测试推送选填，留空发本人、填了发群 -->
+        <div v-if="c.type === 'pushplus-open'" class="mt-2.5 flex items-center gap-2 border-t border-ink/5 pt-2.5">
+          <Icon name="users" :size="13" class="shrink-0 text-ink-muted" />
+          <input
+            v-model.trim="qqCodes[c.id]"
+            type="text"
+            :disabled="testing === c.id"
+            :placeholder="testing === c.id ? '发送中…' : '群配置编码（选填，留空发本人）'"
+            class="min-w-0 flex-1 rounded-lg border border-ink/15 bg-cloud px-2.5 py-1.5 text-xs text-ink outline-none transition placeholder:text-ink-faint focus:border-brand/40 disabled:opacity-50"
+          />
+        </div>
       </article>
     </TransitionGroup>
 
@@ -105,21 +117,23 @@ const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').mat
 const typeOptions = [
   { label: 'Server酱', value: 'serverchan' },
   { label: 'PushPlus', value: 'pushplus' },
+  { label: 'PushPlus开放（群推送）', value: 'pushplus-open' },
   { label: '邮件', value: 'email' }
 ]
 const modalOpen = ref(false)
 const editing = ref(null)
 const testing = ref(null) // 正在测试的凭证 id
 const confirmingId = ref(null) // 两步删除确认
+const qqCodes = ref({}) // 群推送（pushplus-open）测试用群配置编码：按凭证 id 暂存，选填
 
 function typeLabel(t) {
   return (typeOptions.find((o) => o.value === t) || {}).label || t
 }
 function channelCls(t) {
-  return { serverchan: 'bg-brand/10 text-brand', pushplus: 'bg-success/10 text-success', email: 'bg-info/10 text-info' }[t] || 'bg-ink/10 text-ink-soft'
+  return { serverchan: 'bg-brand/10 text-brand', pushplus: 'bg-success/10 text-success', 'pushplus-open': 'bg-brand/10 text-brand', email: 'bg-info/10 text-info' }[t] || 'bg-ink/10 text-ink-soft'
 }
 function channelShort(t) {
-  return { serverchan: 'SC', pushplus: 'PP', email: '@' }[t] || '··'
+  return { serverchan: 'SC', pushplus: 'PP', 'pushplus-open': 'PK', email: '@' }[t] || '··'
 }
 function openAdd() {
   editing.value = null
@@ -138,9 +152,10 @@ function confirmDel(c) {
 }
 async function testPush(c) {
   testing.value = c.id
+  const qqCode = (qqCodes.value[c.id] || '').trim()
   try {
-    await store.testPushCredential(c.id, 'html')
-    toast('测试推送已发送，请查收', 'success')
+    await store.testPushCredential(c.id, 'html', qqCode)
+    toast(qqCode ? '群测试推送已发送，请到 QQ 群查收' : '测试推送已发送，请到本人 QQ 查收', 'success')
   } catch (e) {
     toast('测试推送失败，请检查凭证或通道配置', 'error')
   } finally {

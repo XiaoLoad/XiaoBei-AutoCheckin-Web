@@ -404,6 +404,13 @@ def reconcile():
         except Exception:
             db.session.rollback()
             log.exception('活动窗口轮询异常（不影响 cron 对账）')
+        # 群合并推送对账兜底：补发到点未发的待触发记录（防延迟 job 丢失，非 EOD 补发）
+        try:
+            from app.services.group_digest import reconcile_pending_digests
+            reconcile_pending_digests()
+        except Exception:
+            db.session.rollback()
+            log.exception('群合并推送对账异常（不影响 cron 对账）')
 
 
 def _expand_windows_job():
@@ -963,6 +970,10 @@ def _commit_result(schedule, acc, status, fail_reason='', resolved=None, extra=N
         initiator='system',
         course_name=course_name or None,
     )
+    # 任务发起人（B 平台真实姓名）与是否需要图片：取自执行时 extra（无 extra 如早期跳过则为空）
+    ex = extra or {}
+    rec.task_initiator = ex.get('initiator') or ''
+    rec.need_photo = ex.get('need_photo')
     # 执行时配置快照：忠实还原该条日志当时实际使用的配置（resolved 为 None 表示
     # 执行前配置缺失/校验失败，无快照可抓，落 NULL，详情端显示「无配置快照」）
     if resolved is not None:
@@ -980,6 +991,15 @@ def _commit_result(schedule, acc, status, fail_reason='', resolved=None, extra=N
         acc.last_sign_at = now_cst()
         acc.last_sign_status = status
     db.session.commit()
+
+    # 群合并推送注册：寝室签到落库即登记本成员所属分组的合并触发（个人 1-to-1 仍由 dispatch_push 并发）。
+    # 异常隔离，绝不波及主链路落库结果。
+    if schedule.task_type == 'dorm':
+        try:
+            from app.services.group_digest import register_digest
+            register_digest(acc, schedule)
+        except Exception:
+            log.exception('群合并推送注册失败（不影响执行记录） schedule=%s', schedule.id)
 
     # 统一出口日志：_commit_result 是全部执行路径（成功/失败/跳过，含提交前的各早退分支、
     # 甚至外层兜底）唯一的落库点，只有在这里留一条 INFO 才能保证「任何一种结局都有痕」。

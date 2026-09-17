@@ -5,13 +5,14 @@ import re
 
 from app.utils.validators import RECIPIENT_MAX, validate_recipients
 
-_CHANNELS = ('serverchan', 'pushplus', 'email')
+_CHANNELS = ('serverchan', 'pushplus', 'email', 'pushplus-open')
 _CRED_REQUIRED_FIELDS = {
     'serverchan': ['serverchanKey'],
     'pushplus': ['pushplusToken'],
     'email': ['emailSmtp', 'emailFrom', 'emailPass', 'emailTo'],
+    'pushplus-open': ['token'],
 }
-_SECRET_KEYS = ('serverchanKey', 'pushplusToken', 'emailPass')
+_SECRET_KEYS = ('serverchanKey', 'pushplusToken', 'emailPass', 'token')
 _MASK_RE = re.compile(r'^••••')
 _COMPOSITE = (dict, list, tuple, set)
 # 字段长度上限：收件人可写多个（逗号分隔），单独放宽

@@ -11,6 +11,9 @@ from app.models.sign_record import SignRecord
 from app.models.push_log import PushLog
 from app.models.op_log import OpAnomalyAck, OpLog
 from app.models.jwxt import JwAccount, JwSemester, JwTimetable, ActivityWindow
+from app.models.group_push import (
+    PushGroup, PushGroupMember, PushGroupDigestLog, PushGroupDigestPending,
+)
 
 __all__ = [
     'db', 'User', 'TokenBlacklist', 'SystemConfig',
@@ -18,4 +21,5 @@ __all__ = [
     'PoolLocation', 'PoolCredential', 'PoolUa', 'PoolImage', 'ImageGroup',
     'Schedule', 'SignRecord', 'PushLog', 'OpLog', 'OpAnomalyAck',
     'JwAccount', 'JwSemester', 'JwTimetable', 'ActivityWindow',
+    'PushGroup', 'PushGroupMember', 'PushGroupDigestLog', 'PushGroupDigestPending',
 ]

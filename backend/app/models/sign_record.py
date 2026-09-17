@@ -18,7 +18,12 @@ class SignRecord(db.Model):
     signed_at = db.Column(db.DateTime)
     status = db.Column(db.String(16), nullable=False)                    # success | fail | skip
     fail_reason = db.Column(db.String(255))
-    initiator = db.Column(db.String(16), nullable=False, default='system')  # system | manual
+    initiator = db.Column(db.String(16), nullable=False, default='system')  # system | manual（执行触发方）
+    # B 平台任务真实发起人（sendName·sendRole 姓名），群汇总/详情回显用；与 initiator 区分：
+    # initiator 记「谁触发了本次执行」，task_initiator 记「这条签到任务由谁在 B 平台发起」。
+    task_initiator = db.Column(db.String(64), nullable=True)
+    # 任务是否需要上传签到图片（取自 B 平台任务 needPhoto），群汇总逐人回显
+    need_photo = db.Column(db.Boolean, nullable=True)
     # 执行时配置快照（JSON 字符串）：落库瞬间抓取 resolved 配置的可读渲染，作为历史切片。
     # 存量记录为 NULL —— 详情接口据此返回 hasSnapshot=false，前端显示「无配置快照」。
     config_snapshot = db.Column(db.Text)

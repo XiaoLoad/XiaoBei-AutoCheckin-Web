@@ -50,6 +50,13 @@ const dynamicRoutes = [
     meta: { title: '任务日志', requiresAuth: true, roles: ['user'], group: '运营管理', icon: 'records', order: 5 }
   },
   {
+    path: '/group-push',
+    name: 'group-push',
+    component: () => import('@/views/GroupPushView.vue'),
+    // 群推送：班级（className 派生）/ 寝室（手动成员）两类分组合并推送 QQ 群
+    meta: { title: '群推送', requiresAuth: true, roles: ['user'], group: '运营管理', icon: 'send', order: 6 }
+  },
+  {
     path: '/users',
     name: 'users',
     component: () => import('@/views/UserManagementView.vue'),

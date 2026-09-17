@@ -5,7 +5,8 @@ export const PUSH_CHANNELS = ['serverchan', 'pushplus', 'email']
 export const CHANNEL_META = {
   serverchan: { label: 'Server 酱', short: 'SC', tone: 'bg-brand/10 text-brand', dot: 'bg-brand' },
   pushplus: { label: 'PushPlus', short: 'PP', tone: 'bg-success/10 text-success', dot: 'bg-success' },
-  email: { label: '邮箱', short: '@', tone: 'bg-info/10 text-info', dot: 'bg-info' }
+  email: { label: '邮箱', short: '@', tone: 'bg-info/10 text-info', dot: 'bg-info' },
+  'pushplus-open': { label: 'PushPlus开放', short: 'PK', tone: 'bg-brand/10 text-brand', dot: 'bg-brand' }
 }
 
 const UNKNOWN = { label: '未知通道', short: '··', tone: 'bg-ink/10 text-ink-soft', dot: 'bg-ink/30' }

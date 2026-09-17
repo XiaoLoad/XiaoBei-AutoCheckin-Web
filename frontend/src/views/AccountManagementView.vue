@@ -62,6 +62,16 @@
           </button>
           <button
             type="button"
+            class="inline-flex items-center justify-center gap-1.5 rounded-xl border px-3.5 py-2 text-sm font-semibold transition focus:outline-none focus:ring-4"
+            :class="selectMode ? 'border-brand bg-brand/10 text-brand focus:ring-brand/30' : 'border-ink/10 text-ink-soft hover:bg-cloud focus:ring-ink/10'"
+            @click="toggleSelectMode"
+          >
+            <Icon name="check" :size="17" />
+            <span class="hidden sm:inline">{{ selectMode ? '退出选择' : '批量分组' }}</span>
+            <span class="sm:hidden">批量</span>
+          </button>
+          <button
+            type="button"
             class="inline-flex items-center justify-center gap-1.5 rounded-xl bg-brand px-3.5 py-2 text-sm font-semibold text-white shadow-lg shadow-brand/25 transition hover:bg-brand-dark focus:outline-none focus:ring-4 focus:ring-brand/30 sm:px-4"
             @click="store.openAdd"
           >
@@ -70,6 +80,22 @@
             <span class="sm:hidden">新增</span>
           </button>
         </div>
+      </div>
+    </div>
+
+    <!-- 批量分组操作栏：选中账号后可一键建寝室分组或加入现有分组 -->
+    <div v-if="selectMode && selectedIds.length" class="dash-card fade-up shrink-0 flex flex-wrap items-center gap-3 p-3 sm:p-4">
+      <span class="inline-flex items-center gap-1.5 text-sm font-medium text-ink">
+        <Icon name="check-circle" :size="16" class="text-brand" />已选 {{ selectedIds.length }} 个账号
+      </span>
+      <div class="ml-auto flex items-center gap-2">
+        <button type="button" class="inline-flex items-center gap-1.5 rounded-xl bg-brand px-3.5 py-2 text-sm font-semibold text-white shadow-lg shadow-brand/25 transition hover:bg-brand-dark" @click="openNewGroup">
+          <Icon name="box" :size="16" />新建寝室分组
+        </button>
+        <button type="button" class="inline-flex items-center gap-1.5 rounded-xl border border-ink/10 px-3.5 py-2 text-sm font-medium text-ink-soft transition hover:bg-cloud" @click="openJoinGroup">
+          <Icon name="members" :size="16" />加入现有寝室分组
+        </button>
+        <button type="button" class="rounded-xl border border-ink/10 px-3 py-2 text-sm text-ink-muted transition hover:bg-cloud" @click="clearSelection">清空</button>
       </div>
     </div>
 
@@ -99,6 +125,7 @@
           >
             <!-- 头部：头像（圆环色=上次签到状态）+ 姓名/账号 + 启用状态 -->
             <div class="flex items-center gap-3">
+              <BaseCheckbox v-if="selectMode" :model-value="isSelected(item.id)" @update:model-value="toggleSelect(item.id, $event)" class="shrink-0" />
               <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand/10 text-sm font-medium text-brand ring-2" :class="ringCls(item)">
                 {{ avatarChar(item) }}
               </div>
@@ -205,6 +232,61 @@
       @cancel="store.closeDelete"
     />
 
+    <!-- 批量：新建寝室分组 -->
+    <BaseModal v-model="newGroupOpen" title="新建寝室分组" size="md">
+      <div class="space-y-4">
+        <p class="text-sm text-ink-muted">将为选中的 {{ selectedIds.length }} 个账号创建新的寝室分组。</p>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-ink-soft">分组名称</label>
+          <input v-model="newGroupName" type="text" placeholder="如：3栋507" class="login-input w-full py-2 text-sm" />
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-ink-soft">QQ 群编码（qq_code）<span class="text-ink-muted">（可选）</span></label>
+          <input v-model="newGroupQq" type="text" placeholder="留空可稍后绑定" class="login-input w-full py-2 text-sm" />
+          <p class="mt-1.5 text-xs text-ink-muted">未绑定 QQ 群前不会推送；可在「群推送」页随时编辑。</p>
+        </div>
+      </div>
+      <template #footer>
+        <button type="button" class="flex-1 rounded-xl border border-ink/10 py-2.5 text-sm font-medium text-ink-soft transition hover:bg-cloud" @click="newGroupOpen = false">取消</button>
+        <button type="button" class="flex-1 rounded-xl bg-brand py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand/25 transition hover:bg-brand-dark disabled:opacity-60" :disabled="!newGroupName.trim() || creatingGroup" @click="submitNewGroup">
+          {{ creatingGroup ? '创建中' : '创建并加入' }}
+        </button>
+      </template>
+    </BaseModal>
+
+    <!-- 批量：加入现有寝室分组 -->
+    <BaseModal v-model="joinGroupOpen" title="加入现有寝室分组" size="md">
+      <div class="space-y-4">
+        <p class="text-sm text-ink-muted">将选中的 {{ selectedIds.length }} 个账号加入一个已存在的寝室分组。</p>
+        <div v-if="joinLoading" class="py-6 text-center text-sm text-ink-muted">加载中…</div>
+        <div v-else-if="joinGroups.length === 0" class="rounded-xl border border-dashed border-ink/10 px-3 py-6 text-center text-sm text-ink-muted">
+          还没有寝室分组，先去「群推送」页新建一个。
+        </div>
+        <div v-else>
+          <label class="mb-1.5 block text-sm font-medium text-ink-soft">选择分组</label>
+          <div class="xb-scroll max-h-60 overflow-auto rounded-xl border border-ink/5">
+            <label
+              v-for="g in joinGroups"
+              :key="g.id"
+              class="flex cursor-pointer items-center justify-between gap-2 border-b border-ink/5 px-3 py-2.5 transition hover:bg-cloud/50"
+            >
+              <span class="min-w-0">
+                <span class="block truncate text-sm text-ink">{{ g.name }}</span>
+                <span class="block truncate text-xs text-ink-muted">{{ g.memberCount }} 名成员 · {{ g.bound ? '已绑 QQ 群' : '未绑 QQ 群' }}</span>
+              </span>
+              <BaseCheckbox :model-value="joinTarget === g.id" @update:model-value="joinTarget = $event ? g.id : null" />
+            </label>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <button type="button" class="flex-1 rounded-xl border border-ink/10 py-2.5 text-sm font-medium text-ink-soft transition hover:bg-cloud" @click="joinGroupOpen = false">取消</button>
+        <button type="button" class="flex-1 rounded-xl bg-brand py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand/25 transition hover:bg-brand-dark disabled:opacity-60" :disabled="joinTarget == null || joining" @click="submitJoinGroup">
+          {{ joining ? '加入中' : '加入分组' }}
+        </button>
+      </template>
+    </BaseModal>
+
     <!-- 底部间距占位：真实在流子元素，盒高计入 scrollHeight，不受滚动容器末端 padding/margin 折叠影响；
          -mt-6 抵消根容器 gap-6，确保底部间距精确 24px、与其它页面一致 -->
     <div class="h-6 shrink-0 -mt-6" aria-hidden="true"></div>
@@ -214,13 +296,18 @@
 <script setup>
 import { useAccountsStore } from '@/stores/accounts'
 import { storeToRefs } from 'pinia'
+import { ref } from 'vue'
 import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import BasePagination from '@/components/BasePagination.vue'
+import BaseModal from '@/components/BaseModal.vue'
+import BaseCheckbox from '@/components/BaseCheckbox.vue'
 import AccountFormModal from '@/components/AccountFormModal.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
 import { activeChannels, channelDot, channelLabel, channelTone, readCredEntry } from '@/utils/pushChannels'
 import { accountTypeMeta } from '@/utils/accountType'
+import { fetchGroups, createDormGroup, addMembers } from '@/api/groupPush'
+import { toast } from '@/utils/toast'
 
 // 领域状态下沉到 store：视图只做渲染与展示辅助，数据编排由 store 负责
 const store = useAccountsStore()
@@ -332,6 +419,87 @@ function pushChipTitle(item, ch) {
   if (e.credId && e.to) return `已绑定凭证 · 收件人：${e.to}`
   if (e.credId) return '已绑定凭证'
   return `仅指定收件人：${e.to}（凭证跟随配置套）`
+}
+
+// 批量分组（设计文档 §8.2）：账号多选 → 新建 / 加入寝室分组
+const selectMode = ref(false)
+const selectedIds = ref([])
+const newGroupOpen = ref(false)
+const joinGroupOpen = ref(false)
+const creatingGroup = ref(false)
+const newGroupName = ref('')
+const newGroupQq = ref('')
+const joinTarget = ref(null)
+const joinGroups = ref([])
+const joinLoading = ref(false)
+const joining = ref(false)
+
+function isSelected(id) {
+  return selectedIds.value.includes(id)
+}
+function toggleSelect(id, checked) {
+  if (checked) {
+    if (!selectedIds.value.includes(id)) selectedIds.value = [...selectedIds.value, id]
+  } else {
+    selectedIds.value = selectedIds.value.filter((x) => x !== id)
+  }
+}
+function toggleSelectMode() {
+  selectMode.value = !selectMode.value
+  if (!selectMode.value) selectedIds.value = []
+}
+function clearSelection() {
+  selectedIds.value = []
+}
+async function openNewGroup() {
+  if (selectedIds.value.length === 0) return
+  newGroupName.value = ''
+  newGroupQq.value = ''
+  newGroupOpen.value = true
+}
+async function submitNewGroup() {
+  if (!newGroupName.value.trim()) return
+  creatingGroup.value = true
+  try {
+    const g = await createDormGroup({ name: newGroupName.value.trim(), qqCode: newGroupQq.value.trim() })
+    const res = await addMembers(g.id, selectedIds.value)
+    toast(`已创建分组并加入 ${res && res.added != null ? res.added : selectedIds.value.length} 人`, 'success')
+    newGroupOpen.value = false
+    selectedIds.value = []
+    selectMode.value = false
+  } catch (e) {
+    /* toast by interceptor */
+  } finally {
+    creatingGroup.value = false
+  }
+}
+async function openJoinGroup() {
+  if (selectedIds.value.length === 0) return
+  joinTarget.value = null
+  joinLoading.value = true
+  joinGroupOpen.value = true
+  try {
+    joinGroups.value = await fetchGroups('dorm')
+  } catch (e) {
+    /* toast by interceptor */
+  } finally {
+    joinLoading.value = false
+  }
+}
+async function submitJoinGroup() {
+  if (joinTarget.value == null) return
+  joining.value = true
+  try {
+    const res = await addMembers(joinTarget.value, selectedIds.value)
+    toast(`已加入 ${res && res.added != null ? res.added : selectedIds.value.length} 人`, 'success')
+    joinGroupOpen.value = false
+    selectedIds.value = []
+    selectMode.value = false
+  } catch (e) {
+    /* toast by interceptor */
+  } finally {
+    joining.value = false
+  }
 }
 
 // 首次加载（store 内部负责拉取与状态管理；失败由全局 toast 提示）

@@ -37,7 +37,7 @@ class PoolCredential(db.Model):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
-    channel = db.Column(db.String(16), nullable=False)   # serverchan | pushplus | email
+    channel = db.Column(db.String(16), nullable=False)   # serverchan | pushplus | email | pushplus-open
     name = db.Column(db.String(64), nullable=False)
     secret_enc = db.Column(db.Text, nullable=False)      # Fernet 密文（JSON 结构化凭证）
     enabled = db.Column(db.Boolean, nullable=False, default=True)

@@ -362,4 +362,60 @@ def send_channel(channel, key_or_fields, ctx, template='html'):
             return True, ''
         except Exception as e:
             return False, str(e)
+    if channel == 'qq':
+        # pushplus 开放接口（QQ 机器人）：消息 token 走 URL 路径 /send/{token}，channel=qq 路由到 QQ；
+        # qqCode 为群配置编码，省略则发给机器人绑定的本人（自测可用性用）。
+        # key_or_fields 为 {token, qqCode}。
+        token = (key_or_fields or {}).get('token')
+        qq_code = (key_or_fields or {}).get('qqCode')
+        if not token:
+            return False, '缺少 pushplus-open Token'
+        # QQ 仅支持 markdown/txt，html 会被当成源码展示；html 回落 markdown
+        fmt = template if template in TEMPLATES else 'html'
+        if fmt == 'html':
+            fmt = 'markdown'
+        body = {'title': title, 'content': render(ctx, fmt),
+                'template': fmt, 'channel': 'qq'}
+        if qq_code:
+            body['option'] = qq_code
+        try:
+            resp = requests.post(f'https://www.pushplus.plus/send/{token}',
+                                 json=body, timeout=8, verify=PUSH_VERIFY_SSL)
+        except Exception as e:
+            return False, str(e)
+        try:
+            rb = resp.json()
+        except ValueError:
+            return False, f'PushPlus 开放接口响应非 JSON（HTTP {resp.status_code}）'
+        if resp.status_code != 200 or rb.get('code') != 200:
+            return False, (f"PushPlus 开放接口推送被拒（code={rb.get('code')}，"
+                           f"{rb.get('msg') or f'HTTP {resp.status_code}'}）")
+        return True, ''
     return False, f'未知通道：{channel}'
+
+
+def send_qq(token, qq_code, title, content, template='markdown'):
+    """群合并推送专用：直接投递已渲染好的合并消息到指定 QQ 群（pushplus 开放接口，消息 token）。
+    与 send_channel 的 qq 分支区别：消息内容由调用方整段渲染（多账号汇总），不走单人卡片模板。
+    返回 (ok, errmsg)。"""
+    title = _truncate(title, PUSHPLUS_TITLE_MAX)
+    content = _truncate(content, PUSHPLUS_CONTENT_MAX)
+    if not token:
+        return False, '缺少 pushplus-open Token'
+    if not qq_code:
+        return False, '分组未绑定 QQ 群'
+    try:
+        resp = requests.post(f'https://www.pushplus.plus/send/{token}',
+                             json={'title': title, 'content': content,
+                                   'template': template, 'channel': 'qq', 'option': qq_code},
+                             timeout=8, verify=PUSH_VERIFY_SSL)
+    except Exception as e:
+        return False, str(e)
+    try:
+        body = resp.json()
+    except ValueError:
+        return False, f'PushPlus 开放接口响应非 JSON（HTTP {resp.status_code}）'
+    if resp.status_code != 200 or body.get('code') != 200:
+        return False, (f"PushPlus 开放接口推送被拒（code={body.get('code')}，"
+                       f"{body.get('msg') or f'HTTP {resp.status_code}'}）")
+    return True, ''

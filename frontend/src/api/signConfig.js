@@ -234,9 +234,14 @@ export async function createCredential(payload) {
   return { ...data, type: data.channel }
 }
 
-// 测试推送：用该凭证真实发送一条样例消息，验证通道可用性（template 默认 html）
-export async function testPushCredential(id, template = 'html') {
-  await request({ url: `/pools/credentials/${id}/test-push`, method: 'post', data: { template } })
+// 测试推送：用该凭证真实发送一条样例消息，验证通道可用性（template 默认 html）。
+// qqCode 仅 pushplus-open（QQ 群）通道使用：选填，留空发本人、填了发群。
+export async function testPushCredential(id, template = 'html', qqCode = '') {
+  await request({
+    url: `/pools/credentials/${id}/test-push`,
+    method: 'post',
+    data: { template, qqCode: qqCode || '' },
+  })
   return true
 }
 

@@ -40,6 +40,10 @@ const FIELDS = {
   pushplus: [
     { key: 'pushplusToken', label: 'Token', placeholder: 'PushPlus Token' }
   ],
+  'pushplus-open': [
+    { key: 'token', label: 'Token', placeholder: 'PushPlus 开放接口 Token（消息 token）', type: 'password',
+      hint: '群推送专用：把合并签到结果发到 QQ 群；填消息 token，长期有效、无需刷新' }
+  ],
   email: [
     { key: 'emailSmtp', label: 'SMTP 地址', placeholder: '如 smtp.qq.com' },
     { key: 'emailFrom', label: '发件人', placeholder: '登录 SMTP 的邮箱地址' },

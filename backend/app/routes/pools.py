@@ -309,6 +309,8 @@ def _cred_key_of(channel, fields):
         return fields.get('serverchanKey') or None
     if channel == 'pushplus':
         return fields.get('pushplusToken') or None
+    if channel == 'pushplus-open':
+        return fields.get('token') or None
     if channel == 'email':
         if fields.get('emailSmtp') and fields.get('emailFrom') and fields.get('emailTo'):
             return {k: fields.get(k) for k in ('emailSmtp', 'emailFrom', 'emailPass', 'emailTo')}
@@ -329,9 +331,17 @@ def test_push_credential(cred_id):
 
     payload = request.get_json(silent=True) or {}
     template = payload.get('template') or 'html'
-    key = _cred_key_of(c.channel, fields)
-    if key is None:
-        return error(message=f'凭证缺少 {c.channel} 必要字段', code=4321, status=400)
+    if c.channel == 'pushplus-open':
+        # 开放接口走 qq 通道：token 必填，qqCode 省略则发给机器人绑定的本人（自测可用性）。
+        # QQ 仅支持 markdown/txt，强制 markdown，避免 html 在 QQ 里显示成源码。
+        key = {'token': fields.get('token'), 'qqCode': payload.get('qqCode')}
+        send_channel_name = 'qq'
+        template = 'markdown'
+    else:
+        key = _cred_key_of(c.channel, fields)
+        if key is None:
+            return error(message=f'凭证缺少 {c.channel} 必要字段', code=4321, status=400)
+        send_channel_name = c.channel
 
     # 样例上下文：用本人首个账号信息贴近真实效果；无账号则用占位，避免测试受限于是否有账号
     acc = BAccount.query.filter_by(user_id=request.current_user.id).order_by(BAccount.id.asc()).first()
@@ -342,7 +352,7 @@ def test_push_credential(cred_id):
                 'locationId': None,
                 'remarks': ['这是一条测试推送，用于验证通道可用性']}
     ctx = build_ctx(acc, schedule, resolved, 'success', image_url='')
-    ok, err = send_channel(c.channel, key, ctx, template)
+    ok, err = send_channel(send_channel_name, key, ctx, template)
     if ok:
         return success(message='测试推送已发送，请查收')
     return error(message=f'测试推送失败：{err}', code=4324, status=400)

@@ -77,6 +77,8 @@ function onConfirm() {
 }
 
 function onCancel() {
+  // 关闭弹窗（与遮罩 / ESC / 右上角 ✕ 同一条链路），并抛出 cancel 供调用方做清理
+  emit('update:modelValue', false)
   emit('cancel')
 }
 </script>

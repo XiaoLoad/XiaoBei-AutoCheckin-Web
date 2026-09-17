@@ -117,6 +117,7 @@
                 <button
                   v-if="form.account"
                   type="button"
+                  tabindex="-1"
                   class="login-clear right-3"
                   aria-label="清除账号"
                   @mousedown.prevent
@@ -144,6 +145,7 @@
                 <button
                   v-if="form.password"
                   type="button"
+                  tabindex="-1"
                   class="login-clear right-[3.75rem]"
                   aria-label="清除密码"
                   @mousedown.prevent

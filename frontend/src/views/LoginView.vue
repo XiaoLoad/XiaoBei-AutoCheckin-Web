@@ -143,11 +143,13 @@
               </RouterLink>
             </div>
 
-            <!-- 登录按钮 -->
+            <!-- 登录按钮：过渡只留 background-color / box-shadow。
+                 用 Tailwind 的 transition（默认含 opacity 与 transform）会和 GSAP 抢同一批属性：
+                 GSAP 每帧写一个值，浏览器再按 150ms 曲线把它拖过去，入场与 hover 缩放都被拉慢失真。 -->
             <button
               type="submit"
               :disabled="loading"
-              class="login-submit login-field mt-2 w-full rounded-xl bg-brand px-4 py-3 text-base font-semibold text-white shadow-lg shadow-brand/25 transition hover:bg-brand-dark hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-brand/30 disabled:cursor-not-allowed disabled:opacity-60"
+              class="login-submit login-field mt-2 w-full rounded-xl bg-brand px-4 py-3 text-base font-semibold text-white shadow-lg shadow-brand/25 transition-[background-color,box-shadow] hover:bg-brand-dark hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-brand/30 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {{ loading ? '登录中…' : '登 录' }}
             </button>

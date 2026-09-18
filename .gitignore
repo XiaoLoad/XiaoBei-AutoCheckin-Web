@@ -27,6 +27,7 @@ instance/
 *.log
 tmp/
 backend/logs/
+vite.config.js.timestamp-*.mjs
 
 # 图库上传文件（用户数据，不入库）
 backend/uploads/

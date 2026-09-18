@@ -48,6 +48,8 @@
       @click="toggle"
       @keydown="onKeydown"
     >
+      <!-- 触发区前置槽：调用方可在选项文字前放缩略图等标记（不传时外观与原来完全一致） -->
+      <slot name="prefix" />
       <span class="min-w-0 flex-1 truncate" :class="selectedLabel ? 'text-ink' : 'text-ink-muted'">
         {{ selectedLabel || placeholder }}
       </span>

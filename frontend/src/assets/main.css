@@ -252,8 +252,14 @@ html.theme-blossom[data-mode="dark"] {
 .delay-4 { animation-delay: 0.22s; }
 .delay-5 { animation-delay: 0.28s; }
 
+/* 条件块切换入场：只动透明度，不碰高度与位移。配置区在瀑布流卡片内，卡片高度由 ResizeObserver
+   测量，带位移/高度变化的入场动画会让卡片在动画期间被反复量高、触发多余重排。 */
+@keyframes xbBlockIn { from { opacity: 0; } to { opacity: 1; } }
+.xb-block-in { animation: xbBlockIn 0.18s ease-out both; }
+
 @media (prefers-reduced-motion: reduce) {
   .fade-up { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .xb-block-in { animation: none !important; opacity: 1 !important; }
 }
 
 /* 环境微动：循环动画，组件卸载后自动停止 */

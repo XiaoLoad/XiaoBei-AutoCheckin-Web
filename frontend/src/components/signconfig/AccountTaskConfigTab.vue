@@ -189,7 +189,7 @@
           />
           <LocationSection :config="store.taskConfig" :required="true" :error="store.formErrors.location" />
           <RemarkSection :config="store.taskConfig" :required="true" :error="store.formErrors.remarks" :sample-name="remarkSampleName" />
-          <ImageSection :config="store.taskConfig" />
+          <ImageSection :config="store.taskConfig" :account="selectedAccount" />
           <PushSection :config="store.taskConfig" />
           <AdvancedSection :config="store.taskConfig" />
         </MasonryGrid>
@@ -319,7 +319,9 @@ watch(
 )
 
 // ── 右编辑器：配置套回填 ──
-const accountName = computed(() => store.accounts.find((a) => a.id === store.selectedAccountId)?.name || '')
+// 当前选中账号：图片策略卡的「账号视角」要用完整对象解析所在分组
+const selectedAccount = computed(() => store.accounts.find((x) => String(x.id) === String(store.selectedAccountId)) || null)
+const accountName = computed(() => selectedAccount.value?.name || '')
 const typeLabel = computed(() => (store.taskTypes.find((t) => t.value === store.selectedTaskType) || {}).label || '')
 
 // 当前任务调度实例状态（来自 store，已含 enabled）

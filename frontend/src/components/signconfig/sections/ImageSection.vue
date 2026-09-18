@@ -10,44 +10,95 @@
       </div>
 
       <GCollapse :show="config.image.enabled">
-        <div class="space-y-2 pt-1">
+        <div class="space-y-3 pt-1">
+          <!-- 01 取图范围：选什么就用什么，选中项直接决定下方内容，不是换个标签继续选 -->
           <div>
-            <label class="mb-1 block text-xs font-medium text-ink-muted">取图方式</label>
-            <BaseSelect v-model="config.image.mode" :options="modeOptions" size="sm" class="w-72" />
-            <p class="mt-1 text-xs text-ink-muted">{{ modeHint }}</p>
+            <div class="mb-1.5 flex items-center gap-1.5">
+              <span class="text-[11px] font-medium tabular-nums text-ink-muted">01</span>
+              <span class="text-xs font-medium text-ink">图从哪来</span>
+              <span class="ml-auto text-[11px] text-ink-muted">定范围</span>
+            </div>
+            <div class="inline-flex w-full rounded-lg bg-cloud p-0.5" role="group" aria-label="取图方式">
+              <button
+                v-for="m in modeOptions"
+                :key="m.value"
+                type="button"
+                class="flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition"
+                :class="config.image.mode === m.value ? 'bg-elevated text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
+                :aria-pressed="config.image.mode === m.value"
+                @click="config.image.mode = m.value"
+              >
+                {{ m.label }}
+              </button>
+            </div>
+
+            <!-- key 触发整块重建：切换取图方式时条件块重播入场，而不是原地换文案 -->
+            <div :key="config.image.mode" class="xb-block-in mt-2.5">
+              <LibraryPicker
+                v-if="!isByGroup"
+                v-model="config.image.groupId"
+                :options="groupOptions"
+                :images="previewImages"
+              />
+              <GroupScope
+                v-else
+                :config="config.image"
+                :audit="audit"
+                :account="account"
+                :group-options="groupOptions"
+                :fallback-images="previewImages"
+                :is-admin="isAdmin"
+                @bind="router.push('/group-push')"
+              />
+            </div>
+
+            <!-- 账号视角：配置套不知道账号，只有这里能给出「算到本账号是什么」 -->
+            <ResolvedScope
+              v-if="account && isByGroup"
+              class="mt-2.5"
+              :resolved="resolved"
+              :account-name="account.name"
+              :group-kind="kind"
+            />
+
+            <!-- 漏网时才给就地兜底：分组绑好了就不该再摆选择器，否则又被读成「选了分组还能再选」 -->
+            <div v-if="accountGap" class="xb-block-in mt-2.5 flex items-center gap-2">
+              <span class="flex-none text-xs text-ink-muted">兜底</span>
+              <div class="min-w-0 flex-1">
+                <LibraryPicker
+                  v-model="config.image.groupId"
+                  tone="fallback"
+                  :options="groupOptions"
+                  :images="previewImages"
+                />
+              </div>
+            </div>
           </div>
 
-          <div v-if="isByGroup">
-            <label class="mb-1 block text-xs font-medium text-ink-muted">按哪类分组</label>
-            <BaseSelect v-model="config.image.groupKind" :options="kindOptions" size="sm" class="w-72" />
-          </div>
-
+          <!-- 02 用完去哪 -->
           <div>
-            <label class="mb-1 block text-xs font-medium text-ink-muted">
-              {{ isByGroup ? '默认图库（分组未绑图库时回退）' : '图片来源分组' }}
-            </label>
-            <BaseSelect v-model="config.image.groupId" :options="groupOptions" :searchable="true" size="sm" class="w-72" />
-            <p class="mt-1 text-xs text-ink-muted">{{ scopeHint }}</p>
+            <div class="mb-1.5 flex items-center gap-1.5">
+              <span class="text-[11px] font-medium tabular-nums text-ink-muted">02</span>
+              <span class="text-xs font-medium text-ink">用完去哪</span>
+              <span class="ml-auto text-[11px] text-ink-muted">定去向</span>
+            </div>
+            <div class="inline-flex w-full rounded-lg bg-cloud p-0.5" role="group" aria-label="图片策略">
+              <button
+                v-for="s in strategyOptions"
+                :key="s.value"
+                type="button"
+                class="flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition"
+                :class="config.image.strategy === s.value ? 'bg-elevated text-brand shadow-sm' : 'text-ink-muted hover:text-ink-soft'"
+                :aria-pressed="config.image.strategy === s.value"
+                @click="config.image.strategy = s.value"
+              >
+                {{ s.label }}
+              </button>
+            </div>
+            <p class="mt-1.5 text-xs text-ink-muted">{{ strategyHint }}</p>
           </div>
 
-          <!-- 绑定状态就地可见，省得回分组页逐个核对；管理员无分组，不展示 -->
-          <div v-if="isByGroup && !isAdmin" class="rounded-lg bg-cloud/50 px-3 py-2">
-            <p class="text-xs" :class="bindTone">{{ bindText }}</p>
-            <button
-              type="button"
-              class="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-brand transition hover:underline"
-              @click="router.push('/group-push')"
-            >
-              <Icon name="send" :size="13" />去分组页绑定图库
-            </button>
-          </div>
-
-          <div>
-            <label class="mb-1 block text-xs font-medium text-ink-muted">图片策略</label>
-            <BaseSelect v-model="config.image.strategy" :options="strategyOptions" size="sm" class="w-72" />
-          </div>
-
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2 border-t border-ink/5 pt-2.5">
             <span class="text-xs text-ink-muted">图库 {{ activeCount }} 张（回收站 {{ trashCount }} 张）</span>
             <button
               type="button"
@@ -64,20 +115,25 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onActivated, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import ConfigSection from '@/components/signconfig/ConfigSection.vue'
 import ConfigToggle from '@/components/signconfig/ConfigToggle.vue'
 import GCollapse from '@/components/signconfig/GCollapse.vue'
-import BaseSelect from '@/components/BaseSelect.vue'
 import Icon from '@/components/Icon.vue'
+import LibraryPicker from '@/components/signconfig/sections/image/LibraryPicker.vue'
+import GroupScope from '@/components/signconfig/sections/image/GroupScope.vue'
+import ResolvedScope from '@/components/signconfig/sections/image/ResolvedScope.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useSignConfigStore } from '@/stores/signConfig'
-import { fetchGroups } from '@/api/groupPush'
+import { fetchGroups, fetchMembers } from '@/api/groupPush'
 
 const props = defineProps({
   config: { type: Object, required: true },
-  source: { type: String, default: '' }
+  source: { type: String, default: '' },
+  // 账号上下文：传入时本卡改为「账号视角」，额外给出这条规则算到该账号的实际取图结果。
+  // 配置套编辑器与定时任务抽屉不传，保持模板视角。
+  account: { type: Object, default: null }
 })
 
 const store = useSignConfigStore()
@@ -85,74 +141,161 @@ const auth = useAuthStore()
 const router = useRouter()
 const isAdmin = computed(() => auth.isAdmin)
 
-const strategyOptions = [
-  { label: '循环复用（用毕入回收站续用）', value: 'recycle' },
-  { label: '用后删除', value: 'delete' },
-  { label: '用后入回收站可恢复', value: 'trash' }
-]
 const modeOptions = [
   { label: '固定图库', value: 'fixed' },
   { label: '按分组取图', value: 'byGroup' }
 ]
-const kindOptions = [
-  { label: '寝室分组', value: 'dorm' },
-  { label: '班级分组', value: 'class' }
+// 分段控件容不下长句，选项只留短语，后果由下方一行随选中项说明
+const strategyOptions = [
+  { label: '循环复用', value: 'recycle' },
+  { label: '用后删除', value: 'delete' },
+  { label: '入回收站', value: 'trash' }
 ]
-const activeCount = computed(() => store.imageLibrary.filter((i) => !i.inTrash).length)
-const trashCount = computed(() => store.imageLibrary.filter((i) => i.inTrash).length)
-// 图片来源分组选项：'' = 全部图库（兼容未分组的历史配置），其余为用户自建分组（如寝室号）
+const strategyHints = {
+  recycle: '用完放回图库，之后仍会被抽中',
+  delete: '用完直接删除，不可恢复',
+  trash: '用完移入回收站，可手动恢复；超 7 天自动清理'
+}
+
+const isByGroup = computed(() => props.config.image.mode === 'byGroup')
+const kind = computed(() => (props.config.image.groupKind === 'class' ? 'class' : 'dorm'))
+const strategyHint = computed(() => strategyHints[props.config.image.strategy] || '')
+
+// ''/null 均表示不过滤分组（全部图库），与后端 config.image.groupId 口径一致
+const scopeId = computed(() => {
+  const v = props.config.image.groupId
+  return v === '' || v == null ? null : String(v)
+})
+
+// 可抽张数：recycle 会把范围内的 used 整批放回 active，故 active 与 used 都算；
+// trash/delete 不回池，used 属历史残留，不再参与抽取（与 image_store 的认领口径对齐）
+function poolOf(gid) {
+  const key = gid === '' || gid == null ? null : String(gid)
+  const recycle = props.config.image.strategy === 'recycle'
+  return store.imageLibrary.filter((i) => {
+    if (i.inTrash) return false
+    if (key !== null && String(i.groupId) !== key) return false
+    return recycle || !i.used
+  })
+}
+
+const previewImages = computed(() => poolOf(scopeId.value))
 const groupOptions = computed(() => [
   { label: '全部图库', value: '' },
   ...store.imageGroups.map((g) => ({ label: g.name, value: g.id }))
 ])
+const activeCount = computed(() => store.imageLibrary.filter((i) => !i.inTrash).length)
+const trashCount = computed(() => store.imageLibrary.filter((i) => i.inTrash).length)
 
-const isByGroup = computed(() => props.config.image.mode === 'byGroup')
-const kindLabel = computed(() => (props.config.image.groupKind === 'class' ? '班级分组' : '寝室分组'))
-const modeHint = computed(() => (isByGroup.value
-  ? '各账号按所属分组的图库取图，一个配置套就能覆盖多个寝室'
-  : '所有账号共用同一个图库，适合单人或单寝室'))
-const scopeHint = computed(() => (isByGroup.value
-  ? '账号不在任何分组、或分组未绑图库时，回退用这里的默认图库'
-  : '只使用所选分组内的照片；同寝室账号选同一分组即共用。分组在「我的资源 → 图库」中管理。'))
+// ── 分组健康度核对：漏网的分组/账号都会落到兜底图库，配置时必须看得见 ──
+const enabledAccounts = computed(() => store.accounts.filter((a) => a.status !== 'disabled'))
+const audit = ref(null)
+const auditReady = ref(false)
+const groupRows = ref([])
+// Map<string(groupId), Set<string(accountId)>>，仅寝室分组需要
+const memberIndex = ref(null)
 
-// 分组绑定状态：按分组取图下必须能看到「有没有分组真的绑了图库」，
-// 否则配置页只会显示一堆悬空回退，用户无从判断问题出在哪。
-const groupStats = ref(null)
-const bindText = computed(() => {
-  const s = groupStats.value
-  if (!s) return `${kindLabel.value}的图库归属在「分组」页设置`
-  if (!s.total) return `还没有${kindLabel.value}，全部账号都会走默认图库`
-  if (!s.bound) return `${s.total} 个${kindLabel.value}都没绑图库，全部账号都会走默认图库`
-  if (s.bound === s.total) return `${s.total} 个${kindLabel.value}都已绑定图库`
-  return `${s.bound}/${s.total} 个${kindLabel.value}已绑定图库，其余走默认图库`
-})
-const bindTone = computed(() => (groupStats.value?.bound > 0 ? 'text-ink-muted' : 'text-warning'))
+let auditToken = 0
+function resetAudit() {
+  auditToken += 1 // 在途响应立即失效，避免切回固定图库后旧核对结果回填
+  audit.value = null
+  auditReady.value = false
+  groupRows.value = []
+  memberIndex.value = null
+}
 
-// 快速连点切换分组类型时旧响应可能后到，用序号丢弃过期结果
-let statsToken = 0
-async function loadGroupStats() {
-  if (isAdmin.value) {
-    groupStats.value = null
+function buildAudit(rows, index, k) {
+  const accs = enabledAccounts.value
+  const unboundGroups = rows.filter((g) => !g.imageGroupId).length
+  let unboundAccounts
+  if (k === 'class') {
+    // 班级分组由账号 className 实时派生，故「未分组」实质是 className 为空的账号
+    const names = new Set(rows.map((g) => (g.name || '').trim()))
+    unboundAccounts = accs.filter((a) => {
+      const cls = (a.className || '').trim()
+      return !cls || !names.has(cls)
+    }).length
+  } else {
+    const covered = new Set()
+    if (index) for (const set of index.values()) for (const id of set) covered.add(id)
+    unboundAccounts = accs.filter((a) => !covered.has(String(a.id))).length
+  }
+  return { total: rows.length, unboundGroups, unboundAccounts }
+}
+
+async function loadAudit() {
+  if (isAdmin.value || !props.config.image.enabled || !isByGroup.value) {
+    resetAudit()
     return
   }
-  const kind = props.config.image.groupKind === 'class' ? 'class' : 'dorm'
-  const token = ++statsToken
+  const k = kind.value
+  const token = ++auditToken
   try {
-    const items = await fetchGroups(kind)
-    if (token !== statsToken) return
-    groupStats.value = { total: items.length, bound: items.filter((g) => g.imageGroupId).length }
+    const rows = await fetchGroups(k)
+    if (token !== auditToken) return
+    let index = null
+    if (k === 'dorm') {
+      // 寝室成员只能逐组取；分组通常在个位数，一次并发拉完后本地建索引，
+      // 健康度统计与账号解析共用这一份，不再二次请求
+      const lists = await Promise.all(rows.map((g) => fetchMembers(g.id).catch(() => [])))
+      if (token !== auditToken) return
+      index = new Map(rows.map((g, i) => [String(g.id), new Set(lists[i].map((m) => String(m.accountId)))]))
+    }
+    groupRows.value = rows
+    memberIndex.value = index
+    audit.value = buildAudit(rows, index, k)
+    auditReady.value = true
   } catch (e) {
-    if (token === statsToken) groupStats.value = null
+    if (token !== auditToken) return
+    audit.value = null
+    auditReady.value = false
+    groupRows.value = []
+    memberIndex.value = null
   }
 }
 
-onMounted(() => {
-  if (isByGroup.value) loadGroupStats()
+// 账号实际取图结果。口径与后端 _account_group_image_id 对齐：分组绑定的图库必须仍存在，
+// 悬空视为未绑；未绑或账号无归属时逐级回退配置套的 groupId，再回退全部图库。
+const resolved = computed(() => {
+  const acc = props.account
+  if (!acc || !isByGroup.value || !auditReady.value) return null
+  const fallbackId = scopeId.value
+  const infoOf = (gid) => {
+    const g = gid == null ? null : store.imageGroups.find((x) => String(x.id) === String(gid))
+    return g ? { imageName: g.name, count: poolOf(gid).length } : { imageName: '全部图库', count: poolOf(null).length }
+  }
+  const boundImage = (gid) => (gid && store.imageGroups.some((x) => String(x.id) === String(gid)) ? gid : null)
+  // 兜底图库是否真的配了：没配时后端一路退到全部图库，结论文案要跟着换口径
+  const fallbackSet = !!boundImage(fallbackId)
+
+  let row = null
+  if (kind.value === 'class') {
+    const cls = (acc.className || '').trim()
+    row = cls ? groupRows.value.find((g) => (g.name || '').trim() === cls) || null : null
+  } else {
+    row = groupRows.value.find((g) => memberIndex.value?.get(String(g.id))?.has(String(acc.id))) || null
+  }
+  if (!row) return { groupName: '', ...infoOf(fallbackId), reason: 'no-group', fallbackSet }
+  const hit = boundImage(row.imageGroupId)
+  if (!hit) return { groupName: row.name, ...infoOf(fallbackId), reason: 'unbound-group', fallbackSet }
+  return { groupName: row.name, ...infoOf(hit), reason: '', fallbackSet }
 })
 
-// 必须排在 isByGroup / loadGroupStats 之后：写在前面会在 setup 阶段触发 TDZ
-watch([() => props.config.image.mode, () => props.config.image.groupKind], () => {
-  groupStats.value = null
-  if (isByGroup.value) loadGroupStats()
+// 账号视角的就地兜底只在漏网时给：本账号有正常归属时不摆选择器。
+// 兜底值仍是本配置的 image.groupId，改这里等于给这个任务实例预设兜底。
+const accountGap = computed(() => !!resolved.value?.reason)
+
+onMounted(loadAudit)
+
+// 本页在 keep-alive 内，去「分组」页绑完图库再回来不会重新挂载，
+// 靠 onActivated 重核对一次，否则健康度与账号解析结果还停在离开前的状态
+onActivated(() => {
+  if (isByGroup.value && props.config.image.enabled) loadAudit()
 })
+
+// 与 script setup 末尾约定一致：watch 写在最后，避免 setup 阶段 TDZ
+watch(
+  [() => props.config.image.mode, () => props.config.image.groupKind, () => props.config.image.enabled],
+  loadAudit
+)
 </script>

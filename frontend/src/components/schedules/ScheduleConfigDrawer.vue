@@ -84,7 +84,7 @@
               />
               <LocationSection :config="signConfigStore.taskConfig" :required="true" :error="signConfigStore.formErrors.location" />
               <RemarkSection :config="signConfigStore.taskConfig" :required="true" :error="signConfigStore.formErrors.remarks" :sample-name="remarkSampleName" />
-              <ImageSection :config="signConfigStore.taskConfig" />
+              <ImageSection :config="signConfigStore.taskConfig" :account="scheduleAccount" />
               <PushSection :config="signConfigStore.taskConfig" />
               <AdvancedSection :config="signConfigStore.taskConfig" />
             </MasonryGrid>
@@ -184,10 +184,13 @@ const syncing = ref(false)
 // 当前任务调度实例状态（来自 signConfigStore，已含 enabled / scheduleId / configSetId）
 const taskState = computed(() => signConfigStore.taskScheduleState)
 
-// 备注预览示例姓名：当前任务所属账号的 B 平台姓名
-const remarkSampleName = computed(() =>
-  signConfigStore.accounts.find((a) => a.id === String(props.schedule.accountId || ''))?.name || ''
+// 定时任务所属账号：图片策略卡的「账号视角」用它解析所在分组
+const scheduleAccount = computed(
+  () => signConfigStore.accounts.find((a) => a.id === String(props.schedule.accountId || '')) || null
 )
+
+// 备注预览示例姓名：当前任务所属账号的 B 平台姓名
+const remarkSampleName = computed(() => scheduleAccount.value?.name || '')
 
 // 配置套下拉：仅本地选择/预览，关联由「套用」显式触发
 const bindPick = computed({

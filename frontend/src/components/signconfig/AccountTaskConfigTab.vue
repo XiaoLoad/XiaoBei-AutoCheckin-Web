@@ -190,7 +190,7 @@
           <LocationSection :config="store.taskConfig" :required="true" :error="store.formErrors.location" />
           <RemarkSection :config="store.taskConfig" :required="true" :error="store.formErrors.remarks" :sample-name="remarkSampleName" />
           <ImageSection :config="store.taskConfig" :account="selectedAccount" />
-          <PushSection :config="store.taskConfig" />
+          <PushSection scope="account" :config="store.taskConfig" :account="selectedAccount" />
           <AdvancedSection :config="store.taskConfig" />
         </MasonryGrid>
       </template>

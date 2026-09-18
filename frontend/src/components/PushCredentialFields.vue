@@ -45,12 +45,15 @@ const FIELDS = {
       hint: '群推送专用：把合并签到结果发到 QQ 群；填消息 token，长期有效、无需刷新' }
   ],
   email: [
-    { key: 'emailSmtp', label: 'SMTP 地址', placeholder: '如 smtp.qq.com' },
-    { key: 'emailFrom', label: '发件人', placeholder: '登录 SMTP 的邮箱地址' },
-    { key: 'emailPass', label: '授权码', placeholder: '邮箱授权码', type: 'password' },
+    { key: 'emailSmtp', label: 'SMTP 服务器', placeholder: '如 smtp.qq.com',
+      hint: '用这个服务器把邮件发出去，一般就是邮箱服务商的地址' },
+    { key: 'emailFrom', label: '发件邮箱', placeholder: '登录 SMTP 的邮箱地址',
+      hint: '收件人看到的发件人；也是登录 SMTP 用的账号' },
+    { key: 'emailPass', label: 'SMTP 授权码', placeholder: '邮箱授权码', type: 'password',
+      hint: '邮箱后台单独生成的授权码，不是登录密码' },
     {
-      key: 'emailTo', label: '默认收件人', placeholder: '多个用逗号分隔', wide: true,
-      hint: '账号没单独指定收件人时，签到结果发到这里'
+      key: 'emailTo', label: '默认收件邮箱', placeholder: '多个用逗号分隔', wide: true,
+      hint: '账号没单独填收件人时，签到结果发到这里'
     }
   ]
 }

@@ -59,20 +59,18 @@ function toExpanded(animate) {
     return
   }
   const target = content.offsetHeight
-  tween = gsap.fromTo(
-    el,
-    { height: 0, opacity: 0 },
-    {
-      height: target,
-      opacity: 1,
-      duration: props.duration,
-      ease: 'power2.out',
-      onComplete: () => {
-        setExpanded()
-        tween = null
-      }
+  // 从「当前状态」补间，不写死起点：快速连续切换时 el 可能正停在中途，
+  // 写死 fromTo({height:0,opacity:0}) 会把它打回 0 再重播一遍，视觉上就是闪一下。
+  tween = gsap.to(el, {
+    height: target,
+    opacity: 1,
+    duration: props.duration,
+    ease: 'power2.out',
+    onComplete: () => {
+      setExpanded()
+      tween = null
     }
-  )
+  })
 }
 
 function toCollapsed(animate) {
@@ -86,22 +84,18 @@ function toCollapsed(animate) {
     setCollapsed()
     return
   }
-  const start = el.offsetHeight
-  el.style.height = start + 'px'
-  tween = gsap.fromTo(
-    el,
-    { height: start, opacity: 1 },
-    {
-      height: 0,
-      opacity: 0,
-      duration: props.duration,
-      ease: 'power2.in',
-      onComplete: () => {
-        setCollapsed()
-        tween = null
-      }
+  // height 可能是 'auto'，先落成当前像素值，补间才有确定的起点（否则从 auto 起步会跳一帧）
+  el.style.height = el.offsetHeight + 'px'
+  tween = gsap.to(el, {
+    height: 0,
+    opacity: 0,
+    duration: props.duration,
+    ease: 'power2.in',
+    onComplete: () => {
+      setCollapsed()
+      tween = null
     }
-  )
+  })
 }
 
 onMounted(() => {

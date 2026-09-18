@@ -409,12 +409,12 @@ function deptText(item) {
   return [p.college, p.major, p.className].filter(Boolean).join(' · ')
 }
 
-// 该账号有自己推送目标的通道：绑了凭证，或单独指定了收件人（邮件）
+// 该账号有自己推送目标的通道：绑了凭证，或单独指定了收件邮箱（邮件）
 function pushChannelsOf(item) {
   return activeChannels(item.pushCreds)
 }
 
-// 只指定了收件人、没绑凭证的通道用虚线标签区分「半落位」，避免看着像已绑定
+// 只指定了收件邮箱、没绑凭证的通道用虚线标签区分「半落位」，避免看着像已绑定
 function pushChipCls(item, ch) {
   const e = readCredEntry((item.pushCreds || {})[ch])
   return e.credId ? channelTone(ch) : 'border border-dashed border-ink/25 text-ink-soft'
@@ -422,9 +422,9 @@ function pushChipCls(item, ch) {
 
 function pushChipTitle(item, ch) {
   const e = readCredEntry((item.pushCreds || {})[ch])
-  if (e.credId && e.to) return `已绑定凭证 · 收件人：${e.to}`
+  if (e.credId && e.to) return `已绑定凭证 · 收件邮箱：${e.to}`
   if (e.credId) return '已绑定凭证'
-  return `仅指定收件人：${e.to}（凭证跟随配置套）`
+  return `仅指定收件邮箱：${e.to}（凭证跟随配置套）`
 }
 
 // 批量分组（设计文档 §8.2）：账号多选 → 新建 / 加入寝室分组

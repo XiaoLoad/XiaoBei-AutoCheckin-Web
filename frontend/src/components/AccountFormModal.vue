@@ -198,15 +198,15 @@
               </button>
             </span>
 
-            <!-- 收件人：与框内其它字段同构（标签在控件上方），与凭证选择正交——不绑凭证也能单独指定发给谁 -->
+            <!-- 收件邮箱：与框内其它字段同构（标签在控件上方），与凭证选择正交——不绑凭证也能单独指定发给谁 -->
             <div v-if="ch === 'email'" class="cred-sub">
-              <label class="mb-1.5 block text-sm font-medium text-ink-soft" for="acc-push-email-to">收件人</label>
+              <label class="mb-1.5 block text-sm font-medium text-ink-soft" for="acc-push-email-to">收件邮箱</label>
               <input
                 id="acc-push-email-to"
                 v-model.trim="form.pushCreds.email.to"
                 type="text"
                 autocomplete="off"
-                placeholder="可填多个，逗号分隔"
+                placeholder="签到结果发到这里"
                 class="login-input"
               />
               <p class="mt-1 text-xs" :class="recipientWarn ? 'text-warning' : 'text-ink-muted'">{{ recipientHint }}</p>
@@ -253,7 +253,7 @@
           可以全部留空——签到照常执行，只是不发通知；留空的通道跟随配置套里的凭证。
         </p>
         <p class="mt-1 text-xs leading-relaxed text-ink-muted">
-          这里选的凭证只在任务凭证来源为「账号自带凭证」时生效，收件人不受这个限制。
+          这里选的凭证只在任务凭证来源为「账号自带凭证」时生效，收件邮箱不受这个限制。
         </p>
       </section>
 
@@ -391,7 +391,7 @@ const secondarySummary = computed(() => {
   return hits.length ? `已配置 ${hits.map(channelLabel).join('、')}` : '未配置'
 })
 
-// 该通道是否已有落位内容（绑了凭证或单独指定了收件人）——落位竖线与汇总计数共用同一判定
+// 该通道是否已有落位内容（绑了凭证或单独指定了收件邮箱）——落位竖线与汇总计数共用同一判定
 function entryFilled(ch) {
   const e = form.pushCreds[ch]
   return !!(e.credId || e.to)
@@ -446,12 +446,12 @@ const emailFallback = computed(() => {
   return ((hit && hit.fields && hit.fields.emailTo) || '').trim()
 })
 
-// 提示分三态：没选凭证（留空＝跟随配置套）／选了且有默认收件人／选了但这份凭证没写默认收件人。
+// 提示分三态：没选凭证（留空＝跟随配置套）／选了且有默认收件邮箱／选了但这份凭证没写默认收件邮箱。
 // 此前三态压成一句「留空时这里必填」，没选凭证时也在报警示色，读起来像整块必填。
 const recipientHint = computed(() => {
-  if (!form.pushCreds.email.credId) return '留空则跟随配置套的邮件凭证'
-  if (emailFallback.value) return `留空则发给凭证默认收件人（${emailFallback.value}）`
-  return '这份凭证没填默认收件人，这里要填一个'
+  if (!form.pushCreds.email.credId) return '不填就用所用凭证里的默认收件邮箱'
+  if (emailFallback.value) return `不填就发到这份凭证的默认收件邮箱（${emailFallback.value}）`
+  return '这份凭证没填默认收件邮箱，这里要填一个'
 })
 // 只有「选了凭证、凭证又没有默认收件人、这里也没填」才是真会发不出去，此时才转警示色
 const recipientWarn = computed(() =>

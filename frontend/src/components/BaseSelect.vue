@@ -392,9 +392,14 @@ function onSearchKeydown(e) {
   }
 }
 
-// 点击外部关闭
+// 点击外部关闭。⚠️面板被 Teleport 到 body、不在 root 之内，必须单独判一次：
+// 否则点选项时 mousedown 就先判成「点了外部」把面板关掉，面板开始退场淡出、选项的 click
+// 再落到已消失的元素上——现象就是「点下拉闪一下」，慢一点还会丢选择。
 function onDocClick(e) {
-  if (open.value && root.value && !root.value.contains(e.target)) close()
+  if (!open.value) return
+  if (root.value && root.value.contains(e.target)) return
+  if (panel.value && panel.value.contains(e.target)) return
+  close()
 }
 
 watch(open, (v) => {

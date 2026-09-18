@@ -730,7 +730,11 @@ async function batchRestore() {
 // ── GSAP 过渡：批量操作栏显隐（高度+透明度，消除布局跳变）──
 function onBarEnter(el, done) {
   gsap.killTweensOf(el)
-  gsap.fromTo(el, { height: 0, opacity: 0 }, {
+  // 起点不写死 0：取消选中没走完就又选中时（Transition 的 leave 被打断、元素尚未卸载）
+  // 操作栏正停在中途，从 0 重播会先整条塌下去再撑开——视觉上就是闪一下。起值取当前内联值。
+  const fromHeight = parseFloat(el.style.height) || 0
+  const fromOpacity = el.style.opacity === '' ? 0 : parseFloat(el.style.opacity)
+  gsap.fromTo(el, { height: fromHeight, opacity: fromOpacity }, {
     height: el.scrollHeight, opacity: 1, duration: 0.25, ease: 'power2.out',
     onComplete: () => { el.style.height = ''; el.style.opacity = ''; done() }
   })

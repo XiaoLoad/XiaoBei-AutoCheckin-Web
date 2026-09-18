@@ -85,7 +85,7 @@
               <LocationSection :config="signConfigStore.taskConfig" :required="true" :error="signConfigStore.formErrors.location" />
               <RemarkSection :config="signConfigStore.taskConfig" :required="true" :error="signConfigStore.formErrors.remarks" :sample-name="remarkSampleName" />
               <ImageSection :config="signConfigStore.taskConfig" :account="scheduleAccount" />
-              <PushSection :config="signConfigStore.taskConfig" />
+              <PushSection scope="account" :config="signConfigStore.taskConfig" :account="scheduleAccount" />
               <AdvancedSection :config="signConfigStore.taskConfig" />
             </MasonryGrid>
           </section>

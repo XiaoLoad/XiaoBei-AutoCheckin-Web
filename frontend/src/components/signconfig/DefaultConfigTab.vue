@@ -228,7 +228,7 @@
           <LocationSection :config="store.activeSet.config" :required="true" :error="store.formErrors.location" />
           <RemarkSection :config="store.activeSet.config" :required="true" :error="store.formErrors.remarks" :sample-name="remarkSampleName" />
           <ImageSection :config="store.activeSet.config" />
-          <PushSection :config="store.activeSet.config" />
+          <PushSection scope="set" :config="store.activeSet.config" />
           <AdvancedSection :config="store.activeSet.config" />
         </MasonryGrid>
       </template>

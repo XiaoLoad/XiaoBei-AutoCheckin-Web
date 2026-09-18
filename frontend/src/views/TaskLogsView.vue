@@ -876,7 +876,11 @@ function detailSections(d) {
               // 新快照直接给来源文案；老快照没有该字段时按两个开关回退
               value:
                 push.credSourceLabel ||
-                (push.useOwnCredential ? "资源池凭证" : "直接填写"),
+                (push.useAccountCredential
+                  ? "各账号自带凭证"
+                  : push.useOwnCredential
+                    ? "资源池凭证"
+                    : "直接填写"),
             },
             {
               label: "通知时机",

@@ -256,7 +256,9 @@
         上传自动压缩至 ≤180KB（B 平台提交口径）；也可将图片直接拖拽到此处批量上传；轮回使用的图片消费后进入「已使用」保留不删；图库中「删除」会移入回收站，回收站内「删除」才永久移除（保留 7 天后也会自动清除）；点击图片打开灯箱预览，可缩放、左右切换。
       </p>
 
-      <div class="xb-scroll overflow-x-hidden rounded-xl bg-cloud/40 px-1.5 py-1.5 lg:flex-1 lg:min-h-0 lg:overflow-y-auto" :class="{ 'pb-28': uploadList.length }">
+      <!-- 图库列表固定 90vh：明显抬高图库可视区、改善图片浏览；卡片随内容增高包住列表（背景不再溢出），
+           内部 overflow-y-auto 仍限制不按全部图片撑满，保留图库自身滚动；页面（main）随卡片超出视口而纵向滚动 -->
+      <div class="xb-scroll overflow-x-hidden rounded-xl bg-cloud/40 px-1.5 py-1.5 lg:h-[90vh] lg:overflow-y-auto" :class="{ 'pb-28': uploadList.length }">
         <div v-if="pagedList.length === 0" class="flex h-full items-center justify-center text-sm text-ink-muted">
           {{ view === 'trash' ? '回收站为空' : view === 'used' ? '已使用列表为空' : '当前分组暂无图片' }}
         </div>

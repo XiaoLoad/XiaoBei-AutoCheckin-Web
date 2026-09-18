@@ -5,7 +5,20 @@ import { defineStore } from 'pinia'
 import { useRefreshBusStore } from '@/stores/refreshBus'
 import { ref, computed, watch } from 'vue'
 import { fetchAccounts, createAccount, updateAccount, deleteAccount } from '@/api/accounts'
+import { fetchDormMembers } from '@/api/groupPush'
 import { accountTypeCode } from '@/utils/accountType'
+
+// 成员地图归一化：[{accountId, groupId, groupName}] → { [accountId]: {id, name, count} }。
+// 后端按分组 id 倒序返回，同一账号多次出现时保留首个（最新的组）并累计个数。
+export function toDormGroupMap(rows) {
+  const map = {}
+  for (const r of rows) {
+    const k = String(r.accountId)
+    if (map[k]) map[k].count += 1
+    else map[k] = { id: r.groupId, name: r.groupName, count: 1 }
+  }
+  return map
+}
 
 export const useAccountsStore = defineStore('accounts', () => {
   const refreshBus = useRefreshBusStore()
@@ -15,6 +28,12 @@ export const useAccountsStore = defineStore('accounts', () => {
   const loaded = ref(false)
   let loadSeq = 0
   const accounts = ref([])
+
+  // 账号 → 所属寝室分组（卡片要标注）。分组归属存在 push_group_members，账号列表接口
+  // 不带这层，故随列表一起取回；多个分组时取最新的那个（后端按分组 id 倒序），并记个数。
+  const dormGroups = ref({})
+  // 归属是否已取到：没取到就不能显示「未分组」——那是在替服务端下结论，宁可留空
+  const dormLoaded = ref(false)
 
   // 筛选状态（前端演示；后端接入时作为查询参数传递，见 api/accounts.js）
   const keyword = ref('')
@@ -81,7 +100,10 @@ export const useAccountsStore = defineStore('accounts', () => {
     if (page.value > tp) page.value = tp
   })
 
+  // 清空筛选：关键词也算筛选（hasFilter 把 keyword 计在内），漏掉它会出现
+  // 「重置可用但点了没反应」——只有搜索词时按钮亮着、点下去列表纹丝不动
   function resetFilters() {
+    keyword.value = ''
     typeFilter.value = ''
     signFilter.value = ''
     enabledFilter.value = ''
@@ -97,9 +119,17 @@ export const useAccountsStore = defineStore('accounts', () => {
     const seq = ++loadSeq
     try {
       // 后端接入时此处可传 { keyword, type, signStatus, enabled } 由服务端过滤与分页
-      const list = await fetchAccounts()
+      // 归属拉取失败只降级自己（卡片留空），不能连带把账号列表也拖挂
+      const [list, membership] = await Promise.all([
+        fetchAccounts(),
+        fetchDormMembers().catch(() => null)
+      ])
       if (seq !== loadSeq) return // 竞态守卫：仅采纳最新请求
       accounts.value = list
+      if (membership) {
+        dormGroups.value = toDormGroupMap(membership)
+        dormLoaded.value = true
+      }
       loaded.value = true
     } finally {
       if (!first) refreshBus.end()
@@ -184,6 +214,8 @@ export const useAccountsStore = defineStore('accounts', () => {
     loading,
     refreshing,
     accounts,
+    dormGroups,
+    dormLoaded,
     keyword,
     typeFilter,
     signFilter,

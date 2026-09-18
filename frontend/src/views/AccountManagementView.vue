@@ -1,74 +1,73 @@
 <template>
   <!-- 根容器：占满父级高度，列表卡片 flex-1 内部滚动，解决高度过低问题 -->
   <div class="flex flex-col gap-6 lg:flex-1 lg:min-h-0">
-    <!-- 统一操作栏：搜索 + 筛选 + 刷新 + 重置 + 新增，合并为一卡，简约单行布局。
+    <!-- 统一操作栏：左侧查找（搜索 + 筛选），右侧操作（工具组 + 主操作）。两者分列两端、
+         各成一体——旧布局把四个按钮与筛选挤在同一行，筛选一变动就争宽度把整行挤断。
          relative z-30 提升堆叠层级，确保内部下拉面板不被下方列表卡片遮挡。 -->
     <div class="dash-card fade-up relative z-30 shrink-0 p-3 sm:p-4">
-      <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <!-- 搜索框：进一步加宽，提升输入体验与整体美观 -->
-        <div class="relative w-full sm:w-80">
-          <Icon name="search" :size="16" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
-          <input
-            v-model="keyword"
-            type="text"
-            placeholder="搜索账号 / 姓名 / 学号"
-            class="login-input py-2 pl-9 text-sm"
-          />
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-3">
+        <!-- 查找区：搜索 + 三项筛选 -->
+        <div class="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2">
+          <div class="relative w-full sm:w-60 2xl:w-72">
+            <Icon name="search" :size="16" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
+            <input
+              v-model="keyword"
+              type="text"
+              placeholder="搜索账号 / 姓名 / 学号"
+              class="login-input py-2 pl-9 text-sm"
+            />
+          </div>
+
+          <!-- 分隔线：区分搜索区与筛选区 -->
+          <span class="hidden h-6 w-px bg-ink/10 sm:block" />
+
+          <!-- 筛选组：宽度按各自最长选项定尺（签到类型里「寝室 + 活动」最长），
+               否则选中长选项会被截成省略号 -->
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div class="flex items-center gap-2">
+              <span class="shrink-0 text-sm font-medium text-ink-soft">签到类型</span>
+              <div class="w-32">
+                <BaseSelect v-model="typeFilter" :options="typeOptions" placeholder="全部" size="sm" />
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="shrink-0 text-sm font-medium text-ink-soft">签到状态</span>
+              <div class="w-28">
+                <BaseSelect v-model="signFilter" :options="signOptions" placeholder="全部" size="sm" />
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="shrink-0 text-sm font-medium text-ink-soft">启用状态</span>
+              <div class="w-24">
+                <BaseSelect v-model="enabledFilter" :options="enabledOptions" placeholder="全部" size="sm" />
+              </div>
+            </div>
+          </div>
         </div>
 
-        <!-- 分隔线：区分搜索区与筛选区 -->
-        <span class="hidden h-6 w-px bg-ink/10 sm:block" />
-
-        <!-- 筛选组：标签改为醒目文字、下拉框采用紧凑尺寸，比例协调 -->
-        <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <div class="flex items-center gap-2">
-            <span class="shrink-0 text-sm font-medium text-ink-soft">签到类型</span>
-            <div class="w-28">
-              <BaseSelect v-model="typeFilter" :options="typeOptions" placeholder="全部" size="sm" />
-            </div>
-          </div>
-          <div class="flex items-center gap-2">
-            <span class="shrink-0 text-sm font-medium text-ink-soft">签到状态</span>
-            <div class="w-28">
-              <BaseSelect v-model="signFilter" :options="signOptions" placeholder="全部" size="sm" />
-            </div>
-          </div>
-          <div class="flex items-center gap-2">
-            <span class="shrink-0 text-sm font-medium text-ink-soft">启用状态</span>
-            <div class="w-24">
-              <BaseSelect v-model="enabledFilter" :options="enabledOptions" placeholder="全部" size="sm" />
-            </div>
-          </div>
-        </div>
-
-        <!-- 右侧操作：刷新 / 重置（有筛选时显示）/ 新增 -->
-        <div class="ml-auto flex items-center gap-2">
+        <!-- 操作区：刷新 / 重置各自成键——曾把两者并进一个药丸容器，结果「✕ 重置」被读成
+             刷新键的一部分；新增账号是唯一主操作。重置常驻、无筛选时禁用，避免按钮忽隐忽现
+             让整行跟着抖。 -->
+        <div class="ml-auto flex shrink-0 items-center gap-2">
           <button
             type="button"
-            class="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-ink/10 text-ink-muted transition hover:bg-cloud hover:text-ink"
-            aria-label="刷新"
-            :disabled="loading"
+            class="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-ink/10 text-ink-muted transition hover:bg-cloud hover:text-ink active:scale-90"
+            :class="spinning && 'text-brand'"
+            :title="spinning ? '刷新中…' : '刷新列表'"
+            aria-label="刷新列表"
+            :disabled="busy"
             @click="refresh"
           >
-            <Icon name="refresh" :size="17" :class="loading && 'spin-refresh'" />
+            <Icon name="refresh" :size="17" :class="spinning && 'spin-refresh'" />
           </button>
           <button
-            v-if="hasFilter"
             type="button"
-            class="inline-flex h-9 items-center gap-1.5 rounded-xl border border-ink/10 px-3 text-sm font-medium text-ink-soft transition hover:bg-cloud"
+            class="inline-flex h-9 shrink-0 items-center rounded-xl border border-ink/10 px-3 text-sm font-medium text-ink-soft transition hover:bg-cloud active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+            title="清空搜索与筛选条件"
+            :disabled="!hasFilter"
             @click="store.resetFilters"
           >
-            <Icon name="close" :size="14" />重置
-          </button>
-          <button
-            type="button"
-            class="inline-flex items-center justify-center gap-1.5 rounded-xl border px-3.5 py-2 text-sm font-semibold transition focus:outline-none focus:ring-4"
-            :class="selectMode ? 'border-brand bg-brand/10 text-brand focus:ring-brand/30' : 'border-ink/10 text-ink-soft hover:bg-cloud focus:ring-ink/10'"
-            @click="toggleSelectMode"
-          >
-            <Icon name="check" :size="17" />
-            <span class="hidden sm:inline">{{ selectMode ? '退出选择' : '批量分组' }}</span>
-            <span class="sm:hidden">批量</span>
+            重置
           </button>
           <button
             type="button"
@@ -83,28 +82,79 @@
       </div>
     </div>
 
-    <!-- 批量分组操作栏：选中账号后可一键建寝室分组或加入现有分组 -->
-    <div v-if="selectMode && selectedIds.length" class="dash-card fade-up shrink-0 flex flex-wrap items-center gap-3 p-3 sm:p-4">
-      <span class="inline-flex items-center gap-1.5 text-sm font-medium text-ink">
-        <Icon name="check-circle" :size="16" class="text-brand" />已选 {{ selectedIds.length }} 个账号
-      </span>
-      <div class="ml-auto flex items-center gap-2">
-        <button type="button" class="inline-flex items-center gap-1.5 rounded-xl bg-brand px-3.5 py-2 text-sm font-semibold text-white shadow-lg shadow-brand/25 transition hover:bg-brand-dark" @click="openNewGroup">
-          <Icon name="box" :size="16" />新建寝室分组
-        </button>
-        <button type="button" class="inline-flex items-center gap-1.5 rounded-xl border border-ink/10 px-3.5 py-2 text-sm font-medium text-ink-soft transition hover:bg-cloud" @click="openJoinGroup">
-          <Icon name="members" :size="16" />加入现有寝室分组
-        </button>
-        <button type="button" class="rounded-xl border border-ink/10 px-3 py-2 text-sm text-ink-muted transition hover:bg-cloud" @click="clearSelection">清空</button>
-      </div>
-    </div>
-
     <!-- 列表卡片：账号卡片网格（桌面/移动同一套），卡片 flex-1 内部滚动，底部固定分页。
          静默刷新期旧数据原地保留，仅整卡降透明并暂停交互 -->
     <div
       class="dash-card fade-up flex flex-col overflow-hidden rounded-2xl transition-opacity lg:flex-1 lg:min-h-0"
       :class="refreshing && 'opacity-60 pointer-events-none'"
     >
+      <!-- 列表头：与列表同一张卡、同一行槽位。常态给条数与「批量分组」入口，选择态原位
+           换成批量操作——进出选择不再从下方多长出一张卡片，高度也不跳。
+           选择态即使筛到 0 条也保留，否则筛选一改就没了退出口。 -->
+      <div
+        v-if="!loading && (filtered.length || selectMode)"
+        class="flex min-h-[3rem] shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-ink/5 px-3 py-2 sm:px-4"
+      >
+        <Transition name="xb-head" mode="out-in">
+          <div v-if="!selectMode" key="browse" class="flex w-full flex-wrap items-center gap-x-3 gap-y-2">
+            <span class="text-sm text-ink-muted">
+              共 <span class="font-medium tabular-nums text-ink-soft">{{ filtered.length }}</span> 个账号<template
+                v-if="filtered.length > pageSize"
+              >，本页 {{ pagedRows.length }} 个</template>
+            </span>
+            <button
+              type="button"
+              class="ml-auto inline-flex h-8 items-center gap-1.5 rounded-lg border border-ink/10 px-3 text-sm font-medium text-ink-soft transition hover:bg-cloud active:scale-95"
+              @click="enterSelectMode"
+            >
+              <Icon name="check" :size="15" />批量分组
+            </button>
+          </div>
+          <div v-else key="select" class="flex w-full flex-wrap items-center gap-x-3 gap-y-2">
+            <span class="inline-flex items-center gap-1.5 text-sm text-ink">
+              <Icon name="check-circle" :size="16" class="shrink-0 text-brand" />
+              <template v-if="selectedIds.length"
+                >已选 <span class="font-medium tabular-nums">{{ selectedIds.length }}</span> 个</template
+              >
+              <template v-else>点选账号，再批量分组</template>
+            </span>
+            <div class="ml-auto flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                class="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3 text-sm font-semibold text-white transition hover:bg-brand-dark active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+                :disabled="!selectedIds.length"
+                @click="openNewGroup"
+              >
+                <Icon name="box" :size="15" /><span class="hidden sm:inline">新建寝室分组</span><span class="sm:hidden">新建</span>
+              </button>
+              <button
+                type="button"
+                class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ink/10 px-3 text-sm font-medium text-ink-soft transition hover:bg-cloud active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+                :disabled="!selectedIds.length"
+                @click="openJoinGroup"
+              >
+                <Icon name="members" :size="15" /><span class="hidden sm:inline">加入现有分组</span><span class="sm:hidden">加入</span>
+              </button>
+              <button
+                type="button"
+                class="inline-flex h-8 items-center rounded-lg px-2.5 text-sm text-ink-muted transition hover:bg-cloud active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+                :disabled="!selectedIds.length"
+                @click="clearSelection"
+              >
+                清空
+              </button>
+              <button
+                type="button"
+                class="inline-flex h-8 items-center rounded-lg px-2.5 text-sm font-medium text-ink-soft transition hover:bg-cloud active:scale-95"
+                @click="toggleSelectMode"
+              >
+                退出选择
+              </button>
+            </div>
+          </div>
+        </Transition>
+      </div>
+
       <!-- 加载态 -->
       <div v-if="loading" class="flex flex-1 items-center justify-center text-sm text-ink-muted">加载中…</div>
 
@@ -133,7 +183,7 @@
                 <p class="break-words text-sm font-medium text-ink">{{ (item.profile && item.profile.name) || '未命名' }}</p>
                 <p class="mt-0.5 break-all text-xs text-ink-muted">{{ item.account }}</p>
               </div>
-              <span class="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium" :class="item.enabled ? 'bg-success/10 text-success' : 'bg-ink/5 text-ink-muted'">
+              <span class="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium" :class="item.enabled ? 'bg-success/10 text-success' : 'bg-ink/5 text-ink-muted'">
                 <span class="h-1.5 w-1.5 rounded-full" :class="item.enabled ? 'bg-success' : 'bg-ink/30'" />
                 {{ item.enabled ? '启用' : '禁用' }}
               </span>
@@ -150,16 +200,31 @@
                 <dd class="min-w-0 flex-1 break-words leading-5 text-ink-soft">{{ deptText(item) || '登录后自动获取' }}</dd>
               </div>
               <div class="flex items-baseline gap-2">
+                <dt class="w-16 shrink-0 leading-5 text-ink-muted">寝室分组</dt>
+                <dd class="min-w-0 flex-1 leading-5">
+                  <span
+                    v-if="dormGroupOf(item)"
+                    class="inline-flex max-w-full items-center gap-1 rounded-full bg-cloud px-2 py-0.5 font-medium text-ink-soft"
+                    :title="dormGroupTitle(item)"
+                  >
+                    <Icon name="box" :size="12" class="shrink-0 text-ink-muted" />
+                    <span class="truncate">{{ dormGroupOf(item).name }}</span>
+                    <span v-if="dormGroupOf(item).count > 1" class="shrink-0 text-ink-muted">等 {{ dormGroupOf(item).count }} 个</span>
+                  </span>
+                  <span v-else class="text-ink-muted">{{ dormLoaded ? '未分组' : '—' }}</span>
+                </dd>
+              </div>
+              <div class="flex items-baseline gap-2">
                 <dt class="w-16 shrink-0 leading-5 text-ink-muted">签到类型</dt>
                 <dd class="min-w-0 flex-1 leading-5">
-                  <span class="inline-flex items-center rounded-full px-2 py-0.5 font-medium" :class="typeMeta(item).cls">{{ typeMeta(item).label }}</span>
+                  <span class="inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 font-medium" :class="typeMeta(item).cls">{{ typeMeta(item).label }}</span>
                 </dd>
               </div>
               <div class="flex items-baseline gap-2">
                 <dt class="w-16 shrink-0 leading-5 text-ink-muted">上次签到</dt>
                 <dd class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5 gap-y-1 leading-5">
                   <span class="leading-5 tabular-nums text-ink-soft">{{ (item.lastSignIn && item.lastSignIn.time) || '—' }}</span>
-                  <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium" :class="signMeta(item).tag">
+                  <span class="inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 font-medium" :class="signMeta(item).tag">
                     <span class="h-1.5 w-1.5 rounded-full" :class="signMeta(item).dot" />{{ signMeta(item).label }}
                   </span>
                 </dd>
@@ -172,13 +237,13 @@
                       v-for="ch in pushChannelsOf(item)"
                       :key="ch"
                       :title="pushChipTitle(item, ch)"
-                      class="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 font-medium"
+                      class="inline-flex items-center gap-1 whitespace-nowrap rounded-full px-1.5 py-0.5 font-medium"
                       :class="pushChipCls(item, ch)"
                     >
                       <span class="h-1.5 w-1.5 rounded-full" :class="channelDot(ch)" />{{ channelLabel(ch) }}
                     </span>
                   </template>
-                  <span v-else class="text-ink-muted">跟随配置套</span>
+                  <span v-else class="whitespace-nowrap text-ink-muted">跟随配置套</span>
                 </dd>
               </div>
             </dl>
@@ -301,7 +366,7 @@
 <script setup>
 import { useAccountsStore } from '@/stores/accounts'
 import { storeToRefs } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, onBeforeUnmount } from 'vue'
 import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import BasePagination from '@/components/BasePagination.vue'
@@ -320,6 +385,8 @@ const store = useAccountsStore()
 const {
   loading,
   refreshing,
+  dormGroups,
+  dormLoaded,
   keyword,
   typeFilter,
   signFilter,
@@ -338,9 +405,34 @@ const {
   pagedRows
 } = storeToRefs(store)
 
+// 刷新按钮的动效：请求几十毫秒就回来时图标转一下都看不见，故给一个最短转动时长兜底，
+// 期间按钮视为忙、不接受再次点击（也就不可能连点堆请求）。转动是「已刷新」的反馈，不是装饰。
+const MIN_SPIN = 450
+const spinning = ref(false)
+const busy = computed(() => spinning.value || loading.value || refreshing.value)
+let spinTimer = null
+function spinFor(ms) {
+  spinning.value = true
+  clearTimeout(spinTimer)
+  spinTimer = setTimeout(() => {
+    spinning.value = false
+  }, ms)
+}
+onBeforeUnmount(() => clearTimeout(spinTimer))
+
 // 事件包装：失败时 rejection 已由 request.js 全局 toast 提示，这里吞掉避免未处理告警
 function refresh() {
-  store.load().catch(() => {})
+  if (busy.value) return
+  const start = Date.now()
+  spinFor(MIN_SPIN)
+  store.load()
+    .catch(() => {})
+    .finally(() => {
+      // 请求比最短时长更久时，等它结束再停，避免转到一半突然静止
+      const left = MIN_SPIN - (Date.now() - start)
+      if (left > 0) spinFor(left)
+      else spinning.value = false
+    })
 }
 function onSubmitForm(payload) {
   store.onSubmitForm(payload).catch(() => {})
@@ -409,6 +501,17 @@ function deptText(item) {
   return [p.college, p.major, p.className].filter(Boolean).join(' · ')
 }
 
+// 所属寝室分组：dormGroups 是「账号 id → 分组」的地图，未取到归属时返回 null，
+// 由模板区分「未分组」（确实没有）与「—」（还没取到，不替服务端下结论）
+function dormGroupOf(item) {
+  return dormGroups.value[String(item.id)] || null
+}
+function dormGroupTitle(item) {
+  const g = dormGroupOf(item)
+  if (!g) return ''
+  return g.count > 1 ? `分属 ${g.count} 个寝室分组，显示最新的「${g.name}」` : `寝室分组：${g.name}`
+}
+
 // 该账号有自己推送目标的通道：绑了凭证，或单独指定了收件邮箱（邮件）
 function pushChannelsOf(item) {
   return activeChannels(item.pushCreds)
@@ -457,6 +560,10 @@ function toggleSelect(id, checked) {
     selectedIds.value = selectedIds.value.filter((x) => x !== id)
   }
 }
+function enterSelectMode() {
+  selectMode.value = true
+  selectedIds.value = []
+}
 function toggleSelectMode() {
   selectMode.value = !selectMode.value
   if (!selectMode.value) selectedIds.value = []
@@ -490,6 +597,8 @@ async function submitNewGroup() {
     newGroupOpen.value = false
     selectedIds.value = []
     selectMode.value = false
+    // 归属变了，卡片上的「寝室分组」要跟着变；顺带把列表刷新一遍（静默降透明）
+    store.load().catch(() => {})
   } catch (e) {
     /* toast by interceptor */
   } finally {
@@ -518,6 +627,7 @@ async function submitJoinGroup() {
     joinGroupOpen.value = false
     selectedIds.value = []
     selectMode.value = false
+    store.load().catch(() => {})
   } catch (e) {
     /* toast by interceptor */
   } finally {
@@ -539,9 +649,26 @@ refresh()
     transform: rotate(360deg);
   }
 }
+/* 列表头两态切换：两态都占满一行，只做淡入淡出与 2px 位移，不动容器高度 */
+.xb-head-enter-active,
+.xb-head-leave-active {
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+.xb-head-enter-from {
+  opacity: 0;
+  transform: translateY(-2px);
+}
+.xb-head-leave-to {
+  opacity: 0;
+  transform: translateY(2px);
+}
 @media (prefers-reduced-motion: reduce) {
   .spin-refresh {
     animation: none;
+  }
+  .xb-head-enter-active,
+  .xb-head-leave-active {
+    transition: none;
   }
 }
 /* 预留滚动条宽度，避免出现纵向滚动条时内容区宽度抖动 */

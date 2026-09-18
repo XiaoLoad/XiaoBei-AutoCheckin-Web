@@ -106,6 +106,21 @@ def list_groups():
     return success({'items': [_dorm_to_dict(g) for g in groups], 'type': PushGroup.TYPE_DORM})
 
 
+@bp.route('/dorm-members', methods=['GET'])
+@token_required
+def dorm_members():
+    """寝室分组成员地图：accountId → 所属分组，按分组 id 倒序（同分组页排列）。
+    账号卡片要标注所属寝室分组，而账号列表接口不带这层归属；按分组逐个取成员会在
+    账号页产生 N+1，故在此一次 join 返回。一个账号可能被加入多个分组，交由调用方取舍。"""
+    uid = request.current_user.id
+    rows = (db.session.query(PushGroupMember.account_id, PushGroup.id, PushGroup.name)
+            .join(PushGroup, PushGroup.id == PushGroupMember.group_id)
+            .filter(PushGroup.user_id == uid, PushGroup.type == PushGroup.TYPE_DORM)
+            .order_by(PushGroup.id.desc()).all())
+    items = [{'accountId': aid, 'groupId': gid, 'groupName': name} for aid, gid, name in rows]
+    return success({'items': items})
+
+
 @bp.route('/groups', methods=['POST'])
 @token_required
 def create_dorm_group():

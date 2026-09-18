@@ -30,6 +30,14 @@ export async function fetchMembers(id) {
   return data.items || []
 }
 
+// 寝室分组成员地图（全部组一次取回）：accountId → 所属分组。
+// 账号卡片要标注所属寝室分组，而账号列表接口不带这层归属；按分组逐个取成员会在
+// 账号页产生 N+1，故由后端一次 join 返回。
+export async function fetchDormMembers() {
+  const data = await request({ url: '/group-push/dorm-members', method: 'get' })
+  return data.items || []
+}
+
 // 批量添加成员
 export async function addMembers(id, accountIds) {
   return request({ url: `/group-push/groups/${id}/members`, method: 'post', data: { accountIds } })

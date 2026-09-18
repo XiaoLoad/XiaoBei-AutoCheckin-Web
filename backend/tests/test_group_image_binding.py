@@ -296,3 +296,61 @@ def test_checkin_flow_need_photo_without_library_fails_fast(bind_env, monkeypatc
     outcome, reason, _ = sch._checkin_flow(sched, env['acc'], {'token': 't', 'ua': None},
                                            cfg, '签到')
     assert outcome == 'fail' and '需要上传签到图片' in reason
+
+
+# ───────────────────────── 寝室分组成员地图 ─────────────────────────
+
+def test_dorm_members_map_covers_all_groups(app, bind_env, request):
+    """成员地图一次返回所有寝室的 (accountId, 分组)：账号卡片靠它标注所属分组。
+    他人的分组与成员不得泄漏；删组即断归属。"""
+    env = bind_env
+    uid = env['uid']
+    c = app.test_client()
+
+    tag = uuid.uuid4().hex[:8]
+    extra = [BAccount(user_id=uid, account=f'gmap_{tag}_{i}', password_enc='x') for i in range(2)]
+    db.session.add_all(extra)
+    db.session.flush()
+
+    # 他人的分组与成员：本用例自己造、自己删（bind_env 的清理只覆盖 env['uid']）
+    other = User(username=f'tc_gmap_other_{tag}', role='user', enabled=True,
+                 quota=100, used_quota=0)
+    other.set_password('pw')
+    db.session.add(other)
+    db.session.flush()
+    alien = BAccount(user_id=other.id, account=f'gmap_alien_{tag}', password_enc='x')
+    db.session.add(alien)
+    db.session.commit()
+
+    def _drop_other():
+        gids = [g.id for g in PushGroup.query.filter_by(user_id=other.id).all()]
+        if gids:
+            PushGroupMember.query.filter(PushGroupMember.group_id.in_(gids)) \
+                .delete(synchronize_session=False)
+        PushGroup.query.filter_by(user_id=other.id).delete(synchronize_session=False)
+        BAccount.query.filter_by(user_id=other.id).delete(synchronize_session=False)
+        db.session.delete(db.session.get(User, other.id))
+        db.session.commit()
+
+    request.addfinalizer(_drop_other)
+
+    g1 = _dorm_group(uid, f'507_{tag}', accounts=[env['acc'], extra[0]])
+    g2 = _dorm_group(uid, f'508_{tag}', accounts=[extra[1]])
+    _dorm_group(other.id, f'他人的组_{tag}', accounts=[alien])
+
+    from app.utils.auth import generate_token
+
+    headers = {'Authorization': f'Bearer {generate_token(db.session.get(User, uid))}'}
+    items = c.get('/api/group-push/dorm-members', headers=headers).get_json()['data']['items']
+    got = {(x['accountId'], x['groupName']) for x in items}
+    assert (env['acc'].id, g1.name) in got
+    assert (extra[0].id, g1.name) in got
+    assert (extra[1].id, g2.name) in got
+    assert len([x for x in items if x['accountId'] == env['acc'].id]) == 1
+    assert all(x['accountId'] != alien.id for x in items)
+
+    # 删组即断归属：地图不应再出现该组成员
+    r = c.delete(f'/api/group-push/groups/{g2.id}', headers=headers)
+    assert r.status_code == 200, r.get_json()
+    items = c.get('/api/group-push/dorm-members', headers=headers).get_json()['data']['items']
+    assert all(x['accountId'] != extra[1].id for x in items)

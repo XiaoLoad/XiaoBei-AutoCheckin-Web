@@ -4,9 +4,10 @@
     <div class="dash-card fade-up shrink-0 p-4 sm:p-5">
       <div class="flex items-start justify-between gap-4">
         <div>
-          <h1 class="text-lg font-semibold text-ink">群推送</h1>
+          <h1 class="text-lg font-semibold text-ink">分组</h1>
           <p class="mt-1 text-sm text-ink-muted">
-            把同一批人的当日签到结果合并成一条消息，推送到对应的 QQ 群——而非每人各发一条。
+            把同寝室 / 同班级的账号归到一起。分组有两项用途：绑定图库归属（配置套选「按分组取图」时各组取各自的照片），
+            以及把当日的签到结果合并成一条消息推送到对应的 QQ 群——而非每人各发一条。
           </p>
         </div>
         <span class="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1 text-xs font-medium text-brand">
@@ -99,7 +100,7 @@
 
         <div v-if="activeGroups.length === 0" class="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-10 text-center text-sm text-ink-muted">
           <Icon :name="activeTab === 'class' ? 'members' : 'box'" :size="26" class="opacity-50" />
-          <span>{{ activeTab === 'class' ? '暂无班级信息：账号校验通过后会自动带回班级字段。' : '还没有寝室分组，点击下方「新建分组」把同寝室账号归到一起。' }}</span>
+          <span>{{ activeTab === 'class' ? '暂无班级信息：账号校验通过后会自动带回班级字段。' : '还没有寝室分组，点击下方「新建分组」把同寝室账号归到一起，顺带绑定这个寝室的图库。' }}</span>
         </div>
 
         <div v-else-if="filteredGroups.length === 0" class="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-10 text-center text-sm text-ink-muted">
@@ -236,6 +237,41 @@
               </div>
             </div>
 
+            <!-- 图库归属：配置套图片策略选「按分组取图」时，本组账号按此取图 -->
+            <div class="mt-4">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-sm font-medium text-ink-soft">图库归属</p>
+                  <p v-if="!editingImage" class="mt-1 text-sm" :class="selectedGroup.imageGroupId ? 'text-ink' : 'text-ink-muted'">
+                    {{ selectedGroup.imageGroupId ? imageGroupLabel(selectedGroup.imageGroupId) : '未绑定，走配置套默认图库' }}
+                  </p>
+                </div>
+                <button
+                  v-if="!editingImage"
+                  type="button"
+                  class="rounded-lg border border-ink/10 px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-cloud"
+                  @click="startEditImage"
+                >编辑</button>
+              </div>
+              <div v-if="editingImage" class="mt-2 flex items-center gap-2">
+                <BaseSelect v-model="imageDraft" :options="imageGroupOptions" :searchable="true" size="sm" class="w-full" />
+                <button
+                  type="button"
+                  class="shrink-0 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-dark disabled:opacity-60"
+                  :disabled="savingImage"
+                  @click="saveImageGroup"
+                >{{ savingImage ? '保存中' : '保存' }}</button>
+                <button
+                  type="button"
+                  class="shrink-0 rounded-lg border border-ink/10 px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-cloud"
+                  @click="cancelEditImage"
+                >取消</button>
+              </div>
+              <p v-if="editingImage" class="mt-1.5 text-xs text-ink-muted">
+                未绑定图库的分组，其成员按配置套的默认图库取图。图库分组在「签到配置 → 我的资源 → 图库」中维护。
+              </p>
+            </div>
+
             <!-- 成员 -->
             <div class="mt-4 border-t border-ink/5 pt-4">
               <div class="flex items-center justify-between">
@@ -301,6 +337,11 @@
           <input v-model="createForm.qqCode" type="text" placeholder="留空可稍后绑定" class="login-input w-full py-2 text-sm" />
           <p class="mt-1.5 text-xs text-ink-muted">未绑定 QQ 群前不会推送；可在右侧详情随时编辑。</p>
         </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-ink-soft">图库归属<span class="text-ink-muted">（可选）</span></label>
+          <BaseSelect v-model="createForm.imageGroupId" :options="imageGroupOptions" :searchable="true" size="sm" class="w-full" />
+          <p class="mt-1.5 text-xs text-ink-muted">配置套图片策略选「按分组取图」时，本组账号按此图库取图；不绑定则走配置套默认图库。</p>
+        </div>
       </div>
       <template #footer>
         <button type="button" class="flex-1 rounded-xl border border-ink/10 py-2.5 text-sm font-medium text-ink-soft transition hover:bg-cloud" @click="createOpen = false">取消</button>
@@ -351,7 +392,7 @@
     <ConfirmModal
       v-model="deleteOpen"
       title="删除寝室分组"
-      :message="deleteTarget ? `确定删除寝室分组「${deleteTarget.name}」？成员关系将一并清除，且不可恢复。` : ''"
+      :message="deleteTarget ? `确定删除寝室分组「${deleteTarget.name}」？成员关系与图库归属将一并清除（图片本身留在图库中），且不可恢复。` : ''"
       danger
       confirming-text="删除中…"
       @confirm="confirmDelete"
@@ -375,6 +416,7 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import Icon from '@/components/Icon.vue'
 import BaseModal from '@/components/BaseModal.vue'
 import BaseCheckbox from '@/components/BaseCheckbox.vue'
+import BaseSelect from '@/components/BaseSelect.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { toast } from '@/utils/toast'
@@ -384,6 +426,7 @@ import {
   fetchMembers, addMembers, removeMember, bindClassGroup, flushGroup
 } from '@/api/groupPush'
 import { fetchAccounts } from '@/api/accounts'
+import { fetchImageGroups } from '@/api/signConfig'
 
 const tabs = [
   { key: 'class', label: '班级分组' },
@@ -401,12 +444,30 @@ const flushing = ref(false)
 // 新建分组弹窗
 const createOpen = ref(false)
 const creating = ref(false)
-const createForm = ref({ name: '', qqCode: '' })
+const createForm = ref({ name: '', qqCode: '', imageGroupId: '' })
 
 // QQ 绑定内联编辑
 const editingQQ = ref(false)
 const qqDraft = ref('')
 const savingQQ = ref(false)
+
+// 图库归属内联编辑
+const imageGroups = ref([])
+const editingImage = ref(false)
+const imageDraft = ref('')
+const savingImage = ref(false)
+
+// 图库归属下拉：'' = 不绑定（回退配置套默认图库），其余为「我的资源 → 图库」里建的分组
+const imageGroupOptions = computed(() => [
+  { label: '不绑定（走配置套默认图库）', value: '' },
+  ...imageGroups.value.map((g) => ({ label: g.name, value: g.id }))
+])
+
+// 已绑图库的展示名：图库分组被删时后端已自动解绑（ON DELETE SET NULL），此处仅作文案兜底
+function imageGroupLabel(id) {
+  const g = imageGroups.value.find((x) => String(x.id) === String(id))
+  return g ? g.name : '原图库分组已删除'
+}
 
 // 成员
 const addOpen = ref(false)
@@ -636,13 +697,24 @@ async function loadAccounts() {
   }
 }
 
+async function loadImageGroups() {
+  try {
+    imageGroups.value = await fetchImageGroups()
+  } catch (e) {
+    /* toast by interceptor */
+  }
+}
+
 function ensureSelection() {
   const list = activeGroups.value
   if (list.length === 0) {
     selected.value = null
     return
   }
-  if (selected.value && list.some((g) => g.type === selected.value.type && (g.id ?? g.name) === selected.value.key)) {
+  // 命中判据带上 name：班级分组行首次落库后 id ?? name 由「名字」变「id」，
+  // 只比 key 会让刚绑完 QQ / 图库的这次刷新把选中项弹走
+  if (selected.value && list.some((g) => g.type === selected.value.type &&
+    ((g.id ?? g.name) === selected.value.key || g.name === selected.value.key))) {
     return
   }
   selectGroup(list[0])
@@ -651,6 +723,7 @@ function ensureSelection() {
 function selectGroup(g) {
   selected.value = { type: g.type, key: g.id ?? g.name }
   editingQQ.value = false
+  editingImage.value = false
 }
 
 function startEditQQ() {
@@ -660,6 +733,37 @@ function startEditQQ() {
 function cancelEditQQ() {
   editingQQ.value = false
   qqDraft.value = ''
+}
+
+function startEditImage() {
+  if (!selectedGroup.value) return
+  const cur = selectedGroup.value.imageGroupId
+  imageDraft.value = cur == null ? '' : String(cur)
+  editingImage.value = true
+}
+function cancelEditImage() {
+  editingImage.value = false
+  imageDraft.value = ''
+}
+async function saveImageGroup() {
+  if (!selectedGroup.value) return
+  savingImage.value = true
+  try {
+    const imageGroupId = imageDraft.value === '' ? null : imageDraft.value
+    if (selectedGroup.value.type === 'dorm') {
+      await updateDormGroup(selectedGroup.value.id, { imageGroupId })
+    } else {
+      // 班级分组可能尚未落库（没绑 QQ 时没有行），接口按 (type=class, name) upsert
+      await bindClassGroup({ name: selectedGroup.value.name, imageGroupId })
+    }
+    toast('图库归属已保存', 'success')
+    editingImage.value = false
+    await loadGroups()
+  } catch (e) {
+    /* toast by interceptor */
+  } finally {
+    savingImage.value = false
+  }
 }
 async function saveQQ() {
   if (!selectedGroup.value) return
@@ -696,13 +800,17 @@ async function flush(g) {
 }
 
 function openCreate() {
-  createForm.value = { name: '', qqCode: '' }
+  createForm.value = { name: '', qqCode: '', imageGroupId: '' }
   createOpen.value = true
 }
 async function submitCreate() {
   creating.value = true
   try {
-    await createDormGroup({ name: createForm.value.name.trim(), qqCode: createForm.value.qqCode.trim() })
+    await createDormGroup({
+      name: createForm.value.name.trim(),
+      qqCode: createForm.value.qqCode.trim(),
+      imageGroupId: createForm.value.imageGroupId || null
+    })
     toast('分组已创建', 'success')
     createOpen.value = false
     await loadGroups()
@@ -850,7 +958,8 @@ function animateHeight(el) {
 const rightAnimKey = computed(() => {
   const g = selectedGroup.value
   const id = g ? g.id ?? g.name : 'none'
-  return `${id}|${memberList.value.length}|${editingQQ.value ? 1 : 0}`
+  const bind = g ? `${g.qqCode || ''}|${g.imageGroupId || ''}` : ''
+  return `${id}|${memberList.value.length}|${editingQQ.value ? 1 : 0}|${editingImage.value ? 1 : 0}|${bind}`
 })
 const leftAnimKey = computed(() => `${activeTab.value}|${filteredGroups.value.length}`)
 
@@ -862,7 +971,7 @@ onMounted(async () => {
   if (rootRef.value) {
     animCtx = gsap.context(() => {}, rootRef.value)
   }
-  await Promise.all([loadGroups(), loadAccounts()])
+  await Promise.all([loadGroups(), loadAccounts(), loadImageGroups()])
   await loadDormMembersMap()
 })
 

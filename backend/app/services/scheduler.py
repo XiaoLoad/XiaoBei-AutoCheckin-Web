@@ -23,6 +23,7 @@ from concurrent.futures import ThreadPoolExecutor as FuturesThreadPool, as_compl
 from app.extensions import db
 from app.models import ActivityWindow, BAccount, ConfigSet, JwAccount, OpLog, Schedule, SignRecord, PushLog
 from app.models.b_account import binding_cred_id
+from app.models.group_push import PushGroup, PushGroupMember
 from app.models.pools import ImageGroup, PoolCredential, PoolLocation, PoolUa
 from app.models.system_config import get_setting
 from app.models.user import now_cst
@@ -76,8 +77,9 @@ def _snap_weekday_label(weekdays):
     return '、'.join(f'周{_WEEKDAY_NAMES[w]}' for w in ws)
 
 
-def build_config_view(schedule, resolved, uid):
-    """将 resolved 配置渲染为执行时配置快照（含可读名称）。无 resolved 返回 None。"""
+def build_config_view(schedule, resolved, uid, acc=None):
+    """将 resolved 配置渲染为执行时配置快照（含可读名称）。无 resolved 返回 None。
+    acc 用于「按分组取图」模式解析本账号实际取图范围，快照记录的是真实使用的图库。"""
     if not resolved:
         return None
     cfg = resolved
@@ -103,8 +105,14 @@ def build_config_view(schedule, resolved, uid):
                         'lat': loc.lat, 'lng': loc.lng, 'offsetM': loc.offset_m}
 
     image_cfg = cfg.get('image') or {}
+    image_mode = 'byGroup' if image_cfg.get('mode') == 'byGroup' else 'fixed'
+    group_kind = (image_cfg.get('groupKind') if image_cfg.get('groupKind') in
+                  (PushGroup.TYPE_CLASS, PushGroup.TYPE_DORM) else PushGroup.TYPE_DORM)
+    # byGroup 按账号实时解析，与 _checkin_flow 共用 resolve_image_group，
+    # 保证快照记的就是本次真正取图的图库（fixed 直接取配置值，不查库）
+    gid = (resolve_image_group(uid, cfg, acc) if image_mode == 'byGroup'
+           else _snap_to_int(image_cfg.get('groupId')))
     group_name = ''
-    gid = _snap_to_int(image_cfg.get('groupId'))
     if gid:
         g = db.session.get(ImageGroup, gid)
         group_name = g.name if g else ''
@@ -112,6 +120,8 @@ def build_config_view(schedule, resolved, uid):
         'enabled': bool(image_cfg.get('enabled')),
         'strategy': image_cfg.get('strategy') or '',
         'strategyLabel': _IMAGE_STRATEGY_LABELS.get(image_cfg.get('strategy'), '—'),
+        'mode': image_mode,
+        'groupKind': group_kind,
         'groupId': gid,
         'groupName': group_name,
     }
@@ -627,6 +637,46 @@ def _load_location(resolved):
         return None
 
 
+def resolve_image_group(uid, resolved, acc):
+    """取图范围解析：返回图库分组 id，None = 不过滤分组（全部图库）。
+
+    fixed（默认）：直接用配置套的 image.groupId。
+    byGroup：按 image.groupKind（dorm 默认 / class）取该账号所属分组的图库归属，
+    组内任一分组绑了图库即用之；账号不属任何分组、分组未绑图库或图库已被删，
+    逐级回退配置套默认图库，仍为空则回退全部图库。单人寝室不必建分组，
+    不建即自动走配置套默认图库，无需额外约定。"""
+    image_cfg = (resolved or {}).get('image') or {}
+    default_gid = _snap_to_int(image_cfg.get('groupId'))
+    if image_cfg.get('mode') != 'byGroup':
+        return default_gid
+    kind = image_cfg.get('groupKind')
+    if kind not in (PushGroup.TYPE_CLASS, PushGroup.TYPE_DORM):
+        kind = PushGroup.TYPE_DORM
+    return _account_group_image_id(uid, acc, kind) or default_gid
+
+
+def _account_group_image_id(uid, acc, kind):
+    """账号所属分组绑定的图库 id；无归属分组或分组未绑图库返回 None。
+    班级分组按 className 派生匹配，寝室分组按成员表匹配（与 group_push 口径一致）。"""
+    if acc is None:
+        return None
+    q = PushGroup.query.filter_by(user_id=uid, type=kind)
+    if kind == PushGroup.TYPE_CLASS:
+        cls_name = ((acc.profile or {}).get('className') or '').strip()
+        if not cls_name:
+            return None
+        q = q.filter(PushGroup.name == cls_name)
+    else:
+        q = q.join(PushGroupMember, PushGroupMember.group_id == PushGroup.id).filter(
+            PushGroupMember.account_id == acc.id)
+    # 同一账号理论上只属一个寝室分组，多属时取已绑图库的那个（id 升序保证结果稳定）
+    for g in q.order_by(PushGroup.id.asc()).all():
+        if g.image_group_id and ImageGroup.query.filter_by(
+                id=g.image_group_id, user_id=uid).first() is not None:
+            return g.image_group_id
+    return None
+
+
 def _parse_platform_time(s):
     """解析平台任务时间窗（know 'HH:mm:ss' / sign 'HH:mm'），非法返回 None"""
     try:
@@ -649,11 +699,8 @@ def _checkin_flow(schedule, acc, session, resolved, remark):
     adapter = get_adapter()
     image_cfg = (resolved or {}).get('image') or {}
     strategy = image_cfg.get('strategy') if image_cfg.get('strategy') in ('recycle', 'trash', 'delete') else 'trash'
-    group_raw = image_cfg.get('groupId')
-    try:
-        group = int(group_raw) if group_raw not in (None, '', 0) else None
-    except (TypeError, ValueError):
-        group = None
+    # 取图范围延迟到第 ⑤ 步解析：按分组取图要查库，无任务/超窗/围栏拦截等早退路径不必付这个成本
+    group = None
 
     # 本次尝试提交的参数快照：跨分支累计，skip/fail/成功均带回，供落库回显「提交参数」。
     # 仅「无进行中任务」这种尚未触及任何提交信息的场景才为空（无参数可记）。
@@ -735,6 +782,7 @@ def _checkin_flow(schedule, acc, session, resolved, remark):
         if need_photo and not image_cfg.get('enabled'):
             return 'fail', '该任务需要上传签到图片，请在配置套中启用图库并确认有可用图片', attempt
         if image_cfg.get('enabled'):
+            group = resolve_image_group(uid, resolved, acc)
             claimed = claim_image_for_submit(uid, group, strategy)
             if not claimed:
                 return 'fail', '图库暂无可用图片，请先上传或调整取图范围', attempt
@@ -977,7 +1025,7 @@ def _commit_result(schedule, acc, status, fail_reason='', resolved=None, extra=N
     # 执行时配置快照：忠实还原该条日志当时实际使用的配置（resolved 为 None 表示
     # 执行前配置缺失/校验失败，无快照可抓，落 NULL，详情端显示「无配置快照」）
     if resolved is not None:
-        rec.set_config_snapshot(build_config_view(schedule, resolved, schedule.user_id))
+        rec.set_config_snapshot(build_config_view(schedule, resolved, schedule.user_id, acc=acc))
     # 提交参数快照：仅当确实构造了尝试提交参数（非空 dict）才落库；
     # 纯早期跳过（如「无进行中任务」）传回 {} 表示无参数，落 NULL 保持详情简洁。
     if extra:

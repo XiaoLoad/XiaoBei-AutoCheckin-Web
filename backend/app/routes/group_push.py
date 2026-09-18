@@ -1,11 +1,13 @@
-# 群推送分组蓝图：班级（className 派生）/ 寝室（手动成员）两类分组的 CRUD、
-# QQ 群绑定、成员管理与合并推送状态查询。触发与发送在 app/services/group_digest，本层只管配置与展示。
+# 分组蓝图：班级（className 派生）/ 寝室（手动成员）两类分组的 CRUD。
+# 分组承载两项归属：QQ 群（合并推送用）与图库分组（配置套「按分组取图」用），
+# 两者互相独立、各自可空。QQ 群绑定、成员管理与合并推送状态在此层；
+# 触发与发送在 app/services/group_digest，图库归属的消费方在 scheduler。
 import json
 
 from flask import Blueprint, request
 
 from app.extensions import db
-from app.models import (BAccount, PushGroup, PushGroupDigestLog, PushGroupMember)
+from app.models import (BAccount, ImageGroup, PushGroup, PushGroupDigestLog, PushGroupMember)
 from app.models.user import now_cst
 from app.utils.response import error, success
 from app.utils.auth import token_required
@@ -34,6 +36,20 @@ def _member_count(g):
     return PushGroupMember.query.filter_by(group_id=g.id).count()
 
 
+def _clean_image_group(uid, raw):
+    """图库归属校验：空值（None/''/0）表示解绑；否则须是本人的图库分组。
+    返回 (ok, image_group_id, message)。越权或不存在一律拒绝，避免脏数据进库。"""
+    if raw in (None, '', 0, '0'):
+        return True, None, ''
+    try:
+        gid = int(raw)
+    except (TypeError, ValueError):
+        return False, None, '图库分组 id 无效'
+    if ImageGroup.query.filter_by(id=gid, user_id=uid).first() is None:
+        return False, None, '图库分组不存在'
+    return True, gid, ''
+
+
 def _dorm_to_dict(g):
     return {
         'id': g.id,
@@ -41,6 +57,7 @@ def _dorm_to_dict(g):
         'name': g.name,
         'qqCode': g.qq_code or '',
         'bound': g.bound,
+        'imageGroupId': g.image_group_id,
         'memberCount': _member_count(g),
         'today': _today_status(g.id),
         'createdAt': g.created_at.strftime('%Y-%m-%d %H:%M') if g.created_at else '',
@@ -48,7 +65,7 @@ def _dorm_to_dict(g):
 
 
 def _class_groups_derived(user_id):
-    """班级分组实时派生：去重账号 className；已绑定的组回写 qq_code 与今日状态。"""
+    """班级分组实时派生：去重账号 className；已建的行回写 qq_code、图库归属与今日状态。"""
     accs = BAccount.query.filter_by(user_id=user_id, enabled=True).all()
     names = []
     seen = set()
@@ -68,6 +85,7 @@ def _class_groups_derived(user_id):
             'name': name,
             'qqCode': g.qq_code or '' if g else '',
             'bound': bool(g and g.bound),
+            'imageGroupId': g.image_group_id if g else None,
             'memberCount': sum(1 for a in accs if (a.profile or {}).get('className') == name),
             'today': _today_status(g.id) if g else None,
             'createdAt': g.created_at.strftime('%Y-%m-%d %H:%M') if (g and g.created_at) else '',
@@ -98,8 +116,12 @@ def create_dorm_group():
     uid = request.current_user.id
     if PushGroup.query.filter_by(user_id=uid, type=PushGroup.TYPE_DORM, name=name).first():
         return error(message='该寝室分组已存在', code=4401, status=409)
+    ok, image_gid, message = _clean_image_group(uid, payload.get('imageGroupId'))
+    if not ok:
+        return error(message=message, code=4402, status=400)
     qq_code = str(payload.get('qqCode') or '').strip() or None
-    g = PushGroup(user_id=uid, type=PushGroup.TYPE_DORM, name=name, qq_code=qq_code)
+    g = PushGroup(user_id=uid, type=PushGroup.TYPE_DORM, name=name, qq_code=qq_code,
+                  image_group_id=image_gid)
     db.session.add(g)
     db.session.commit()
     return success(_dorm_to_dict(g), message='创建成功', status=201)
@@ -122,6 +144,12 @@ def update_dorm_group(group_id):
         g.name = new_name
     if 'qqCode' in payload:
         g.qq_code = str(payload['qqCode'] or '').strip() or None
+    if 'imageGroupId' in payload:
+        ok, image_gid, message = _clean_image_group(request.current_user.id,
+                                                    payload.get('imageGroupId'))
+        if not ok:
+            return error(message=message, code=4402, status=400)
+        g.image_group_id = image_gid
     db.session.commit()
     return success(_dorm_to_dict(g), message='保存成功')
 
@@ -205,27 +233,38 @@ def remove_member(group_id, account_id):
 @bp.route('/class-bind', methods=['POST'])
 @token_required
 def bind_class_group():
-    """班级分组绑定/解绑 QQ 群：按 (user_id, type=class, name) upsert；qq_code 为空则删除该行。"""
+    """班级分组保存：按 (user_id, type=class, name) upsert。
+    qqCode 与 imageGroupId 各自独立、都可空，只传其一时另一个保持不变；
+    两者皆空视为彻底解绑，删除该行（不留空壳，避免与派生的班级列表重名冲突）。"""
     payload = request.get_json(silent=True) or {}
     name = str(payload.get('name') or '').strip()
     if not name:
         return error(message='班级名称不能为空', code=4400, status=400)
     uid = request.current_user.id
-    qq_code = str(payload.get('qqCode') or '').strip() or None
     g = PushGroup.query.filter_by(user_id=uid, type=PushGroup.TYPE_CLASS, name=name).first()
-    if not qq_code:
+    qq_code = g.qq_code if g else None
+    image_gid = g.image_group_id if g else None
+    if 'qqCode' in payload:
+        qq_code = str(payload.get('qqCode') or '').strip() or None
+    if 'imageGroupId' in payload:
+        ok, image_gid, message = _clean_image_group(uid, payload.get('imageGroupId'))
+        if not ok:
+            return error(message=message, code=4402, status=400)
+    if not qq_code and not image_gid:
         if g:
             db.session.delete(g)
             db.session.commit()
-        return success({'name': name, 'qqCode': '', 'bound': False}, message='已解绑')
+        return success({'name': name, 'qqCode': '', 'imageGroupId': None, 'bound': False},
+                       message='已解绑')
     if g is None:
-        g = PushGroup(user_id=uid, type=PushGroup.TYPE_CLASS, name=name, qq_code=qq_code)
+        g = PushGroup(user_id=uid, type=PushGroup.TYPE_CLASS, name=name)
         db.session.add(g)
-    else:
-        g.qq_code = qq_code
+    g.qq_code = qq_code
+    g.image_group_id = image_gid
     db.session.commit()
-    return success({'id': g.id, 'name': name, 'qqCode': g.qq_code, 'bound': True},
-                  message='已绑定')
+    return success({'id': g.id, 'name': name, 'qqCode': g.qq_code or '',
+                    'imageGroupId': g.image_group_id, 'bound': g.bound},
+                   message='已保存')
 
 
 @bp.route('/flush', methods=['POST'])

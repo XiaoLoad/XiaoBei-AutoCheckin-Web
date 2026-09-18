@@ -842,7 +842,17 @@ function detailSections(d) {
       fields: [
         { label: "状态", value: img.enabled ? "已启用" : "未启用" },
         { label: "用后策略", value: img.strategyLabel || "—" },
-        { label: "取图范围", value: img.groupName || "全部图片", span: 2 },
+        // 取图方式与范围成对展示：按分组取图时 groupName 记的是该账号实际命中的图库
+        {
+          label: "取图方式",
+          value:
+            img.mode === "byGroup"
+              ? img.groupKind === "class"
+                ? "按班级分组"
+                : "按寝室分组"
+              : "固定图库",
+        },
+        { label: "取图范围", value: img.groupName || "全部图片" },
       ],
     },
     {

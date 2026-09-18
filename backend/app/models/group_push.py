@@ -19,6 +19,12 @@ class PushGroup(db.Model):
     name = db.Column(db.String(64), nullable=False)
     # pushplus qqBot 配置编码（option 路由键）；空=未绑定不推送
     qq_code = db.Column(db.String(32))
+    # 图库归属：本分组绑定的图库分组（image_groups.id）。配置套图片策略选「按分组取图」时，
+    # 组内账号按此取图；NULL=未绑定，运行时回退配置套默认图库（再回退全部图库）。
+    # ondelete=SET NULL：图库分组被删时自动解绑，不阻塞删除
+    image_group_id = db.Column(db.Integer,
+                               db.ForeignKey('image_groups.id', ondelete='SET NULL'),
+                               index=True)
     created_at = db.Column(db.DateTime, default=now_cst)
     updated_at = db.Column(db.DateTime, default=now_cst, onupdate=now_cst)
 
@@ -42,6 +48,7 @@ class PushGroup(db.Model):
             'name': self.name,
             'qqCode': self.qq_code or '',
             'bound': self.bound,
+            'imageGroupId': self.image_group_id,
             'memberCount': member_count if member_count is not None else len(self.members or []),
             'createdAt': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else '',
         }

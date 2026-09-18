@@ -169,9 +169,15 @@ export const useSignConfigStore = defineStore('signConfig', () => {
   function configsEqual(a, b) {
     if (a === b) return true
     if (!a || !b) return false
-    const norm = (c) => JSON.stringify(
-      canonicalize({ ...api.makeConfig(), ...(c || {}), locationId: c?.locationId == null ? null : String(c.locationId) })
-    )
+    const base = api.makeConfig()
+    const norm = (c) => JSON.stringify(canonicalize({
+      ...base,
+      ...(c || {}),
+      locationId: c?.locationId == null ? null : String(c.locationId),
+      // image 块内新增键（mode/groupKind）兜底：顶层浅合并整块替换，兜不到块内缺键，
+      // 历史任务快照与归一化后的配置套会因此被误判「已偏离配置套」，故在此按骨架垫平
+      image: { ...base.image, ...((c || {}).image || {}) }
+    }))
     return norm(a) === norm(b)
   }
   // 找出与给定配置实质一致的配置套 id（用于定时任务页抽屉自定义修改后自动关联）。
@@ -244,6 +250,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     if (src) {
       src = { ...api.makeConfig(), ...src }
       api.ensureActivityConfig(src.activity)
+      api.ensureImageConfig(src.image)
     }
     taskConfigDraft.value = src ? JSON.parse(JSON.stringify(src)) : null
     draftSourceSnapshot.value = src ? JSON.parse(JSON.stringify(src)) : null

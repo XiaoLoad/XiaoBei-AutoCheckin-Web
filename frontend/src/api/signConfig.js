@@ -25,7 +25,11 @@ export function makeConfig() {
     image: {
       enabled: false, // 是否上传图片
       strategy: 'recycle', // 图片策略：recycle 循环复用 / delete 用后删除 / trash 用后入回收站可恢复
-      groupId: '' // 图片来源分组（'' = 全部图库）；同寝室账号选同一分组即共用照片
+      // 取图方式：fixed 固定图库（全部账号共用 groupId 指向的库）/ byGroup 按分组取图
+      // （各账号按所属分组的图库归属取图，适合一个配置套覆盖多寝室）
+      mode: 'fixed',
+      groupKind: 'dorm', // byGroup 时按哪类分组取图：dorm 寝室分组 / class 班级分组
+      groupId: '' // 固定图库分组（'' = 全部图库）；byGroup 时作为分组未绑图库的回退默认值
     },
     push: {
       channels: [], // 推送通道多选：serverchan / pushplus / email
@@ -74,6 +78,17 @@ export function ensureActivityConfig(activity) {
   return activity
 }
 
+// image 块骨架兜底：mode/groupKind 是后加的键，历史配置套与任务快照里都没有；
+// 缺键会让取图方式下拉显示空白、并让 configsEqual 把历史快照误判为「已偏离配置套」。
+// 与 ensureActivityConfig 同理就地补齐，返回同一引用（保持响应式）。
+export function ensureImageConfig(image) {
+  if (!image || typeof image !== 'object') return image
+  image.mode = image.mode === 'byGroup' ? 'byGroup' : 'fixed'
+  image.groupKind = image.groupKind === 'class' ? 'class' : 'dorm'
+  if (!image.strategy) image.strategy = makeConfig().image.strategy
+  return image
+}
+
 // ── 元信息：账号来自真实 /api/accounts ──
 export async function fetchConfigMeta() {
   const accounts = await fetchAccounts()
@@ -105,6 +120,7 @@ export async function fetchConfigMeta() {
 const mapSetIn = (s) => {
   const config = { ...makeConfig(), ...(s.config || {}) }
   ensureActivityConfig(config.activity)
+  ensureImageConfig(config.image)
   return {
     id: String(s.id),
     name: s.name,
@@ -174,6 +190,14 @@ async function refreshPools() { return fetchPools() }
 export async function fetchCredentials() {
   const data = await request({ url: '/pools/credentials', method: 'get' })
   return (data.items || []).map((c) => ({ ...c, type: c.channel }))
+}
+
+// 图库分组单拉：分组页绑定图库归属这类只需要分组列表的场景用，避免连带拉取图库等全量资源池
+export async function fetchImageGroups() {
+  const data = await request({ url: '/pools/image-groups', method: 'get' })
+  return (data.items || []).map((g) => ({
+    id: String(g.id), name: g.name, count: g.count || 0
+  }))
 }
 
 // 位置池：scope = system | user

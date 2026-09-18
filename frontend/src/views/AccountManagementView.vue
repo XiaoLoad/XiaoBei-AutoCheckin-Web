@@ -243,7 +243,12 @@
         <div>
           <label class="mb-1.5 block text-sm font-medium text-ink-soft">QQ 群编码（qq_code）<span class="text-ink-muted">（可选）</span></label>
           <input v-model="newGroupQq" type="text" placeholder="留空可稍后绑定" class="login-input w-full py-2 text-sm" />
-          <p class="mt-1.5 text-xs text-ink-muted">未绑定 QQ 群前不会推送；可在「群推送」页随时编辑。</p>
+          <p class="mt-1.5 text-xs text-ink-muted">未绑定 QQ 群前不会推送；可在「分组」页随时编辑。</p>
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-ink-soft">图库归属<span class="text-ink-muted">（可选）</span></label>
+          <BaseSelect v-model="newGroupImage" :options="imageGroupOptions" :searchable="true" size="sm" class="w-full" />
+          <p class="mt-1.5 text-xs text-ink-muted">配置套图片策略选「按分组取图」时，本组账号按此图库取图；不绑定则走配置套默认图库。</p>
         </div>
       </div>
       <template #footer>
@@ -260,7 +265,7 @@
         <p class="text-sm text-ink-muted">将选中的 {{ selectedIds.length }} 个账号加入一个已存在的寝室分组。</p>
         <div v-if="joinLoading" class="py-6 text-center text-sm text-ink-muted">加载中…</div>
         <div v-else-if="joinGroups.length === 0" class="rounded-xl border border-dashed border-ink/10 px-3 py-6 text-center text-sm text-ink-muted">
-          还没有寝室分组，先去「群推送」页新建一个。
+          还没有寝室分组，先去「分组」页新建一个。
         </div>
         <div v-else>
           <label class="mb-1.5 block text-sm font-medium text-ink-soft">选择分组</label>
@@ -272,7 +277,7 @@
             >
               <span class="min-w-0">
                 <span class="block truncate text-sm text-ink">{{ g.name }}</span>
-                <span class="block truncate text-xs text-ink-muted">{{ g.memberCount }} 名成员 · {{ g.bound ? '已绑 QQ 群' : '未绑 QQ 群' }}</span>
+                <span class="block truncate text-xs text-ink-muted">{{ g.memberCount }} 名成员 · {{ g.bound ? '已绑 QQ 群' : '未绑 QQ 群' }}{{ g.imageGroupId ? ' · 已绑图库' : '' }}</span>
               </span>
               <BaseCheckbox :model-value="joinTarget === g.id" @update:model-value="joinTarget = $event ? g.id : null" />
             </label>
@@ -296,7 +301,7 @@
 <script setup>
 import { useAccountsStore } from '@/stores/accounts'
 import { storeToRefs } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import BasePagination from '@/components/BasePagination.vue'
@@ -307,6 +312,7 @@ import ConfirmModal from '@/components/ConfirmModal.vue'
 import { activeChannels, channelDot, channelLabel, channelTone, readCredEntry } from '@/utils/pushChannels'
 import { accountTypeMeta } from '@/utils/accountType'
 import { fetchGroups, createDormGroup, addMembers } from '@/api/groupPush'
+import { fetchImageGroups } from '@/api/signConfig'
 import { toast } from '@/utils/toast'
 
 // 领域状态下沉到 store：视图只做渲染与展示辅助，数据编排由 store 负责
@@ -429,6 +435,13 @@ const joinGroupOpen = ref(false)
 const creatingGroup = ref(false)
 const newGroupName = ref('')
 const newGroupQq = ref('')
+const newGroupImage = ref('')
+const imageGroups = ref([])
+// 图库归属下拉：'' = 不绑定，组内账号回退配置套默认图库
+const imageGroupOptions = computed(() => [
+  { label: '不绑定（走配置套默认图库）', value: '' },
+  ...imageGroups.value.map((g) => ({ label: g.name, value: g.id }))
+])
 const joinTarget = ref(null)
 const joinGroups = ref([])
 const joinLoading = ref(false)
@@ -455,13 +468,23 @@ async function openNewGroup() {
   if (selectedIds.value.length === 0) return
   newGroupName.value = ''
   newGroupQq.value = ''
+  newGroupImage.value = ''
   newGroupOpen.value = true
+  try {
+    imageGroups.value = await fetchImageGroups()
+  } catch (e) {
+    /* toast by interceptor */
+  }
 }
 async function submitNewGroup() {
   if (!newGroupName.value.trim()) return
   creatingGroup.value = true
   try {
-    const g = await createDormGroup({ name: newGroupName.value.trim(), qqCode: newGroupQq.value.trim() })
+    const g = await createDormGroup({
+      name: newGroupName.value.trim(),
+      qqCode: newGroupQq.value.trim(),
+      imageGroupId: newGroupImage.value || null
+    })
     const res = await addMembers(g.id, selectedIds.value)
     toast(`已创建分组并加入 ${res && res.added != null ? res.added : selectedIds.value.length} 人`, 'success')
     newGroupOpen.value = false

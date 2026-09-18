@@ -53,8 +53,8 @@ const dynamicRoutes = [
     path: '/group-push',
     name: 'group-push',
     component: () => import('@/views/GroupPushView.vue'),
-    // 群推送：班级（className 派生）/ 寝室（手动成员）两类分组合并推送 QQ 群
-    meta: { title: '群推送', requiresAuth: true, roles: ['user'], group: '运营管理', icon: 'send', order: 6 }
+    // 分组：班级（className 派生）/ 寝室（手动成员）两类分组，承载图库归属与 QQ 群合并推送
+    meta: { title: '分组', requiresAuth: true, roles: ['user'], group: '运营管理', icon: 'send', order: 6 }
   },
   {
     path: '/users',

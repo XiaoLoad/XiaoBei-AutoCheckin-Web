@@ -95,6 +95,8 @@ def sanitize_config(raw):
     for blk in ('image', 'push', 'advanced'):
         if not isinstance(raw.get(blk), dict):
             return False, None
+    # image 块内部不做归一化，原样落库：取图方式（mode=fixed|byGroup / groupKind=class|dorm）
+    # 与旧字段（enabled/strategy/groupId）共存，未知值由运行时解析层兜底为默认，避免改写存量配置
     # fence 为新增可选块（旧数据/旧客户端不带，执行端默认开）；出现时须为对象
     if 'fence' in raw and not isinstance(raw['fence'], dict):
         return False, None

@@ -26,6 +26,7 @@ instance/
 # 日志与临时文件
 *.log
 tmp/
+backend/logs/
 
 # 图库上传文件（用户数据，不入库）
 backend/uploads/

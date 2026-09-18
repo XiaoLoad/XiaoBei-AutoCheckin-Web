@@ -32,8 +32,10 @@
       </div>
     </div>
 
-    <!-- 列表卡片：搜索 + 类型切换头部 + 独立滚动列表 + 固定底部分页，合并为单一模块 -->
-    <div class="dash-card fade-up flex flex-1 min-h-0 flex-col overflow-hidden rounded-2xl">
+    <!-- 列表卡片：搜索 + 类型切换头部 + 独立滚动列表 + 固定底部分页，合并为单一模块。
+         桌面端 lg:h-full 让卡片占满整屏高度（比原先的 flex-1 多出一屏减去统计卡的高度），
+         统计卡随之计入页面可滚动距离、整页下滚；列表视图更高、可展示更多内容，底部留白不变 -->
+    <div class="dash-card fade-up flex lg:h-full lg:shrink-0 flex-col overflow-hidden rounded-2xl">
       <!-- 头部：账号模糊搜索 + 类型切换，与下方列表用分隔线隔开 -->
       <div class="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-ink/10 px-4 py-3">
         <!-- 账号模糊搜索框：按姓名 / 学号 / 班级 匹配 -->

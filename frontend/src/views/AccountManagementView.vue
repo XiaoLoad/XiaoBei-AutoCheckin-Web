@@ -116,7 +116,7 @@
               <template v-if="selectedIds.length"
                 >已选 <span class="font-medium tabular-nums">{{ selectedIds.length }}</span> 个</template
               >
-              <template v-else>点选账号，再批量分组</template>
+              <template v-else>点击账号卡片选择，再批量分组</template>
             </span>
             <div class="ml-auto flex flex-wrap items-center gap-2">
               <button
@@ -171,11 +171,21 @@
             v-for="item in pagedRows"
             :key="item.id"
             v-reveal
-            class="flex flex-col rounded-xl border border-ink/10 bg-card p-4 transition hover:border-brand/40"
+            class="flex flex-col rounded-xl border p-4 transition duration-150"
+            :class="cardCls(item)"
+            @click="selectMode && toggleSelect(item.id, !isSelected(item.id))"
+            @animationend="onPickAnimEnd(item.id)"
           >
             <!-- 头部：头像（圆环色=上次签到状态）+ 姓名/账号 + 启用状态 -->
             <div class="flex items-center gap-3">
-              <BaseCheckbox v-if="selectMode" :model-value="isSelected(item.id)" @update:model-value="toggleSelect(item.id, $event)" class="shrink-0" />
+              <!-- 复选框自己处理点击并阻止冒泡：卡片整体也可点选，不阻止会「勾上又立刻取消」 -->
+              <BaseCheckbox
+                v-if="selectMode"
+                class="shrink-0"
+                :model-value="isSelected(item.id)"
+                @click.stop
+                @update:model-value="toggleSelect(item.id, $event)"
+              />
               <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand/10 text-sm font-medium text-brand ring-2" :class="ringCls(item)">
                 {{ avatarChar(item) }}
               </div>
@@ -248,11 +258,16 @@
               </div>
             </dl>
 
-            <!-- 操作行：右对齐 -->
-            <div class="mt-2.5 flex items-center justify-end gap-1 border-t border-ink/5 pt-2">
-              <button class="rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand transition hover:bg-brand/10" @click="store.openEdit(item)">编辑</button>
-              <button class="rounded-lg px-2.5 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-cloud" @click="onToggle(item)">{{ item.enabled ? '禁用' : '启用' }}</button>
-              <button class="rounded-lg px-2.5 py-1.5 text-xs font-medium text-danger transition hover:bg-danger/10" @click="store.askDelete(item)">删除</button>
+            <!-- 操作行：右对齐。选择态下整体禁用——多选时点「删除」会弹确认框、点「编辑」会开弹窗，
+                 与「只保留选择」的意图打架。禁用而不隐藏，卡片高度不跳；按钮让出鼠标事件后，
+                 点在这儿也等于点卡片（同样是选中）。 -->
+            <div
+              class="mt-2.5 flex items-center justify-end gap-1 border-t border-ink/5 pt-2 transition-opacity"
+              :class="selectMode && 'opacity-40'"
+            >
+              <button class="rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand transition hover:bg-brand/10 disabled:pointer-events-none" :disabled="selectMode" @click="store.openEdit(item)">编辑</button>
+              <button class="rounded-lg px-2.5 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-cloud disabled:pointer-events-none" :disabled="selectMode" @click="onToggle(item)">{{ item.enabled ? '禁用' : '启用' }}</button>
+              <button class="rounded-lg px-2.5 py-1.5 text-xs font-medium text-danger transition hover:bg-danger/10 disabled:pointer-events-none" :disabled="selectMode" @click="store.askDelete(item)">删除</button>
             </div>
           </article>
         </div>
@@ -366,7 +381,7 @@
 <script setup>
 import { useAccountsStore } from '@/stores/accounts'
 import { storeToRefs } from 'pinia'
-import { ref, computed, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import BasePagination from '@/components/BasePagination.vue'
@@ -550,26 +565,61 @@ const joinGroups = ref([])
 const joinLoading = ref(false)
 const joining = ref(false)
 
+// 「刚被点中」的账号：弹动只属于用户这一下动作。若把弹性直接绑在选中态上，
+// 翻页重新挂载已选卡片时会重播一次，看着像闪了一下
+const justPicked = ref([])
+function onPickAnimEnd(id) {
+  justPicked.value = justPicked.value.filter((x) => x !== id)
+}
+
+// 卡片外观：浏览态只有悬停提示；选择态整体可点，选中后换品牌色边框 + 柔光。
+// 底色在这里二选一（bg-card / bg-brand/5），不与静态 class 并存——同组工具类谁赢
+// 取决于 Tailwind 的生成顺序而非 class 书写顺序，靠覆盖不可靠
+function cardCls(item) {
+  if (!selectMode.value) return 'border-ink/10 bg-card hover:border-brand/40'
+  if (isSelected(item.id)) {
+    return ['cursor-pointer border-brand bg-brand/5 ring-2 ring-brand/25', justPicked.value.includes(item.id) && 'xb-picked']
+  }
+  return 'cursor-pointer border-ink/10 bg-card hover:border-brand/50 hover:bg-cloud/40'
+}
+
 function isSelected(id) {
   return selectedIds.value.includes(id)
 }
 function toggleSelect(id, checked) {
   if (checked) {
     if (!selectedIds.value.includes(id)) selectedIds.value = [...selectedIds.value, id]
+    if (!justPicked.value.includes(id)) justPicked.value = [...justPicked.value, id]
   } else {
     selectedIds.value = selectedIds.value.filter((x) => x !== id)
+    justPicked.value = justPicked.value.filter((x) => x !== id)
   }
 }
 function enterSelectMode() {
   selectMode.value = true
   selectedIds.value = []
+  justPicked.value = []
 }
 function toggleSelectMode() {
   selectMode.value = !selectMode.value
-  if (!selectMode.value) selectedIds.value = []
+  if (!selectMode.value) {
+    selectedIds.value = []
+    justPicked.value = []
+  }
 }
+
+// 选择态下 Esc 退出；弹窗开着时让位——Esc 归弹窗，退到一半会更乱
+function onKeydown(e) {
+  if (e.key !== 'Escape' || !selectMode.value) return
+  if (newGroupOpen.value || joinGroupOpen.value) return
+  toggleSelectMode()
+}
+onMounted(() => document.addEventListener('keydown', onKeydown))
+onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
+
 function clearSelection() {
   selectedIds.value = []
+  justPicked.value = []
 }
 async function openNewGroup() {
   if (selectedIds.value.length === 0) return
@@ -597,6 +647,7 @@ async function submitNewGroup() {
     newGroupOpen.value = false
     selectedIds.value = []
     selectMode.value = false
+    justPicked.value = []
     // 归属变了，卡片上的「寝室分组」要跟着变；顺带把列表刷新一遍（静默降透明）
     store.load().catch(() => {})
   } catch (e) {
@@ -627,6 +678,7 @@ async function submitJoinGroup() {
     joinGroupOpen.value = false
     selectedIds.value = []
     selectMode.value = false
+    justPicked.value = []
     store.load().catch(() => {})
   } catch (e) {
     /* toast by interceptor */
@@ -662,8 +714,26 @@ refresh()
   opacity: 0;
   transform: translateY(2px);
 }
+/* 点中卡片时的落点反馈：边框与柔光的进出交给 transition，这里只补一次轻微回弹，
+   让「点上了」有实感；缩放幅度 1% 出头，在网格里不会碰到相邻卡片。
+   动画结束即摘掉该类（见 onPickAnimEnd）；reduced-motion 下不播动画，类留着也无副作用 */
+.xb-picked {
+  animation: xb-pick 0.24s ease-out;
+}
+@keyframes xb-pick {
+  0% {
+    transform: scale(0.985);
+  }
+  55% {
+    transform: scale(1.012);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
 @media (prefers-reduced-motion: reduce) {
-  .spin-refresh {
+  .spin-refresh,
+  .xb-picked {
     animation: none;
   }
   .xb-head-enter-active,

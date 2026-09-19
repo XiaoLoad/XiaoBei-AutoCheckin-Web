@@ -84,17 +84,22 @@
       </section>
     </div>
 
+    <!-- 两卡保持默认 stretch 等高：曾用 lg:items-start 让它们各按自身高度落位，结果是
+         底边参差最多 204px。留白改由「谁的内容能长」来吸收——图表容器 flex-1、账号空态居中。 -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <!-- 任务完成情况 -->
-      <section class="dash-card p-5 v-reveal delay-3">
+      <section class="dash-card p-5 v-reveal delay-3 flex flex-col">
         <h3 class="font-semibold text-ink mb-1">任务完成情况</h3>
         <p class="text-xs text-ink-muted mb-2">近 30 天 · 执行结果占比</p>
-        <BaseChart :option="taskOption" height="260px" />
+        <!-- 不给固定像素高、由 flex-1 撑满卡片剩余高度：被同排账号卡拉高时多出的空间落进画布，
+             而不是在卡底留一块空白。⚠️必须留 min-h 下限——饼图 radius 是 min(宽,高) 的百分比，
+             实测 368 宽下 260px 画布 = 198px 圆环、118px 画布只有 90px，低于下限圆环会缩水。 -->
+        <BaseChart class="flex-1 min-h-[260px]" :option="taskOption" />
         <p v-if="!loading && taskSummaryTotal === 0" class="mt-2 text-center text-xs text-ink-muted">近 30 天暂无执行记录</p>
       </section>
 
       <!-- 我的账号状态（仅显示已启用并配置好配置套的账号） -->
-      <section class="dash-card p-5 lg:col-span-2 v-reveal delay-4">
+      <section class="dash-card p-5 lg:col-span-2 v-reveal delay-4 flex flex-col">
         <div class="flex items-center justify-between mb-4">
           <div class="min-w-0">
             <h3 class="font-semibold text-ink">我的账号状态</h3>
@@ -105,12 +110,17 @@
         <div v-if="loading" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <div v-for="i in 3" :key="i" class="h-[112px] rounded-xl border border-ink/5 bg-ink/5 animate-pulse" />
         </div>
-        <div v-else-if="me.accounts.items.length === 0" class="py-8 text-center">
+        <!-- 空态占满剩余高度并垂直居中：没有账号时这段只有 ~112px，被同排图表卡拉到
+             卡片高度后内容会贴顶、下面空一大片 -->
+        <div v-else-if="me.accounts.items.length === 0" class="flex flex-1 flex-col items-center justify-center py-8 text-center">
           <p class="text-sm text-ink-muted">还没有已启用并配置好配置套的账号</p>
           <RouterLink to="/sign-config" class="mt-2 inline-block text-sm font-medium text-brand hover:underline">去签到配置启用</RouterLink>
         </div>
         <template v-else>
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <!-- 展开态条数无业务上限，故给列表卡加限高 + 卡内滚动：426px = 3 行整
+               （单卡 134px = 内容 100 + p-4 32 + 边框 2，行距 gap-3 12px）。
+               只在桌面生效，移动端沿用文档流自然滚动（同 5bf19f1） -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:max-h-[426px] lg:overflow-y-auto lg:pr-1">
             <div v-for="a in visibleAccounts" :key="a.id"
                  class="group flex flex-col rounded-xl border border-ink/5 bg-ink/[0.02] p-4 transition hover:-translate-y-0.5 hover:border-brand/20 hover:shadow-md hover:shadow-ink/5">
               <div class="flex items-start gap-3">
@@ -152,9 +162,12 @@
           <RouterLink to="/task-logs" class="shrink-0 text-sm font-medium text-brand hover:underline">查看全部</RouterLink>
         </div>
       </div>
-      <div class="overflow-x-auto">
+      <!-- 高度 = 表头 41 + 行高 45 × 8 条 = 401px；限高按管理员打卡日志口径取 491px。
+           后端 recent_logs 已限 8 条，此处是兜底：条数上调时也不会把卡片撑长。
+           表头吸顶，卡内滚动时不丢列名。 -->
+      <div class="overflow-auto lg:max-h-[491px]">
         <table class="w-full text-sm">
-          <thead>
+          <thead class="sticky top-0 z-10 bg-elevated">
             <tr class="text-left text-ink-muted border-b border-ink/5">
               <th class="font-medium py-2.5 pr-4 whitespace-nowrap">时间</th>
               <th class="font-medium py-2.5 pr-4 whitespace-nowrap">姓名</th>

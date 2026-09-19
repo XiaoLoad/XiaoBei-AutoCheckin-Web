@@ -12,6 +12,11 @@ from app.utils.response import success
 
 bp = Blueprint('me', __name__, url_prefix='/api/me')
 
+# 概览里「展示用」的账号列表上限。账号数受 users.quota 约束，正常远小于此值，
+# 上限只用于兜住异常数据（脚本批量建号、额度误配），避免单次响应与前端卡片渲染被撑爆。
+# 统计口径（额度占用、我的 B 账号数）不受它影响——那两处一律现算 count，见 overview。
+ACCOUNT_LIST_LIMIT = 200
+
 
 def _today_local():
     """本地日期（无时区），用于今日/近 N 天聚合的日期窗下界。"""
@@ -60,8 +65,15 @@ def me_overview():
 
     # 账号（本人 b_accounts）；仪表盘仅展示「已启用定时任务且配置了配置套」的账号，
     # 并派生类型标签（寝室/活动/通用）+ 平台档案（姓名/学院/专业/班级）。
-    accounts = BAccount.query.filter_by(user_id=uid).order_by(BAccount.id.desc()).all()
-    account_total = len(accounts)
+    # 统计口径与展示列表解耦：额度占用恒等于账号数、必须是精确值，故单独 count，
+    # 不能拿下面这个带 ACCOUNT_LIST_LIMIT 的列表取长度。
+    account_total = BAccount.query.filter_by(user_id=uid).count()
+    accounts = (
+        BAccount.query.filter_by(user_id=uid)
+        .order_by(BAccount.id.desc())
+        .limit(ACCOUNT_LIST_LIMIT)
+        .all()
+    )
 
     # 配额（users.quota 为上限；已用额度按产品定义恒等于平台账号数——
     # 存储 used_quota 计数器已被历史操作污染出漂移，展示与校验一律现算账号数）
@@ -201,7 +213,13 @@ def me_overview():
         .limit(8)
         .all()
     )
-    acc_map = {a.id: a for a in accounts}
+    # 日志行的账号名按日志实际涉及的账号回查，不复用上方那个受 ACCOUNT_LIST_LIMIT
+    # 约束的列表——否则账号数超上限时，排在上限之外的老账号会让整行丢掉姓名与班级。
+    log_acc_ids = {r.account_id for r in recent_logs if r.account_id is not None}
+    acc_map = (
+        {a.id: a for a in BAccount.query.filter(BAccount.id.in_(log_acc_ids)).all()}
+        if log_acc_ids else {}
+    )
     log_items = []
     for r in recent_logs:
         acc = acc_map.get(r.account_id)

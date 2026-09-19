@@ -1,6 +1,6 @@
-# 用户管理蓝图：列表（分页/过滤）、新增、编辑、禁用启用、删除（桩）
+# 用户管理蓝图：列表（分页/过滤）、新增、编辑、禁用启用、删除（级联真删）
 # 前缀 /api/users；全部操作均限管理员——列表含全员用户名/角色/额度，不向普通用户开放
-from flask import Blueprint, request
+from flask import Blueprint, current_app, request
 from sqlalchemy import func
 
 from app.extensions import db
@@ -8,7 +8,7 @@ from app.models.b_account import BAccount
 from app.models.user import User
 from app.utils.auth import admin_required
 from app.utils.response import error, success
-from app.services.user_service import load_user, user_summary
+from app.services.user_service import load_user, purge_user, user_delete_blockers, user_summary
 from app.schemas.user_schema import load_create, load_update
 from app.events import user_changed
 
@@ -143,10 +143,41 @@ def set_status(user_id):
 @bp.route('/<user_id>', methods=['DELETE'])
 @admin_required
 def delete_user(user_id):
+    """删除用户：物理删除，并级联清掉名下全部私有数据（见 services/user_service.purge_user）。
+
+    三类拒绝与「禁用自己」同源，都是防呆而非权限：删掉自己会当场失去会话；
+    删掉最后一个管理员则再没人能登录管理端；被他人引用时直接拒绝，
+    因为那些引用属于别人的配置，替他们决定删除是一种越权。
     """
-    删除用户：当前为前端 UI 演示用桩接口，暂不执行真实删除逻辑。
-    直接返回成功，待后端删除逻辑落地后再补充实际销毁。
-    """
-    # [桩] 暂不实现实际删除（前端仅做 UI 展示）。保留接口契约以便后续对接。
-    user_changed.send('users.delete', user_id=user_id)
+    user = load_user(user_id)
+    if not user:
+        return error(message='用户不存在', code=404, status=404)
+
+    current = request.current_user
+    if current.id == user.id:
+        return error(message='不能删除当前登录的账号', code=1006, status=403)
+    if user.role == 'admin' and User.query.filter_by(role='admin').count() <= 1:
+        return error(message='至少保留一个管理员账号', code=1007, status=403)
+
+    blockers = user_delete_blockers(user)
+    if blockers:
+        detail = '、'.join(f"{b['label']} {b['refs']} 处" for b in blockers)
+        return error(message=f'该用户的共享资源仍被其他账号使用（{detail}），请先解除引用',
+                     code=4009, data={'blockers': blockers}, status=409)
+
+    # 审计快照须在删除前抓：行删掉后属性不可读，被删用户名也要靠它落进日志
+    snapshot = {'targetUserId': user.id, 'targetUsername': user.username, 'role': user.role}
+    try:
+        result = purge_user(user)
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('删除用户失败：id=%s', user_id)
+        return error(message='删除失败，数据未变更', code=5001, status=500)
+
+    # 调度器 job 按 schedule_id 显式移除：purge 走 ORM 批量删除、不经过 schedules 路由
+    # （30s 对账线程是兜底，但等它扫到之前会一直触发指向已删任务的重试）
+    from app.services.scheduler import remove_job
+    for sid in result.get('scheduleIds') or []:
+        remove_job(sid)
+    user_changed.send('users.delete', user_id=user.id, snapshot=snapshot, cascade=result['counts'])
     return success(message='删除成功')

@@ -381,12 +381,16 @@ const {
 // 提示口径：成功/自定义文案用全局 toast 就地展示；接口失败由 request.js 统一 toast，
 // 本视图的 catch 只吞掉 rejection（避免未处理 Promise 告警），不再重复提示
 
-// 删除确认文案
-const deleteMessage = computed(() =>
-  store.deletingUser?.username
-    ? `确定要删除用户「${store.deletingUser.username}」吗？此操作不可恢复。`
-    : ''
-)
+// 删除确认文案：物理删除会连带清掉该用户名下的账号、任务与记录，代价必须写出来
+const deleteMessage = computed(() => {
+  const u = store.deletingUser
+  if (!u?.username) return ''
+  const accs = u.used_quota || 0
+  const cascade = accs
+    ? `将同时删除其 ${accs} 个 B 平台账号，以及这些账号下的定时任务、签到记录与推送日志。`
+    : '该用户名下没有 B 平台账号，仅删除账号本身。'
+  return `确定要删除用户「${u.username}」吗？${cascade}此操作不可恢复。`
+})
 
 // 角色筛选：三项互斥，用分段控件承载；写回 store 的 roleFilter 后统一走 onFilterChange 重置页码
 const roleOptions = [

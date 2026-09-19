@@ -122,6 +122,9 @@ def record(action, category, result=RESULT_SUCCESS, summary='', detail=None, use
 # ===== 用户与权限变更（订阅 user_changed）=====
 # users.py 的发布点：users.create / users.update / users.status / users.delete
 _CHANGE_FIELDS = ('username', 'role', 'enabled', 'quota')
+# 删除用户时连带清理的行数 → 摘要里的量词与名称（顺序即重要程度）
+_DELETE_CASCADE_LABELS = (('accounts', '个', '账号'), ('schedules', '个', '定时任务'),
+                          ('signRecords', '条', '签到记录'), ('pushLogs', '条', '推送日志'))
 
 
 def _changes(payload, before, user):
@@ -156,20 +159,20 @@ def _on_user_changed(sender, **kw):
         return
 
     if kind == 'users.delete':
-        target_id = kw.get('user_id')
-        target = None
-        try:
-            from app.models.user import User
-            target = db.session.get(User, int(target_id))
-        except Exception:
-            target = None
-        name = target.username if target is not None else ''
-        # users.delete 目前是桩接口（返回成功但不销毁数据）。日志照实记，不粉饰：
-        # 否则管理员看到一条「删除用户」会以为人真的没了。桩实现落地后去掉这句后缀。
-        record(ACTION_USER_DELETE, CATEGORY_USER,
-               summary=(f'删除用户「{name}」（桩接口未实际销毁）' if name
-                        else f'删除用户（ID {target_id}，桩接口未实际销毁）'),
-               detail={'targetUserId': target_id, 'targetUsername': name, 'stub': True},
+        # 删除事件只带普通值快照（users 行已删，commit 后属性不可再读）
+        snap = kw.get('snapshot') or {}
+        cascade = kw.get('cascade') or {}
+        target_id = snap.get('targetUserId', kw.get('user_id'))
+        name = snap.get('targetUsername') or ''
+        summary = f'删除用户「{name}」' if name else f'删除用户（ID {target_id}）'
+        # 物理删除会连带清掉账号/任务/记录，只写「删了用户」事后无法解释数据消失
+        tail = '、'.join(f"{cascade[k]} {unit}{label}"
+                         for k, unit, label in _DELETE_CASCADE_LABELS if cascade.get(k))
+        if tail:
+            summary += f'（连带删除 {tail}）'
+        record(ACTION_USER_DELETE, CATEGORY_USER, summary=summary,
+               detail={'targetUserId': target_id, 'targetUsername': name,
+                       'targetRole': snap.get('role', ''), 'cascade': cascade},
                user=actor)
         return
 

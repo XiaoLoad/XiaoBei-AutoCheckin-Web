@@ -23,9 +23,6 @@ export const useUsersStore = defineStore('users', () => {
 
   const summary = ref({ total_users: 0, enabled: 0, disabled: 0, total_quota: 0, used_quota: 0 })
 
-  // 乐观删除：后端删除为桩，标记隐藏的 id 并在拉取后过滤，刷新页面前保持不可见
-  const hiddenIds = ref(new Set())
-
   // 弹窗状态
   const showForm = ref(false)
   const formMode = ref('add')
@@ -35,8 +32,9 @@ export const useUsersStore = defineStore('users', () => {
   const deletingUser = ref(null)
   const deleting = ref(false)
 
-  const rows = computed(() => list.value.filter((i) => !hiddenIds.value.has(i.user_id)))
-  const displayTotal = computed(() => Math.max(0, total.value - hiddenIds.value.size))
+  // 列表与总数直接来自服务端：删除是真的删，删完重新取，不再本地假装隐藏
+  const rows = computed(() => list.value)
+  const displayTotal = computed(() => total.value)
   const quotaRate = computed(() =>
     summary.value.total_quota > 0
       ? Math.min(100, Math.round((summary.value.used_quota / summary.value.total_quota) * 100))
@@ -152,21 +150,18 @@ export const useUsersStore = defineStore('users', () => {
     showDelete.value = false
   }
 
-  // 删除（后端为桩，前端乐观移除并标记隐藏；同步汇总计数，由调用方负责 toast）
+  // 删除：后端物理删除并级联清理名下账号/任务/记录，成功后重新取列表与汇总
+  // （曾经是桩接口，前端靠本地隐藏 id 装作删掉了，刷新就穿帮；接口转真后一并去掉）
+  // 失败（如共享资源仍被他人引用 → 409）由 request.js 全局 toast，这里不吞错、只向上抛
   async function confirmDelete() {
     if (!deletingUser.value) return
     deleting.value = true
     const user = deletingUser.value
     try {
       await deleteUser(user.user_id)
-      hiddenIds.value = new Set(hiddenIds.value).add(user.user_id)
-      total.value = Math.max(0, total.value - 1)
-      summary.value.total_users = Math.max(0, summary.value.total_users - 1)
-      summary.value.used_quota = Math.max(0, summary.value.used_quota - (user.used_quota || 0))
-      summary.value.total_quota = Math.max(0, summary.value.total_quota - (user.quota || 0))
-      if (user.enabled) summary.value.enabled = Math.max(0, summary.value.enabled - 1)
-      else summary.value.disabled = Math.max(0, summary.value.disabled - 1)
       showDelete.value = false
+      // 删除可能使当前页越界，fetchUsers 内部会收敛页码
+      await fetchUsers()
     } finally {
       deleting.value = false
     }
@@ -182,7 +177,6 @@ export const useUsersStore = defineStore('users', () => {
     loading,
     refreshing,
     summary,
-    hiddenIds,
     showForm,
     formMode,
     editingUser,

@@ -3,11 +3,13 @@
 // 后端只回码值（category/action/field/closeReason），中文一律在前端查表——
 // 与 accountType.js、pushChannels.js 同一条约定。
 //
-// 配色来自设计稿：认证=品牌蓝、变更=琥珀、配置=灰（配置类事件后端尚未埋点，配色先留好，
-// 一旦补上埋点即可直接显示，不必回头改这里）。
+// 配色来自设计稿：认证=品牌蓝、变更=琥珀、账号=info、调度=墨色、配置=灰。
+// 语义色 success/danger 是结果维度，不作分类色，避免与结果徽标撞车。
 export const OP_CATEGORY_META = {
   auth: { label: '认证', icon: 'shield', dot: 'bg-brand', cls: 'bg-brand/10 text-brand' },
   user: { label: '变更', icon: 'users', dot: 'bg-warning', cls: 'bg-warning/10 text-warning' },
+  account: { label: '账号', icon: 'authorize', dot: 'bg-info', cls: 'bg-info/10 text-info' },
+  schedule: { label: '调度', icon: 'clock', dot: 'bg-ink', cls: 'bg-ink/10 text-ink' },
   pool: { label: '配置', icon: 'sliders', dot: 'bg-scrim/40', cls: 'bg-ink/5 text-ink-muted' },
 }
 
@@ -39,6 +41,15 @@ export const OP_ACTION_META = {
   'user.enable': { label: '启用用户', category: 'user' },
   'user.disable': { label: '禁用用户', category: 'user' },
   'user.delete': { label: '删除用户', category: 'user' },
+  'account.create': { label: '添加账号', category: 'account' },
+  'account.update': { label: '编辑账号', category: 'account' },
+  'account.delete': { label: '删除账号', category: 'account' },
+  'account.secret_view': { label: '查看账号密码', category: 'account' },
+  'schedule.create': { label: '新建定时任务', category: 'schedule' },
+  'schedule.update': { label: '编辑定时任务', category: 'schedule' },
+  'schedule.delete': { label: '删除定时任务', category: 'schedule' },
+  'schedule.enable': { label: '批量开启任务', category: 'schedule' },
+  'schedule.disable': { label: '批量关闭任务', category: 'schedule' },
 }
 
 // 筛选下拉里动作的排列顺序＝上表的声明顺序（认证组在前、用户变更组在后）。
@@ -53,12 +64,21 @@ export function opActionSortKey(code) {
   return i === -1 ? OP_ACTION_ORDER.length : i
 }
 
-// 变更明细的字段名（detail.changes[].field）
+// 变更明细的字段名（detail.changes[].field）。user 域与 account/schedule 域共用一张表，
+// 同名字段跨域含义一致（enabled 都是启用/禁用），故不按域分表。
 export const OP_FIELD_LABELS = {
   username: '用户名',
   role: '角色',
   enabled: '状态',
   quota: '额度',
+  account: 'B 平台账号',
+  type: '账号类型',
+  pushCreds: '推送凭证',
+  mode: '调度模式',
+  config_set_id: '配置套',
+  config: '任务配置',
+  custom: '自定义规则',
+  overrides: '覆盖项',
 }
 
 export function opCategoryMeta(code) {
@@ -94,19 +114,30 @@ export function opFieldValue(field, v) {
   if (v === null || v === undefined || v === '') return '—'
   if (field === 'enabled') return v ? '启用' : '禁用'
   if (field === 'role') return v === 'admin' ? '管理员' : v === 'user' ? '普通用户' : String(v)
+  if (field === 'type') return { general: '通用', dorm: '寝室', activity: '活动' }[v] || String(v)
+  if (field === 'mode') return { follow: '跟随配置套', standalone: '独立配置', custom: '自定义' }[v] || String(v)
   return String(v)
+}
+
+// 单条变更的文案。`{field: 'config'}` 这类只有 field 的占位项（配置内容/凭证密钥不落日志）
+// 渲染成「×× 已更新」，而不是「×× — → —」。
+function changeText(c) {
+  const label = opFieldLabel(c.field)
+  if (c.from === undefined && c.to === undefined) return `${label} 已更新`
+  return `${label} ${opFieldValue(c.field, c.from)} → ${opFieldValue(c.field, c.to)}`
 }
 
 // 时间轴上的事件文案：单字段变更渲染成「额度 100 → 150（用户 liuyang）」，
 // 比笼统的「修改用户「liuyang」」信息量大得多——前者一眼看出改了什么，后者还要点开详情。
+// 目标回退链：user 域是 targetUsername，账号域是 detail.account（B 平台登录账号）。
 export function opEventText(row) {
   const d = row && row.detail
   const changes = d && Array.isArray(d.changes) ? d.changes : []
-  const target = (d && d.targetUsername) || ''
+  const target = d && d.targetUsername ? `用户 ${d.targetUsername}`
+    : d && d.account ? `账号 ${d.account}` : ''
   if (changes.length === 1) {
-    const c = changes[0]
-    const base = `${opFieldLabel(c.field)} ${opFieldValue(c.field, c.from)} → ${opFieldValue(c.field, c.to)}`
-    return target ? `${base}（用户 ${target}）` : base
+    const base = changeText(changes[0])
+    return target ? `${base}（${target}）` : base
   }
   if (changes.length > 1) {
     return `${row.summary || '—'}（${changes.map((c) => opFieldLabel(c.field)).join('、')}）`
@@ -172,13 +203,11 @@ export function opLocalDate(d) {
 // 列顺序即阅读顺序：谁 → 何时 → 做了什么 → 成没成 → 从哪来。
 const CSV_HEADERS = ['时间', '操作者', '角色', '分类', '动作', '结果', '来源 IP', '事由', '变更明细']
 
-// 变更明细压成一列文本：「额度 100 → 150；状态 启用 → 禁用」
+// 变更明细压成一列文本：「额度 100 → 150；状态 启用 → 禁用」；占位项给「×× 已更新」
 function changesText(row) {
   const list = row && row.detail && row.detail.changes
   if (!Array.isArray(list) || !list.length) return ''
-  return list
-    .map((c) => `${opFieldLabel(c.field)} ${opFieldValue(c.field, c.from)} → ${opFieldValue(c.field, c.to)}`)
-    .join('；')
+  return list.map(changeText).join('；')
 }
 
 // 含逗号/引号/换行的单元格必须整体加引号，内部引号翻倍；

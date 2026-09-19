@@ -38,6 +38,14 @@
             <span class="hidden items-center gap-1 text-[11.5px] text-ink-muted sm:inline-flex">
               所属用户 <b class="font-medium text-ink-soft">{{ selectedAccount.owner }}</b>
             </span>
+            <!-- 查看密码：受限回显的唯一入口。明文只在弹窗内存在，关闭即清，不进任何状态 -->
+            <button
+              type="button"
+              class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-ink/10 px-2.5 py-1.5 text-xs font-medium text-ink-soft transition hover:border-brand/30 hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+              @click="openSecret"
+            >
+              <Icon name="lock" :size="13" />查看密码
+            </button>
           </template>
           <h3 v-else class="text-[15px] font-semibold text-ink">签到记录</h3>
 
@@ -243,6 +251,64 @@
     <!-- 底部间距占位：真实在流子元素，盒高计入 scrollHeight；
          -mt-4 sm:-mt-6 抵消根容器 gap，确保底部间距与其他页面一致（24px） -->
     <div class="h-6 shrink-0 -mt-4 sm:-mt-6" aria-hidden="true"></div>
+
+    <!-- 查看密码：登录密码二次验证 → 解密回显一次。
+         明文只存在于 revealed 这一个临时 ref 里，关弹窗即置空，不写 store / localStorage -->
+    <BaseModal v-model="secretOpen" title="查看 B 平台密码" size="md">
+      <div class="space-y-4">
+        <p class="text-xs leading-relaxed text-ink-muted">
+          即将查看 <b class="font-medium text-ink-soft">{{ secretAccount && secretAccount.account }}</b>
+          的 B 平台登录密码。请输入<b class="font-medium text-ink-soft">当前登录密码</b>确认身份；
+          本次查看会记入用户日志。
+        </p>
+
+        <template v-if="!revealed">
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-ink-soft" for="secret-login-pwd">登录密码</label>
+            <input
+              id="secret-login-pwd"
+              v-model="loginPassword"
+              type="password"
+              autocomplete="current-password"
+              placeholder="当前账号的登录密码"
+              class="login-input w-full py-2 text-sm"
+              :disabled="secretBusy"
+              @keyup.enter="submitSecret"
+            />
+          </div>
+          <p v-if="secretError" class="text-xs font-medium text-danger">{{ secretError }}</p>
+        </template>
+
+        <template v-else>
+          <div>
+            <div class="mb-1.5 flex items-center justify-between">
+              <span class="text-xs font-medium text-ink-muted">B 平台密码（关闭弹窗即清除）</span>
+              <button
+                type="button"
+                class="text-xs font-medium text-brand transition hover:text-brand-dark"
+                @click="copySecret"
+              >{{ copied ? '已复制' : '复制' }}</button>
+            </div>
+            <p class="select-all break-all rounded-xl bg-cloud/60 px-3 py-2.5 font-mono text-sm text-ink">{{ revealed }}</p>
+          </div>
+        </template>
+      </div>
+
+      <template #footer>
+        <button
+          type="button"
+          class="flex-1 rounded-xl border border-ink/10 py-2.5 text-sm font-medium text-ink-soft transition hover:bg-cloud"
+          @click="secretOpen = false"
+        >{{ revealed ? '关闭' : '取消' }}</button>
+        <button
+          v-if="!revealed"
+          type="button"
+          class="flex-1 rounded-xl bg-brand py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand/25 transition hover:bg-brand-dark disabled:opacity-60"
+          :disabled="secretBusy || !loginPassword.trim()"
+          @click="submitSecret"
+        >{{ secretBusy ? '验证中…' : '确认查看' }}</button>
+      </template>
+    </BaseModal>
   </div>
 </template>
 
@@ -254,8 +320,11 @@ import { gsap } from 'gsap'
 import PhotoSwipeLightbox from 'photoswipe/lightbox'
 import PhotoSwipe from 'photoswipe'
 import { useSiteRecordsStore } from '@/stores/siteRecords'
+import { revealAccountSecret } from '@/api/siteRecords'
 import { accountTypeMeta, taskTypeMeta } from '@/utils/accountType'
+import { toast } from '@/utils/toast'
 import Icon from '@/components/Icon.vue'
+import BaseModal from '@/components/BaseModal.vue'
 import BasePagination from '@/components/BasePagination.vue'
 import BaseDatePicker from '@/components/BaseDatePicker.vue'
 import AccountTree from '@/components/siterecords/AccountTree.vue'
@@ -316,6 +385,56 @@ function detailOf(row) {
   return store.getDetail(row.id)
 }
 
+// ---- 查看密码（受限回显）----
+// 明文只活在 revealed 这个 ref 里：关弹窗即置空；错误信息同样只在会话内存在。
+const secretOpen = ref(false)
+const secretAccount = ref(null)
+const loginPassword = ref('')
+const secretBusy = ref(false)
+const secretError = ref('')
+const revealed = ref('')
+const copied = ref(false)
+
+function openSecret() {
+  const acc = selectedAccount.value
+  if (!acc) return
+  secretAccount.value = acc
+  loginPassword.value = ''
+  secretError.value = ''
+  revealed.value = ''
+  copied.value = false
+  secretOpen.value = true
+}
+
+async function submitSecret() {
+  if (secretBusy.value || !loginPassword.value.trim() || !secretAccount.value) return
+  secretBusy.value = true
+  secretError.value = ''
+  try {
+    const data = await revealAccountSecret(secretAccount.value.id, loginPassword.value)
+    revealed.value = data.password || ''
+    loginPassword.value = ''
+  } catch (e) {
+    // 拦截器已 toast；这里补一条弹窗内的就地错误，避免用户错过原因
+    secretError.value = e && e.message ? e.message : '验证失败，请重试'
+  } finally {
+    secretBusy.value = false
+  }
+}
+
+async function copySecret() {
+  if (!revealed.value) return
+  try {
+    await navigator.clipboard.writeText(revealed.value)
+  } catch {
+    // 剪贴板不可用（非安全上下文等）：退化为选中文本让用户手动复制
+    return
+  }
+  copied.value = true
+  toast('已复制到剪贴板', 'success')
+  setTimeout(() => { copied.value = false }, 1500)
+}
+
 // ---- 行错落入场（对齐用户端记录页；尊重系统「减少动态效果」偏好） ----
 const reduceMotion = ref(false)
 let mm = null
@@ -355,6 +474,15 @@ watch(loadingRecords, async (v) => {
   if (v) return
   await nextTick()
   staggerRows()
+})
+// 弹窗任何方式关闭（含 Esc / 点遮罩）都立即清掉明文与输入，与「关闭即清」的承诺一致
+watch(secretOpen, (v) => {
+  if (!v) {
+    revealed.value = ''
+    loginPassword.value = ''
+    secretError.value = ''
+    secretBusy.value = false
+  }
 })
 
 onMounted(() => {

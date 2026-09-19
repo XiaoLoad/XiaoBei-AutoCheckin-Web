@@ -11,8 +11,8 @@ import logging
 
 from flask import has_request_context, request
 
-from app.events import (auth_logged_out, auth_login, auth_password_changed,
-                        user_changed)
+from app.events import (account_changed, auth_logged_out, auth_login,
+                        auth_password_changed, schedule_changed, user_changed)
 from app.extensions import db
 from app.models.op_log import OpLog
 
@@ -20,6 +20,8 @@ log = logging.getLogger('op_log')
 
 CATEGORY_AUTH = 'auth'
 CATEGORY_USER = 'user'
+CATEGORY_ACCOUNT = 'account'
+CATEGORY_SCHEDULE = 'schedule'
 
 RESULT_SUCCESS = 'success'
 RESULT_FAIL = 'fail'
@@ -38,6 +40,18 @@ ACTION_USER_UPDATE = 'user.update'
 ACTION_USER_ENABLE = 'user.enable'
 ACTION_USER_DISABLE = 'user.disable'
 ACTION_USER_DELETE = 'user.delete'
+ACTION_ACCOUNT_CREATE = 'account.create'
+ACTION_ACCOUNT_UPDATE = 'account.update'
+ACTION_ACCOUNT_DELETE = 'account.delete'
+ACTION_ACCOUNT_SECRET_VIEW = 'account.secret_view'
+ACTION_SCHEDULE_CREATE = 'schedule.create'
+ACTION_SCHEDULE_UPDATE = 'schedule.update'
+ACTION_SCHEDULE_DELETE = 'schedule.delete'
+ACTION_SCHEDULE_ENABLE = 'schedule.enable'
+ACTION_SCHEDULE_DISABLE = 'schedule.disable'
+
+# B 平台密码查看动作的统一文案（成功/失败共用主语，区别在 result 与后缀）
+SECRET_VIEW_SUMMARY = '查看账号「{account}」的 B 平台密码'
 
 
 def client_ip():
@@ -207,6 +221,180 @@ def _on_password_changed(sender, **kw):
     record(ACTION_AUTH_PASSWORD, CATEGORY_AUTH, summary='修改登录密码', user=user)
 
 
+# ===== 账号域（订阅 account_changed，发布点在 routes/accounts.py 与 admin.py）=====
+# 受管字段：diff 只盯这几项；password 永不进 changes（单独 passwordChanged 布尔），
+# pushCreds 含密钥同样不落值，只在有变时记「已更新」。
+_ACCOUNT_FIELDS = ('account', 'type', 'enabled')
+
+
+def _account_changes(payload, before, acc):
+    known = isinstance(before, dict)
+    out = []
+    for key in _ACCOUNT_FIELDS:
+        if key not in payload:
+            continue
+        new = getattr(acc, key, None)
+        if key == 'enabled':
+            new = bool(new)
+        old = before.get(key) if known else None
+        if known and key in before and old == new:
+            continue
+        out.append({'field': key, 'from': old, 'to': new})
+    # 推送凭证含密钥：值不落日志，仅在确有变更时记一个占位项（前端渲染成「已更新」）
+    if 'pushCreds' in payload and known and before.get('push_creds_json') != acc.push_cred_json:
+        out.append({'field': 'pushCreds'})
+    return out
+
+
+def _acc_name(acc):
+    """账号展示名：优先 B 平台回填的姓名，回落登录账号"""
+    return (acc.profile.get('name') if acc.profile else '') or acc.account
+
+
+def _on_account_changed(sender, **kw):
+    kind = str(sender)
+    acc = kw.get('account')
+    actor = _actor()
+    payload = _payload()
+
+    if kind == 'accounts.delete':
+        snap = kw.get('snapshot') or {}
+        name = snap.get('account') or ''
+        cascade = snap.get('cascade') or {}
+        summary = f'删除账号「{name}」' if name else f'删除账号（ID {snap.get("account_id")}）'
+        if cascade:
+            summary += '（连带 %s 个定时任务、%s 条签到记录）' % (
+                cascade.get('schedules', 0), cascade.get('signRecords', 0))
+        record(ACTION_ACCOUNT_DELETE, CATEGORY_ACCOUNT, summary=summary,
+               detail={'accountId': snap.get('account_id'), 'account': name, 'cascade': cascade},
+               user=actor)
+        return
+
+    if acc is None:
+        return
+
+    if kind == 'accounts.create':
+        record(ACTION_ACCOUNT_CREATE, CATEGORY_ACCOUNT,
+               summary=f'添加账号「{_acc_name(acc)}」（{acc.account}）',
+               detail={'accountId': acc.id, 'account': acc.account, 'type': acc.type,
+                       'enabled': bool(acc.enabled), 'passwordChanged': True},
+               user=actor)
+        return
+
+    if kind == 'accounts.update':
+        changes = _account_changes(payload, kw.get('before'), acc)
+        pwd_changed = bool(kw.get('password_changed'))
+        if not changes and not pwd_changed:
+            # 无实效变更不记行：与 user.update 同口径，避免空保存刷屏
+            return
+        record(ACTION_ACCOUNT_UPDATE, CATEGORY_ACCOUNT,
+               summary=f'修改账号「{_acc_name(acc)}」（{acc.account}）',
+               detail={'accountId': acc.id, 'account': acc.account,
+                       'changes': changes, 'passwordChanged': pwd_changed},
+               user=actor)
+        return
+
+    if kind == 'accounts.secret_view':
+        ok = kw.get('result') != RESULT_FAIL
+        record(ACTION_ACCOUNT_SECRET_VIEW, CATEGORY_ACCOUNT,
+               result=RESULT_SUCCESS if ok else RESULT_FAIL,
+               summary=(f'查看账号「{_acc_name(acc)}」（{acc.account}）的 B 平台密码' if ok
+                        else f'查看账号「{_acc_name(acc)}」（{acc.account}）密码被拒：{kw.get("reason") or "登录密码验证失败"}'),
+               detail={'accountId': acc.id, 'account': acc.account},
+               user=actor)
+        return
+
+
+# ===== 定时任务域（订阅 schedule_changed，发布点在 routes/schedules.py）=====
+_TASK_LABEL = {'dorm': '寝室签到', 'activity': '活动签到'}
+
+
+def _task_label(task_type):
+    return _TASK_LABEL.get(task_type, task_type or '')
+
+
+def _on_schedule_changed(sender, **kw):
+    kind = str(sender)
+    actor = _actor()
+
+    if kind == 'schedules.batch':
+        action = kw.get('action')
+        affected = kw.get('affected_list') or []
+        if not affected:
+            # 全部跳过的批量操作没有实效，记行只会刷屏
+            return
+        if action == 'enable':
+            summary = '批量开启 %d 个定时任务' % len(affected)
+            if kw.get('config_set_name'):
+                summary += '（套用配置套「%s」）' % kw['config_set_name']
+        else:
+            summary = '批量关闭 %d 个定时任务' % len(affected)
+        record(ACTION_SCHEDULE_ENABLE if action == 'enable' else ACTION_SCHEDULE_DISABLE,
+               CATEGORY_SCHEDULE, summary=summary,
+               detail={'affected': len(affected), 'skipped': kw.get('skipped', 0),
+                       'targets': affected,
+                       'configSetId': kw.get('config_set_id')},
+               user=actor)
+        return
+
+    # 删除事件只带普通值快照（ORM 行已删，commit 后属性不可再读），须先于 s 判空处理
+    if kind == 'schedules.delete':
+        record(ACTION_SCHEDULE_DELETE, CATEGORY_SCHEDULE,
+               summary=f'删除定时任务（账号「{kw.get("account_name", "")}」· {_task_label(kw.get("task_type"))}）',
+               detail={'scheduleId': kw.get('schedule_id'), 'accountId': kw.get('account_id'),
+                       'taskType': kw.get('task_type')},
+               user=actor)
+        return
+
+    s = kw.get('schedule')
+    if s is None:
+        return
+    label = _task_label(s.task_type)
+
+    if kind == 'schedules.create':
+        record(ACTION_SCHEDULE_CREATE, CATEGORY_SCHEDULE,
+               summary=f'新建定时任务（账号「{kw.get("account_name", "")}」· {label}）',
+               detail={'scheduleId': s.id, 'accountId': s.account_id,
+                       'taskType': s.task_type},
+               user=actor)
+        return
+
+    if kind == 'schedules.update':
+        changes = _schedule_changes(kw.get('payload') or {}, kw.get('before'), s)
+        if not changes:
+            return
+        record(ACTION_SCHEDULE_UPDATE, CATEGORY_SCHEDULE,
+               summary=f'修改定时任务（账号「{kw.get("account_name", "")}」· {label}）',
+               detail={'scheduleId': s.id, 'accountId': s.account_id,
+                       'taskType': s.task_type, 'changes': changes},
+               user=actor)
+        return
+
+
+# 定时任务受管字段：mode/enabled/config_set_id 做 from→to；config/custom/overrides
+# 内容较重且多为配置快照，只记「已更新」占位，不落内容。
+_SCHEDULE_FIELDS = ('mode', 'enabled', 'config_set_id')
+
+
+def _schedule_changes(payload, before, s):
+    known = isinstance(before, dict)
+    out = []
+    for key in _SCHEDULE_FIELDS:
+        if key not in payload:
+            continue
+        new = getattr(s, key, None)
+        if key == 'enabled':
+            new = bool(new)
+        old = before.get(key) if known else None
+        if known and key in before and old == new:
+            continue
+        out.append({'field': key, 'from': old, 'to': new})
+    for key in ('config', 'custom', 'overrides'):
+        if key in payload:
+            out.append({'field': key})
+    return out
+
+
 _connected = False
 
 
@@ -217,6 +405,8 @@ def connect_handlers():
     if _connected:
         return
     user_changed.connect(_on_user_changed)
+    account_changed.connect(_on_account_changed)
+    schedule_changed.connect(_on_schedule_changed)
     auth_login.connect(_on_auth_login)
     auth_logged_out.connect(_on_logout)
     auth_password_changed.connect(_on_password_changed)

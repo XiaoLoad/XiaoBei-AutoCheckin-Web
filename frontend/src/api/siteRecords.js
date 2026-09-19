@@ -49,3 +49,14 @@ export async function fetchAccountTaskDetail(accountId, taskId, kind = 'know') {
   })
   return { geoFence: data.geoFence || [], logs: data.logs || [] }
 }
+
+// 管理员受限回显指定账号的 B 平台密码：登录密码二次验证 + 服务端限流，
+// 每次查看（含密码错误）后端都会落一条 account.secret_view 审计。
+// 明文只在本次响应里存在，前端不得写入任何持久化状态。
+export function revealAccountSecret(accountId, loginPassword) {
+  return request({
+    url: `/admin/accounts/${accountId}/secret`,
+    method: 'post',
+    data: { login_password: loginPassword },
+  })
+}

@@ -6,6 +6,7 @@ import time
 from flask import Blueprint, request
 from sqlalchemy.orm import joinedload
 
+from app.events import account_changed
 from app.extensions import db
 from app.models import BAccount, Schedule, SignRecord, PushLog
 from app.models.user import now_cst
@@ -117,6 +118,8 @@ def create_account():
     db.session.add(acc)
     # 额度占用不再维护计数器：展示与校验一律按账号数现算（见 create 的额度校验）
     db.session.commit()
+    # 事件钩子：审计在自身事务提交之后发布（record 内独立 commit，不影响业务数据）
+    account_changed.send('accounts.create', account=acc)
     return success(acc.to_dict(), message='添加成功', status=201)
 
 
@@ -132,6 +135,10 @@ def update_account(account_id):
     ok, data, msg, code = load_update(payload)
     if not ok:
         return error(message=msg, code=code, status=400)
+
+    # 审计 before 快照：受管字段旧值；push_creds 只比对序列化串是否变化，值本身不进日志
+    before = {'account': acc.account, 'type': acc.type,
+              'enabled': bool(acc.enabled), 'push_creds_json': acc.push_cred_json}
 
     need_verify = 'password' in data or ('account' in data and data['account'] != acc.account)
     if 'account' in data and data['account'] != acc.account:
@@ -163,6 +170,9 @@ def update_account(account_id):
         acc.set_push_creds(data['pushCreds'])
 
     db.session.commit()
+    # 事件钩子：before 供审计还原 from→to；密码不落日志，只记是否变更
+    account_changed.send('accounts.update', account=acc, before=before,
+                         password_changed='password' in data)
     return success(acc.to_dict(), message='保存成功')
 
 
@@ -175,13 +185,16 @@ def delete_account(account_id):
         return error(message='账号不存在', code=4040, status=404)
 
     sched_ids = [s.id for s in Schedule.query.filter_by(account_id=acc.id).all()]
+    # 审计快照必须在删除前抓：ORM 行删除后属性不可读；级联计数取各 delete() 的返回行数
+    delete_snapshot = {'account_id': acc.id, 'account': acc.account,
+                       'cascade': {'schedules': len(sched_ids), 'signRecords': 0, 'pushLogs': 0}}
     # 顺序敏感：sign_records.schedule_id 外键无级联规则，必须先删签到记录再删任务，
     # 否则任务被记录引用，DELETE schedules 触发 MySQL 1451（0.35.0 修过删单任务的同类问题，
     # 此处为删账号级联路径的同源缺陷）。确认弹窗已告知"配置与日志一并移除"，故物理删除。
     # push_logs.sign_record_id 同样无级联规则，随签到记录先行清理，避免孤儿行。
-    PushLog.query.filter_by(account_id=acc.id).delete()
-    SignRecord.query.filter_by(account_id=acc.id).delete()
-    Schedule.query.filter_by(account_id=acc.id).delete()
+    delete_snapshot['cascade']['pushLogs'] = PushLog.query.filter_by(account_id=acc.id).delete()
+    delete_snapshot['cascade']['signRecords'] = SignRecord.query.filter_by(account_id=acc.id).delete()
+    delete_snapshot['cascade']['schedules'] = Schedule.query.filter_by(account_id=acc.id).delete()
     # 删除即释放额度：已用额度按账号数现算，无需维护计数器
     db.session.delete(acc)
     db.session.commit()
@@ -189,6 +202,7 @@ def delete_account(account_id):
     # 不经过 schedules 路由，故在此显式移除；30s 对账线程作兜底）
     for sid in sched_ids:
         remove_job(sid)
+    account_changed.send('accounts.delete', snapshot=delete_snapshot)
     return success(message='删除成功')
 
 

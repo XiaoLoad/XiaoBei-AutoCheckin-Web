@@ -5,6 +5,7 @@ import json
 from flask import Blueprint, request
 from sqlalchemy.orm import joinedload
 
+from app.events import schedule_changed
 from app.extensions import db
 from app.models import BAccount, ConfigSet, JwAccount, PoolLocation, PushLog, Schedule, SignRecord
 from app.schemas.schedule_schema import load_create, load_update
@@ -14,6 +15,11 @@ from app.utils.schedule_utils import compute_next_run, resolve_activity_cfg
 from app.services.scheduler import sync_schedule, remove_job
 
 bp = Blueprint('schedules', __name__, url_prefix='/api/schedules')
+
+
+def _acc_display_name(acc):
+    """账号展示名：优先 B 平台回填的姓名，回落登录账号（审计 summary 用）"""
+    return (acc.profile.get('name') if acc.profile else '') or acc.account
 
 
 def _activity_enable_issue(schedule):
@@ -68,6 +74,9 @@ def create_schedule():
     )
     db.session.add(s)
     db.session.commit()
+    # 事件钩子：审计（幂等命中已有任务时不发布——没有实效变更）
+    schedule_changed.send('schedules.create', schedule=s,
+                          account_name=_acc_display_name(acc))
     return success(s.to_dict(), message='创建成功', status=201)
 
 
@@ -84,10 +93,16 @@ def delete_schedule(sched_id):
     SignRecord.query.filter_by(schedule_id=s.id).update({'schedule_id': None})
     # push_logs.schedule_id 外键同样无级联规则：推送日志随签到记录保留历史，仅摘除任务引用
     PushLog.query.filter_by(schedule_id=s.id).update({'schedule_id': None})
+    # 审计快照在删除前抓（ORM 行删除后属性不可读）
+    deleted_snapshot = {'schedule_id': s.id, 'account_id': s.account_id,
+                        'account_name': _acc_display_name(s.account),
+                        'task_type': s.task_type}
     db.session.delete(s)
     db.session.commit()
     # 事件钩子：移除调度器已注册 job（与账号级联删除共用兜底，此处即时清理）
     remove_job(sched_id)
+    # 行已删除，事件只带普通值（ORM 对象 commit 后过期，属性不可再读）
+    schedule_changed.send('schedules.delete', **deleted_snapshot)
     return success(message='删除成功')
 
 
@@ -102,6 +117,10 @@ def update_schedule(sched_id):
     ok, data, msg, code = load_update(payload)
     if not ok:
         return error(message=msg, code=code, status=400)
+
+    # 审计 before 快照：受管字段旧值（mode/enabled/config_set_id 做 from→to）
+    update_before = {'mode': s.mode, 'enabled': bool(s.enabled),
+                     'config_set_id': s.config_set_id}
 
     if 'mode' in data:
         s.mode = data['mode']
@@ -170,6 +189,8 @@ def update_schedule(sched_id):
     db.session.commit()
     # 事件钩子：对齐调度器 job 注册（启用→注册/替换，停用→移除）
     sync_schedule(s)
+    schedule_changed.send('schedules.update', schedule=s, payload=payload,
+                          before=update_before, account_name=_acc_display_name(s.account))
     return success(s.to_dict(), message='保存成功')
 
 
@@ -322,6 +343,11 @@ def batch_manage():
         succeed(acc_id, task_type, name)
 
     db.session.commit()
+
+    # 事件钩子：批量启停的审计（affected 为 0 说明没有实效，不记行）
+    schedule_changed.send('schedules.batch', action=action, affected_list=affected_list,
+                          skipped=skipped_count, config_set_id=config_set_id,
+                          config_set_name=(apply_set.name if apply_set else None))
 
     verb = '启用' if action == 'enable' else '关闭'
     msg = f'已{verb} {affected} 个账号任务'

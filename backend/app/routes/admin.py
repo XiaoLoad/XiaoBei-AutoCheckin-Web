@@ -6,17 +6,20 @@ import re
 import time
 from datetime import datetime, timedelta
 
-from flask import Blueprint, request
+from flask import Blueprint, current_app, make_response, request
 from sqlalchemy import case, func
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
+from app.events import account_changed
 from app.models import BAccount, PushLog, Schedule, SignRecord, User
 from app.models.system_config import get_setting
 from app.models.user import now_cst
 from app.services.b_platform.history import fetch_history_tasks, fetch_task_detail
+from app.services.crypto import decrypt
 from app.utils.auth import admin_required
 from app.utils.response import error, success
+from app.utils.throttle import Throttle
 
 bp = Blueprint('admin', __name__, url_prefix='/api/admin')
 
@@ -621,3 +624,45 @@ def site_account_record_detail(account_id, task_id):
     if err:
         return err
     return success(data)
+
+
+# ===== B 平台密码受限回显（管理员专用，入口在全站签到记录页的账号节点）=====
+# 密码本体只在 b_accounts.password_enc（Fernet），本接口是系统内唯一解密出口：
+# 必须限流（不限流就是拿登录密码做爆破的旁路）+ 每次查看（含失败）都落审计。
+_SECRET_VIEW_INTERVAL = 60
+_secret_throttle = Throttle(_SECRET_VIEW_INTERVAL)
+
+
+@bp.route('/accounts/<int:account_id>/secret', methods=['POST'])
+@admin_required
+def reveal_account_secret(account_id):
+    """解密返回指定账号的 B 平台密码：登录密码二次验证 → Fernet 解密 → 一次性返回。
+    响应带 no-store，禁止任何中间层缓存明文。"""
+    payload = request.get_json(silent=True) or {}
+    login_password = payload.get('login_password') or ''
+    if not login_password:
+        return error(message='请输入当前登录密码以确认身份', code=1000, status=400)
+
+    acc = db.session.get(BAccount, account_id)
+    if acc is None:
+        return error(message='账号不存在', code=4040, status=404)
+
+    if _secret_throttle.hit(f'{request.current_user.id}:{account_id}'):
+        return error(message='操作过于频繁，请 1 分钟后再试', code=4290, status=429)
+
+    if not request.current_user.check_password(login_password):
+        account_changed.send('accounts.secret_view', account=acc, result='fail',
+                             reason='登录密码验证失败')
+        return error(message='登录密码验证失败', code=1002, status=400)
+
+    try:
+        plain = decrypt(acc.password_enc)
+    except Exception:
+        # 密钥轮换后旧密文解不开 / 数据损坏：不向调用方透出细节，留给运维查日志
+        current_app.logger.exception('账号凭据解密失败 account_id=%s', account_id)
+        return error(message='凭据解密失败，请检查服务端 SECRET_KEY 配置', code=5001, status=500)
+
+    account_changed.send('accounts.secret_view', account=acc, result='success')
+    resp = make_response(success({'password': plain}, message='密码已解密，请注意保管'))
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp

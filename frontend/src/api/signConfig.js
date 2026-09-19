@@ -200,6 +200,17 @@ export async function fetchImageGroups() {
   }))
 }
 
+// 图库分组 + 张数汇总：分组页要说清「全部图库」有多少张可抽，而未分组图片不落在任何分组上，
+// 故连同 ungrouped 一起取；fetchImageGroups 保持只回分组数组，账号管理页继续用它
+export async function fetchImageGroupSummary() {
+  const data = await request({ url: '/pools/image-groups', method: 'get' })
+  const items = (data.items || []).map((g) => ({
+    id: String(g.id), name: g.name, count: g.count || 0
+  }))
+  const ungrouped = data.ungrouped || 0
+  return { items, ungrouped, total: items.reduce((n, g) => n + g.count, 0) + ungrouped }
+}
+
 // 位置池：scope = system | user
 export async function saveLocation(payload) {
   const body = {

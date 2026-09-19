@@ -10,72 +10,66 @@
             以及把当日的签到结果合并成一条消息推送到对应的 QQ 群——而非每人各发一条。
           </p>
         </div>
-        <span class="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1 text-xs font-medium text-brand">
-          <Icon name="send" :size="14" />合并推送
+        <span class="flex shrink-0 flex-wrap items-center gap-1.5">
+          <span class="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1 text-xs font-medium text-brand">
+            <Icon name="image" :size="14" />图库归属
+          </span>
+          <span class="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1 text-xs font-medium text-brand">
+            <Icon name="send" :size="14" />合并推送
+          </span>
         </span>
       </div>
 
-      <!-- 分组切换 -->
-      <div class="mt-4 inline-flex rounded-xl bg-cloud/60 p-1">
-        <button
-          v-for="t in tabs"
-          :key="t.key"
-          type="button"
-          class="rounded-lg px-4 py-1.5 text-sm font-medium transition"
-          :class="activeTab === t.key ? 'bg-elevated text-ink shadow-sm' : 'text-ink-muted hover:text-ink'"
-          @click="activeTab = t.key"
-        >
-          {{ t.label }}
-        </button>
-      </div>
     </div>
 
-    <!-- 统计卡片：分组数量 + 签到推送概况 -->
-    <div class="grid grid-cols-2 gap-3 lg:grid-cols-4 shrink-0">
-      <div class="dash-card fade-up p-4">
-        <div class="flex items-center gap-2 text-ink-muted">
-          <Icon name="box" :size="15" />
-          <span class="text-xs font-medium">分组总数</span>
-        </div>
-        <p class="mt-2 text-2xl font-semibold tabular-nums text-ink">{{ stat.totalGroups }}</p>
-        <p class="mt-1 text-xs text-ink-muted">班级 {{ stat.classCount }} · 寝室 {{ stat.dormCount }}</p>
+    <!-- 页级筛选：左侧「范围」定看哪类分组，右侧「焦点」定先看哪类问题。
+         两者同处一条 bar，焦点计数才能随范围实时可读，而不是另一张卡在偷偷改数字 -->
+    <div class="dash-card fade-up flex flex-wrap items-center gap-3 p-3">
+      <span class="shrink-0 text-xs text-ink-muted">范围</span>
+      <div class="inline-flex shrink-0 rounded-xl bg-cloud/60 p-1">
+        <button
+          v-for="s in scopes"
+          :key="s.key"
+          type="button"
+          class="rounded-lg px-3.5 py-1.5 text-sm font-medium transition"
+          :class="scope === s.key ? 'bg-elevated text-ink shadow-sm' : 'text-ink-muted hover:text-ink'"
+          @click="scope = s.key"
+        >
+          {{ s.label }}
+        </button>
       </div>
-
-      <div class="dash-card fade-up p-4">
-        <div class="flex items-center gap-2 text-ink-muted">
-          <Icon name="check-circle" :size="15" />
-          <span class="text-xs font-medium">今日已签</span>
-        </div>
-        <p class="mt-2 text-2xl font-semibold tabular-nums text-ink">{{ stat.total ? stat.done + '/' + stat.total : '—' }}</p>
-        <p class="mt-1 text-xs text-ink-muted">{{ stat.total ? stat.pct + '% 完成' : '暂无数据' }}</p>
+      <span class="h-5 w-px shrink-0 bg-ink/10"></span>
+      <div class="flex flex-wrap items-center gap-2">
+        <button
+          v-for="f in focusOptions"
+          :key="f.key"
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition disabled:opacity-40"
+          :class="focus === f.key
+            ? 'border-brand/30 bg-brand/10 font-medium text-brand'
+            : 'border-transparent bg-ink/5 text-ink-soft hover:bg-ink/10'"
+          :disabled="!f.count && focus !== f.key"
+          @click="focus = f.key"
+        >
+          <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="f.dot"></span>{{ f.label }} {{ f.count }}
+        </button>
       </div>
-
-      <div class="dash-card fade-up p-4">
-        <div class="flex items-center gap-2 text-ink-muted">
-          <Icon name="send" :size="15" />
-          <span class="text-xs font-medium">今日已推送</span>
-        </div>
-        <p class="mt-2 text-2xl font-semibold tabular-nums text-ink">{{ stat.pushed }}</p>
-        <p class="mt-1 text-xs text-ink-muted">共 {{ stat.totalGroups }} 个分组</p>
-      </div>
-
-      <div class="dash-card fade-up p-4">
-        <div class="flex items-center gap-2 text-ink-muted">
-          <Icon name="alert" :size="15" />
-          <span class="text-xs font-medium">发送失败</span>
-        </div>
-        <p class="mt-2 text-2xl font-semibold tabular-nums" :class="stat.fail ? 'text-danger' : 'text-ink'">{{ stat.fail }}</p>
-        <p class="mt-1 text-xs text-ink-muted">{{ stat.fail ? stat.fail + ' 个发送失败' : '今日无失败' }}</p>
-      </div>
+      <span class="ml-auto shrink-0 text-xs text-ink-muted">
+        <template v-if="stat.total">今日已签 {{ stat.done }}/{{ stat.total }}<template v-if="stat.fail"> · <span class="text-danger">失败 {{ stat.fail }}</span></template></template>
+        <template v-else>今日暂无签到数据</template>
+      </span>
     </div>
 
     <!-- 主从两栏：左分组列表 / 右分组详情（本页无底部分页，整体随内容增高、整页滚动，不锁视口高度） -->
     <div class="flex flex-col gap-4 lg:flex-row lg:items-start">
-      <!-- 左：分组列表 -->
+      <!-- 左：分组列表。搜索留在本卡内——它要按成员姓名 / 学号 / 小北账号穿透到组，
+           是列表自己的能力，不该挪到页级去 -->
       <div ref="leftCardRef" class="dash-card fade-up flex flex-col overflow-hidden rounded-2xl lg:w-80 lg:shrink-0">
         <div class="flex items-center justify-between px-4 pt-4">
           <span class="text-sm font-medium text-ink-soft">分组</span>
-          <span class="text-xs text-ink-muted">{{ filteredGroups.length }} 个</span>
+          <span class="text-xs text-ink-muted">
+            <template v-if="filteredGroups.length !== groupsInScope.length">{{ filteredGroups.length }} / </template>{{ groupsInScope.length }} 个
+          </span>
         </div>
 
         <!-- 模糊搜索：姓名 / 学号 / 小北账号 / 分组名，命中即定位到所属分组 -->
@@ -85,7 +79,7 @@
             <input
               v-model="searchQuery"
               type="text"
-              placeholder="搜索姓名 / 学号 / 小北账号"
+              placeholder="搜索姓名 / 学号 / 小北账号 / 分组名"
               class="login-input w-full py-2 pl-9 pr-9 text-sm"
             />
             <button
@@ -98,9 +92,14 @@
           </div>
         </div>
 
-        <div v-if="activeGroups.length === 0" class="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-10 text-center text-sm text-ink-muted">
-          <Icon :name="activeTab === 'class' ? 'members' : 'box'" :size="26" class="opacity-50" />
-          <span>{{ activeTab === 'class' ? '暂无班级信息：账号校验通过后会自动带回班级字段。' : '还没有寝室分组，点击下方「新建分组」把同寝室账号归到一起，顺带绑定这个寝室的图库。' }}</span>
+        <div v-if="groupsInScope.length === 0" class="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-10 text-center text-sm text-ink-muted">
+          <Icon :name="scope === 'class' ? 'members' : 'box'" :size="26" class="opacity-50" />
+          <span>{{ emptyScopeText }}</span>
+        </div>
+
+        <div v-else-if="matchedGroups.length === 0" class="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-10 text-center text-sm text-ink-muted">
+          <Icon name="info" :size="26" class="opacity-50" />
+          <span>当前范围内没有「{{ focusLabel }}」的分组</span>
         </div>
 
         <div v-else-if="filteredGroups.length === 0" class="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-10 text-center text-sm text-ink-muted">
@@ -117,28 +116,49 @@
             :class="isSelected(item.group) ? 'border-brand/30 bg-brand/10' : 'border-transparent hover:bg-cloud/50'"
             @click="selectGroup(item.group)"
           >
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2">
               <span class="h-2.5 w-2.5 shrink-0 rounded-full" :class="statusDot(item.group.today)" />
-              <div class="min-w-0 flex-1">
-                <p class="truncate text-sm font-medium text-ink">{{ item.group.name }}</p>
-                <p class="mt-0.5 truncate text-xs text-ink-muted">{{ item.group.memberCount }} 名成员</p>
-              </div>
+              <p class="min-w-0 flex-1 truncate text-sm font-medium text-ink">{{ item.group.name }}</p>
               <span class="shrink-0 text-xs" :class="statusTextClass(item.group.today)">{{ statusShort(item.group.today) }}</span>
             </div>
-            <p v-if="searchQuery && item.hits.length" class="mt-1.5 truncate text-xs text-brand">
+            <!-- 行尾两枚方点：左=图库归属、右=QQ 群；实心=已绑，虚线琥珀=未绑（计数在筛选条上，明细在详情里） -->
+            <div class="mt-1.5 flex items-center gap-2 pl-[18px]">
+              <span class="min-w-0 flex-1 truncate text-xs text-ink-muted">
+                {{ item.group.memberCount }} 名成员<template v-if="scope === 'all'"> · {{ typeLabel(item.group.type) }}</template>
+              </span>
+              <span
+                class="grid h-5 w-5 shrink-0 place-items-center rounded-md border"
+                :class="item.group.imageGroupId
+                  ? 'border-brand/35 bg-brand/10 text-brand'
+                  : 'border-dashed border-warning/55 bg-warning/5 text-warning'"
+                :title="item.group.imageGroupId ? '已绑定图库归属' : '未绑定图库，按配置套兜底取图'"
+              >
+                <Icon name="image" :size="11" />
+              </span>
+              <span
+                class="grid h-5 w-5 shrink-0 place-items-center rounded-md border"
+                :class="item.group.bound
+                  ? 'border-brand/35 bg-brand/10 text-brand'
+                  : 'border-dashed border-warning/55 bg-warning/5 text-warning'"
+                :title="item.group.bound ? '已绑定 QQ 群' : '未绑定 QQ 群，今天不会推送'"
+              >
+                <Icon name="send" :size="11" />
+              </span>
+            </div>
+            <p v-if="searchQuery && item.hits.length" class="mt-1.5 truncate pl-[18px] text-xs text-brand">
               命中：{{ item.hits.map((h) => h.name || h.account).join('、') }}
             </p>
           </button>
         </div>
 
-        <!-- 寝室：新建入口 -->
-        <div v-if="activeTab === 'dorm'" class="border-t border-ink/5 p-3">
+        <!-- 新建入口：班级分组由账号的班级字段派生，没有「新建」这回事 -->
+        <div v-if="scope !== 'class'" class="border-t border-ink/5 p-3">
           <button
             type="button"
             class="flex w-full items-center justify-center gap-1.5 rounded-xl bg-brand px-3.5 py-2 text-sm font-semibold text-white shadow-lg shadow-brand/25 transition hover:bg-brand-dark"
             @click="openCreate"
           >
-            <Icon name="plus" :size="17" />新建分组
+            <Icon name="plus" :size="17" />新建寝室分组
           </button>
         </div>
       </div>
@@ -155,9 +175,10 @@
             <!-- 头部 -->
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2">
                   <h2 class="text-base font-semibold text-ink">{{ selectedGroup.name }}</h2>
-                  <span class="rounded-md bg-cloud px-2 py-0.5 text-xs text-ink-muted">{{ selectedGroup.type === 'class' ? '班级' : '寝室' }}</span>
+                  <span class="rounded-md bg-cloud px-2 py-0.5 text-xs text-ink-muted">{{ typeLabel(selectedGroup.type) }}</span>
+                  <span class="rounded-full px-2 py-0.5 text-xs" :class="imageStateBadge.cls">{{ imageStateBadge.text }}</span>
                 </div>
                 <div class="mt-2"><StatusBadge :today="selectedGroup.today" /></div>
               </div>
@@ -171,12 +192,13 @@
                 >
                   <Icon name="send" :size="15" />{{ flushing ? '发送中' : '立即发送' }}
                 </button>
+                <!-- 未绑 QQ 群是「今天真的不推」，不该是死按钮：点一下直接落到推送段的绑定入口 -->
                 <button
                   v-else
                   type="button"
-                  class="rounded-xl border border-ink/10 px-3.5 py-2 text-sm font-medium text-ink-muted"
-                  disabled
-                >未绑定 QQ 群</button>
+                  class="rounded-xl border border-danger/30 px-3.5 py-2 text-sm font-medium text-danger transition hover:bg-danger/10"
+                  @click="detailTab = 'push'"
+                >去绑定 QQ 群</button>
                 <button
                   v-if="selectedGroup.type === 'dorm'"
                   type="button"
@@ -186,90 +208,137 @@
               </div>
             </div>
 
-            <!-- 签名：今日推送节奏 -->
-            <div class="mt-4 rounded-xl bg-cloud/40 p-4">
-              <p class="mb-3 text-xs font-medium text-ink-muted">今日推送节奏</p>
-              <div class="flex items-center">
-                <div class="flex-1 text-center">
-                  <div class="mx-auto grid h-7 w-7 place-items-center rounded-full bg-brand/10 text-xs font-semibold text-brand">1</div>
-                  <p class="mt-1.5 text-xs text-ink-muted">{{ selectedGroup.memberCount }} 名成员</p>
+            <!-- 分段：推送状态在页头已有徽标，取图此前没有任何页级落点，故默认停在取图 -->
+            <div class="mt-4 inline-flex rounded-xl bg-cloud/60 p-1">
+              <button
+                v-for="t in detailTabs"
+                :key="t.key"
+                type="button"
+                class="rounded-lg px-4 py-1.5 text-sm font-medium transition"
+                :class="detailTab === t.key ? 'bg-elevated text-ink shadow-sm' : 'text-ink-muted hover:text-ink'"
+                @click="detailTab = t.key"
+              >
+                {{ t.label }}
+              </button>
+            </div>
+
+            <!-- 取图：把后端的回退链摊开成三级，让人看出本组实际从哪个库取图、以及为什么是它 -->
+            <div v-if="detailTab === 'image'" class="mt-4 border-t border-ink/5 pt-4">
+              <div class="flex items-center justify-between">
+                <p class="text-sm font-medium text-ink-soft">取图归属 · 逐级解析</p>
+                <span class="text-xs text-ink-muted">本组 {{ memberList.length }} 人</span>
+              </div>
+
+              <div class="mt-3 space-y-1.5">
+                <div
+                  v-for="t in imageChain.tiers"
+                  :key="t.no"
+                  class="rounded-lg px-2.5 py-2"
+                  :class="tierClass(t)"
+                >
+                  <div class="flex items-center gap-2">
+                    <span class="grid h-4 w-4 shrink-0 place-items-center rounded-full text-[11px]" :class="tierNoClass(t)">{{ t.no }}</span>
+                    <span class="min-w-0 flex-1 truncate text-xs" :class="t.tone === 'hit' ? 'text-ink-soft' : 'text-ink-muted'">{{ t.label }}</span>
+                    <span class="shrink-0 text-xs font-medium" :class="tierValueClass(t)">{{ t.value }}</span>
+                  </div>
+                  <p v-if="t.sub" class="mt-0.5 pl-6 text-[11px] text-ink-muted">{{ t.sub }}</p>
                 </div>
-                <div class="h-px flex-1 bg-ink/10"></div>
-                <div class="flex-1 text-center">
-                  <div class="mx-auto grid h-7 w-7 place-items-center rounded-full text-xs font-semibold" :class="step2Class">{{ step2Label.main }}</div>
-                  <p class="mt-1.5 text-xs text-ink-muted">{{ step2Label.sub }}</p>
+              </div>
+
+              <div class="mt-2 rounded-lg border px-2.5 py-2 text-xs" :class="imageChain.verdict.cls">
+                <template v-if="imageChain.verdict.name">本组从<b class="font-medium">{{ imageChain.verdict.name }}</b>取图<template v-if="imageChain.verdict.count != null"> · {{ imageChain.verdict.count }} 张</template> · {{ imageChain.verdict.note }}</template>
+                <template v-else>{{ imageChain.verdict.note }}</template>
+              </div>
+
+              <div class="mt-3">
+                <p class="text-xs text-ink-muted">本组图库归属</p>
+                <div class="mt-1.5 flex items-center gap-2">
+                  <BaseSelect v-model="imageDraft" :options="imageGroupOptions" :searchable="true" size="sm" class="w-full" />
+                  <template v-if="imageDirty">
+                    <button
+                      type="button"
+                      class="shrink-0 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-dark disabled:opacity-60"
+                      :disabled="savingImage"
+                      @click="saveImageGroup"
+                    >{{ savingImage ? '保存中' : '保存' }}</button>
+                    <button
+                      type="button"
+                      class="shrink-0 rounded-lg border border-ink/10 px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-cloud"
+                      @click="resetImageDraft"
+                    >取消</button>
+                  </template>
                 </div>
-                <div class="h-px flex-1 bg-ink/10"></div>
-                <div class="flex-1 text-center">
-                  <div class="mx-auto grid h-7 w-7 place-items-center rounded-full text-xs font-semibold" :class="step3Class">{{ step3Glyph }}</div>
-                  <p class="mt-1.5 text-xs text-ink-muted">{{ step3Label }}</p>
-                </div>
+                <p class="mt-1.5 text-xs text-ink-muted">
+                  留空则按上级兜底取图。图库分组在「签到配置 → 我的资源 → 图库」中维护。
+                </p>
               </div>
             </div>
 
-            <!-- QQ 群绑定 -->
-            <div class="mt-4">
-              <div class="flex items-center justify-between">
-                <div>
-                  <p class="text-sm font-medium text-ink-soft">QQ 群编码（qq_code）</p>
-                  <p v-if="!editingQQ" class="mt-1 text-sm text-ink">{{ selectedGroup.qqCode || '未绑定，填后推送' }}</p>
-                </div>
-                <button
-                  v-if="!editingQQ"
-                  type="button"
-                  class="rounded-lg border border-ink/10 px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-cloud"
-                  @click="startEditQQ"
-                >编辑</button>
-              </div>
-              <div v-if="editingQQ" class="mt-2 flex items-center gap-2">
-                <input v-model="qqDraft" type="text" placeholder="如 dorm829" class="login-input w-full py-1.5 text-sm" />
-                <button
-                  type="button"
-                  class="shrink-0 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-dark disabled:opacity-60"
-                  :disabled="savingQQ"
-                  @click="saveQQ"
-                >{{ savingQQ ? '保存中' : '保存' }}</button>
-                <button
-                  type="button"
-                  class="shrink-0 rounded-lg border border-ink/10 px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-cloud"
-                  @click="cancelEditQQ"
-                >取消</button>
-              </div>
-            </div>
+            <!-- 推送：QQ 群绑定 + 今日节奏（全组合并成一条） -->
+            <div v-else class="mt-4 border-t border-ink/5 pt-4">
 
-            <!-- 图库归属：配置套图片策略选「按分组取图」时，本组账号按此取图 -->
-            <div class="mt-4">
-              <div class="flex items-center justify-between">
-                <div>
-                  <p class="text-sm font-medium text-ink-soft">图库归属</p>
-                  <p v-if="!editingImage" class="mt-1 text-sm" :class="selectedGroup.imageGroupId ? 'text-ink' : 'text-ink-muted'">
-                    {{ selectedGroup.imageGroupId ? imageGroupLabel(selectedGroup.imageGroupId) : '未绑定，走配置套默认图库' }}
-                  </p>
+              <!-- QQ 群：已绑 → 值 + 编辑；未绑 → 直接把输入框摆出来（今天真的不推，入口不该藏在编辑态里） -->
+              <div>
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="text-sm font-medium text-ink-soft">QQ 群编码</p>
+                    <p v-if="!editingQQ" class="mt-1 truncate text-sm" :class="selectedGroup.bound ? 'text-ink' : 'text-danger'">
+                      {{ selectedGroup.bound ? selectedGroup.qqCode : '未绑定 · 今天不会推送' }}
+                    </p>
+                  </div>
+                  <button
+                    v-if="selectedGroup.bound && !editingQQ"
+                    type="button"
+                    class="shrink-0 rounded-lg border border-ink/10 px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-cloud"
+                    @click="startEditQQ"
+                  >编辑</button>
                 </div>
-                <button
-                  v-if="!editingImage"
-                  type="button"
-                  class="rounded-lg border border-ink/10 px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-cloud"
-                  @click="startEditImage"
-                >编辑</button>
+                <div v-if="editingQQ || !selectedGroup.bound" class="mt-2 flex items-center gap-2">
+                  <input
+                    v-model="qqDraft"
+                    type="text"
+                    placeholder="如 dorm829"
+                    class="login-input w-full py-1.5 text-sm"
+                    :class="!selectedGroup.bound && 'border-danger/30'"
+                  />
+                  <button
+                    type="button"
+                    class="shrink-0 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-dark disabled:opacity-60"
+                    :disabled="savingQQ || !qqDraft.trim()"
+                    @click="saveQQ"
+                  >{{ savingQQ ? '保存中' : (selectedGroup.bound ? '保存' : '绑定') }}</button>
+                  <button
+                    v-if="selectedGroup.bound"
+                    type="button"
+                    class="shrink-0 rounded-lg border border-ink/10 px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-cloud"
+                    @click="cancelEditQQ"
+                  >取消</button>
+                </div>
               </div>
-              <div v-if="editingImage" class="mt-2 flex items-center gap-2">
-                <BaseSelect v-model="imageDraft" :options="imageGroupOptions" :searchable="true" size="sm" class="w-full" />
-                <button
-                  type="button"
-                  class="shrink-0 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-dark disabled:opacity-60"
-                  :disabled="savingImage"
-                  @click="saveImageGroup"
-                >{{ savingImage ? '保存中' : '保存' }}</button>
-                <button
-                  type="button"
-                  class="shrink-0 rounded-lg border border-ink/10 px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:bg-cloud"
-                  @click="cancelEditImage"
-                >取消</button>
+
+              <div class="mt-3 rounded-xl bg-cloud/40 p-4">
+                <p class="mb-3 text-xs font-medium text-ink-muted">今日推送节奏</p>
+                <div class="flex items-center">
+                  <div class="flex-1 text-center">
+                    <div class="mx-auto grid h-7 w-7 place-items-center rounded-full bg-brand/10 text-xs font-semibold text-brand">1</div>
+                    <p class="mt-1.5 text-xs text-ink-muted">{{ selectedGroup.memberCount }} 名成员</p>
+                  </div>
+                  <div class="h-px flex-1 bg-ink/10"></div>
+                  <div class="flex-1 text-center">
+                    <div class="mx-auto grid h-7 w-7 place-items-center rounded-full text-xs font-semibold" :class="step2Class">{{ step2Label.main }}</div>
+                    <p class="mt-1.5 text-xs text-ink-muted">{{ step2Label.sub }}</p>
+                  </div>
+                  <div class="h-px flex-1 bg-ink/10"></div>
+                  <div class="flex-1 text-center">
+                    <div class="mx-auto grid h-7 w-7 place-items-center rounded-full text-xs font-semibold" :class="step3Class">{{ step3Glyph }}</div>
+                    <p class="mt-1.5 text-xs text-ink-muted">{{ step3Label }}</p>
+                  </div>
+                </div>
+                <p class="mt-3 border-t border-ink/5 pt-3 text-xs text-ink-muted">
+                  <template v-if="selectedGroup.bound">{{ selectedGroup.memberCount }} 人的签到结果合并成 <span class="font-medium text-ink">1 条</span> 消息，发往 {{ selectedGroup.qqCode }}</template>
+                  <template v-else>绑好 QQ 群后，{{ selectedGroup.memberCount }} 人的结果才会合并发出</template>
+                </p>
               </div>
-              <p v-if="editingImage" class="mt-1.5 text-xs text-ink-muted">
-                未绑定图库的分组，其成员按配置套的默认图库取图。图库分组在「签到配置 → 我的资源 → 图库」中维护。
-              </p>
             </div>
 
             <!-- 成员 -->
@@ -426,13 +495,25 @@ import {
   fetchMembers, addMembers, removeMember, bindClassGroup, flushGroup
 } from '@/api/groupPush'
 import { fetchAccounts } from '@/api/accounts'
-import { fetchImageGroups } from '@/api/signConfig'
+import { fetchConfigSets, fetchImageGroupSummary } from '@/api/signConfig'
 
-const tabs = [
-  { key: 'class', label: '班级分组' },
-  { key: 'dorm', label: '寝室分组' }
+// 范围（看哪类分组）：与焦点筛选同处页级一条 bar，焦点计数才能随范围实时可读
+const scopes = [
+  { key: 'all', label: '全部' },
+  { key: 'dorm', label: '寝室' },
+  { key: 'class', label: '班级' }
 ]
-const activeTab = ref('class')
+const scope = ref('all')
+
+// 焦点（先看哪类问题）：漏网即入口，点一下滤出待补绑的分组
+const focus = ref('all')
+
+// 详情分段：推送状态在页头已有徽标，取图此前没有任何页级落点，故默认停在取图
+const detailTabs = [
+  { key: 'image', label: '取图' },
+  { key: 'push', label: '推送' }
+]
+const detailTab = ref('image')
 
 const loading = ref(false)
 const classGroups = ref([])
@@ -451,11 +532,14 @@ const editingQQ = ref(false)
 const qqDraft = ref('')
 const savingQQ = ref(false)
 
-// 图库归属内联编辑
+// 图库归属：选择器常驻在取图面板里，只有值与已保存的不一致时才出现保存 / 取消
 const imageGroups = ref([])
-const editingImage = ref(false)
+const imageTotals = ref({ ungrouped: 0, total: 0 })
 const imageDraft = ref('')
 const savingImage = ref(false)
+
+// 配置套：取图回退链第 1 级要问「配置套当前是不是按分组取图」，故分组页也得拉一次
+const configSets = ref([])
 
 // 图库归属下拉：'' = 不绑定（回退配置套默认图库），其余为「我的资源 → 图库」里建的分组
 const imageGroupOptions = computed(() => [
@@ -467,6 +551,16 @@ const imageGroupOptions = computed(() => [
 function imageGroupLabel(id) {
   const g = imageGroups.value.find((x) => String(x.id) === String(id))
   return g ? g.name : '原图库分组已删除'
+}
+
+// 可抽张数：后端按 status='active' 统计（与图库页「可抽张数」同口径）
+function imageGroupCount(id) {
+  const g = imageGroups.value.find((x) => String(x.id) === String(id))
+  return g ? g.count : 0
+}
+
+function typeLabel(type) {
+  return type === 'class' ? '班级' : '寝室'
 }
 
 // 成员
@@ -488,11 +582,17 @@ const deleteTarget = ref(null)
 const removeOpen = ref(false)
 const removingMember = ref(null)
 
-const activeGroups = computed(() => (activeTab.value === 'class' ? classGroups.value : dormGroups.value))
+// 全部：寝室在前（显式管理、带真实绑定），班级在后（按 className 派生）
+const allGroups = computed(() => [...dormGroups.value, ...classGroups.value])
+const groupsInScope = computed(() => {
+  if (scope.value === 'dorm') return dormGroups.value
+  if (scope.value === 'class') return classGroups.value
+  return allGroups.value
+})
 
 const selectedGroup = computed(() => {
   if (!selected.value) return null
-  return activeGroups.value.find(
+  return groupsInScope.value.find(
     (g) => g.type === selected.value.type && (g.id ?? g.name) === selected.value.key
   ) || null
 })
@@ -543,10 +643,50 @@ function membersOf(g) {
     }))
 }
 
+// 焦点口径：缺图库 = 没绑图库归属（还有兜底可走，故不按失败论）；缺 QQ 群 = 今天真的不推
+const focusCounts = computed(() => {
+  const list = groupsInScope.value
+  return {
+    all: list.length,
+    noImage: list.filter((g) => !g.imageGroupId).length,
+    noQQ: list.filter((g) => !g.bound).length,
+    unsent: list.filter((g) => !g.today || g.today.status === 'fail').length
+  }
+})
+
+const matchedGroups = computed(() => {
+  const list = groupsInScope.value
+  if (focus.value === 'noImage') return list.filter((g) => !g.imageGroupId)
+  if (focus.value === 'noQQ') return list.filter((g) => !g.bound)
+  if (focus.value === 'unsent') return list.filter((g) => !g.today || g.today.status === 'fail')
+  return list
+})
+
+const focusOptions = computed(() => {
+  const c = focusCounts.value
+  return [
+    { key: 'all', label: '全部分组', count: c.all, dot: 'bg-brand' },
+    { key: 'noImage', label: '缺图库', count: c.noImage, dot: 'bg-warning' },
+    { key: 'noQQ', label: '缺 QQ 群', count: c.noQQ, dot: 'bg-danger' },
+    { key: 'unsent', label: '今日未推', count: c.unsent, dot: 'bg-ink/30' }
+  ]
+})
+
+const focusLabel = computed(() => {
+  const f = focusOptions.value.find((x) => x.key === focus.value)
+  return f ? f.label : '全部分组'
+})
+
+const emptyScopeText = computed(() => {
+  if (scope.value === 'class') return '暂无班级信息：账号校验通过后会自动带回班级字段。'
+  if (scope.value === 'dorm') return '还没有寝室分组，点击下方「新建寝室分组」把同寝室账号归到一起，顺带绑定这个寝室的图库。'
+  return '还没有任何分组：账号校验通过后会按班级自动归类，也可以手动新建寝室分组。'
+})
+
 // 左侧分组列表：按学生姓名 / 小北账号 / 学号 / 分组名模糊过滤，并回传命中成员
 const filteredGroups = computed(() => {
   const q = norm(searchQuery.value)
-  const list = activeGroups.value
+  const list = matchedGroups.value
   if (!q) return list.map((g) => ({ group: g, hits: [] }))
   const out = []
   for (const g of list) {
@@ -563,31 +703,19 @@ const filteredGroups = computed(() => {
   return out
 })
 
-// 顶部统计卡片数据（分组数量 + 签到推送概况）
+// 页级汇总：只供筛选条右侧那行元信息，口径跟随「范围」——整条 bar 描述的都是同一个分组集合
 const stat = computed(() => {
-  const all = [...classGroups.value, ...dormGroups.value]
   let done = 0
   let total = 0
-  let pushed = 0
   let fail = 0
-  for (const g of all) {
+  for (const g of groupsInScope.value) {
     const t = g.today
     if (!t) continue
     done += t.memberDone || 0
     total += t.memberTotal || 0
-    if (t.status === 'success' || t.status === 'partial') pushed += 1
     if (t.status === 'fail') fail += 1
   }
-  return {
-    totalGroups: all.length,
-    classCount: classGroups.value.length,
-    dormCount: dormGroups.value.length,
-    done,
-    total,
-    pushed,
-    fail,
-    pct: total > 0 ? Math.round((done / total) * 100) : 0
-  }
+  return { done, total, fail }
 })
 
 // 预载所有寝室分组的成员（含学号，便于跨组检索）；账号增删后刷新
@@ -648,6 +776,95 @@ const step3Glyph = computed(() => {
   return '·'
 })
 
+// ── 取图归属：把后端 scheduler.resolve_image_group 的回退链摊开成可见的三级 ──
+// 规则：配置套按分组取图（且按本类分组）→ 本组图库归属 → 配置套兜底 groupId（空 = 全部图库）。
+// 配置套可以有多个且取图方式未必一致，这里取「生效的那个」作代表，第 1 级副文案里点明共有几个套。
+const imageStateBadge = computed(() => {
+  const g = selectedGroup.value
+  if (!g) return { text: '', cls: '' }
+  return g.imageGroupId
+    ? { text: `已绑 ${imageGroupLabel(g.imageGroupId)}`, cls: 'bg-success/10 text-success' }
+    : { text: '图库未绑', cls: 'bg-warning/10 text-warning' }
+})
+
+const imageChain = computed(() => {
+  const g = selectedGroup.value
+  if (!g) return null
+  const isDorm = g.type === 'dorm'
+  const kindLabel = isDorm ? '寝室' : '班级'
+  const otherLabel = isDorm ? '班级' : '寝室'
+  const sets = configSets.value
+  const byGroup = sets.filter((s) => s.config.image.mode === 'byGroup')
+  const matched = byGroup.filter((s) => s.config.image.groupKind === (isDorm ? 'dorm' : 'class'))
+  const rep = matched[0] || byGroup[0] || sets[0] || null
+  const groupOn = matched.length > 0
+  const bound = !!g.imageGroupId
+  const fallbackId = rep ? rep.config.image.groupId : ''
+  const fallbackName = fallbackId ? imageGroupLabel(fallbackId) : '全部图库'
+  const fallbackCount = fallbackId ? imageGroupCount(fallbackId) : (imageTotals.value.total || null)
+
+  let tier1Sub
+  if (!sets.length) tier1Sub = '还没有签到配置套，取图方式未定'
+  else if (groupOn) tier1Sub = `按${kindLabel}分组取图 · ${matched.length} 个配置套生效`
+  else if (byGroup.length) tier1Sub = `按${otherLabel}分组取图，本组的${kindLabel}归属不参与`
+  else tier1Sub = `${sets.length} 个配置套都用固定图库`
+
+  const tiers = [
+    {
+      no: 1,
+      label: '配置套取图方式',
+      value: !sets.length ? '暂无配置套' : (byGroup.length ? '按分组取图' : '固定图库'),
+      sub: tier1Sub,
+      tone: 'neutral'
+    },
+    {
+      no: 2,
+      label: '本组图库归属',
+      value: bound ? `${imageGroupLabel(g.imageGroupId)} · ${imageGroupCount(g.imageGroupId)} 张` : '未绑定',
+      sub: bound && !groupOn ? '已绑 · 配置套当前不按分组取图，这一级不参与' : '',
+      tone: !groupOn ? 'dim' : (bound ? 'hit' : 'warn')
+    },
+    {
+      no: 3,
+      label: '配置套兜底图库',
+      value: groupOn && bound ? '未参与' : `${fallbackName}${fallbackId ? ` · ${fallbackCount} 张` : ''}`,
+      sub: groupOn && bound ? '' : (fallbackId ? '本组未绑时取这个库' : '配置套未指定兜底库，回退到全部图库'),
+      tone: groupOn && bound ? 'dim' : 'hit'
+    }
+  ]
+
+  let verdict
+  if (!sets.length) {
+    verdict = { name: '', count: null, note: '还没有签到配置套，先建一个才能确定取图方式', cls: 'border-ink/10 bg-ink/[0.03] text-ink-muted' }
+  } else if (!groupOn) {
+    verdict = { name: fallbackName, count: fallbackCount, note: '配置套没按分组取图，本组归属不生效', cls: 'border-ink/10 bg-ink/[0.03] text-ink-soft' }
+  } else if (bound) {
+    verdict = { name: imageGroupLabel(g.imageGroupId), count: imageGroupCount(g.imageGroupId), note: '只取本组照片', cls: 'border-brand/25 bg-brand/10 text-brand' }
+  } else {
+    verdict = { name: fallbackName, count: fallbackCount, note: `本组未绑，含其它${kindLabel}的照片`, cls: 'border-warning/30 bg-warning/10 text-warning' }
+  }
+  return { tiers, verdict }
+})
+
+function tierClass(t) {
+  if (t.tone === 'hit') return 'border border-brand/30 bg-brand/10'
+  if (t.tone === 'warn') return 'border border-dashed border-warning/55 bg-warning/5'
+  if (t.tone === 'dim') return 'bg-ink/[0.03] opacity-60'
+  return 'bg-ink/[0.03]'
+}
+
+function tierNoClass(t) {
+  if (t.tone === 'hit') return 'bg-brand/15 text-brand'
+  if (t.tone === 'warn') return 'bg-warning/15 text-warning'
+  return 'bg-ink/10 text-ink-muted'
+}
+
+function tierValueClass(t) {
+  if (t.tone === 'hit') return 'text-brand'
+  if (t.tone === 'warn') return 'text-warning'
+  return 'text-ink-soft'
+}
+
 // ── 列表状态 helpers ──
 function statusDot(today) {
   if (!today) return 'bg-ink/30'
@@ -699,14 +916,25 @@ async function loadAccounts() {
 
 async function loadImageGroups() {
   try {
-    imageGroups.value = await fetchImageGroups()
+    const res = await fetchImageGroupSummary()
+    imageGroups.value = res.items
+    imageTotals.value = { ungrouped: res.ungrouped, total: res.total }
+  } catch (e) {
+    /* toast by interceptor */
+  }
+}
+
+async function loadConfigSets() {
+  try {
+    const { userConfigSets } = await fetchConfigSets()
+    configSets.value = userConfigSets
   } catch (e) {
     /* toast by interceptor */
   }
 }
 
 function ensureSelection() {
-  const list = activeGroups.value
+  const list = groupsInScope.value
   if (list.length === 0) {
     selected.value = null
     return
@@ -723,7 +951,7 @@ function ensureSelection() {
 function selectGroup(g) {
   selected.value = { type: g.type, key: g.id ?? g.name }
   editingQQ.value = false
-  editingImage.value = false
+  qqDraft.value = ''
 }
 
 function startEditQQ() {
@@ -735,15 +963,16 @@ function cancelEditQQ() {
   qqDraft.value = ''
 }
 
-function startEditImage() {
-  if (!selectedGroup.value) return
-  const cur = selectedGroup.value.imageGroupId
-  imageDraft.value = cur == null ? '' : String(cur)
-  editingImage.value = true
-}
-function cancelEditImage() {
-  editingImage.value = false
-  imageDraft.value = ''
+// 取图选择器常驻：草稿只在用户真的改了值时才与已保存值不同，据此控制保存 / 取消的出现
+const imageDirty = computed(() => {
+  const g = selectedGroup.value
+  if (!g) return false
+  return imageDraft.value !== (g.imageGroupId == null ? '' : String(g.imageGroupId))
+})
+
+function resetImageDraft() {
+  const g = selectedGroup.value
+  imageDraft.value = g && g.imageGroupId != null ? String(g.imageGroupId) : ''
 }
 async function saveImageGroup() {
   if (!selectedGroup.value) return
@@ -757,7 +986,6 @@ async function saveImageGroup() {
       await bindClassGroup({ name: selectedGroup.value.name, imageGroupId })
     }
     toast('图库归属已保存', 'success')
-    editingImage.value = false
     await loadGroups()
   } catch (e) {
     /* toast by interceptor */
@@ -895,14 +1123,17 @@ async function confirmRemoveMember() {
   removingMember.value = null
 }
 
-watch(() => activeTab.value, () => {
+// 范围 / 焦点变化：筛选把当前选中项滤掉时，跟着落到第一个命中分组（否则右侧会忽然空掉）
+watch([scope, focus], () => {
   if (norm(searchQuery.value)) {
     const m = filteredGroups.value
     if (m.length) selectGroup(m[0].group)
-    else selected.value = null
-  } else {
-    ensureSelection()
+    else ensureSelection()
+    return
   }
+  if (matchedGroups.value.some((g) => isSelected(g))) return
+  if (matchedGroups.value.length) selectGroup(matchedGroups.value[0])
+  else ensureSelection()
 })
 
 // 仅一个命中分组时直接选中（搜学生 → 定位分组一步到位）
@@ -915,6 +1146,20 @@ watch(searchQuery, (q) => {
   const m = filteredGroups.value
   if (m.length === 1) selectGroup(m[0].group)
 })
+
+// 取图草稿跟随选中项：常驻选择器比原来的「编辑态」更容易把上一个分组的选择带过去，
+// 故切分组与保存后刷新都把草稿复位到当前值
+watch(
+  () => {
+    const g = selectedGroup.value
+    return g ? `${g.type}|${g.id ?? g.name}|${g.imageGroupId ?? ''}` : ''
+  },
+  () => {
+    resetImageDraft()
+    editingQQ.value = false
+    qqDraft.value = ''
+  }
+)
 
 // GSAP 高度过渡：切分组 / 成员增减 / 切 tab / 搜索过滤都会改变卡片高度，
 // 这里把「高度跳变」补成平滑过渡。复用项目的高度补间范式：
@@ -959,9 +1204,9 @@ const rightAnimKey = computed(() => {
   const g = selectedGroup.value
   const id = g ? g.id ?? g.name : 'none'
   const bind = g ? `${g.qqCode || ''}|${g.imageGroupId || ''}` : ''
-  return `${id}|${memberList.value.length}|${editingQQ.value ? 1 : 0}|${editingImage.value ? 1 : 0}|${bind}`
+  return `${id}|${memberList.value.length}|${detailTab.value}|${editingQQ.value ? 1 : 0}|${imageDirty.value ? 1 : 0}|${bind}|${configSets.value.length}`
 })
-const leftAnimKey = computed(() => `${activeTab.value}|${filteredGroups.value.length}`)
+const leftAnimKey = computed(() => `${scope.value}|${focus.value}|${filteredGroups.value.length}`)
 
 watch(rightAnimKey, () => animateHeight(rightCardRef.value))
 watch(leftAnimKey, () => animateHeight(leftCardRef.value))
@@ -971,7 +1216,7 @@ onMounted(async () => {
   if (rootRef.value) {
     animCtx = gsap.context(() => {}, rootRef.value)
   }
-  await Promise.all([loadGroups(), loadAccounts(), loadImageGroups()])
+  await Promise.all([loadGroups(), loadAccounts(), loadImageGroups(), loadConfigSets()])
   await loadDormMembersMap()
 })
 

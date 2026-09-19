@@ -59,6 +59,12 @@ def test_baseline_upgrade_matches_models():
                 db_cols = {c['name'] for c in insp.get_columns(name)}
                 missing = model_cols - db_cols
                 assert not missing, f'表 {name} 迁移缺列：{sorted(missing)}'
+                # 索引同样对账：漏写一条 create_index 不会有任何报错，
+                # 只会在数据涨到优化器认真看待它时才暴露（如 /op-logs/meta 的全表聚合）
+                db_idx = {i['name'] for i in insp.get_indexes(name) if i.get('name')}
+                model_idx = {i.name for i in table.indexes if i.name}
+                gap_idx = model_idx - db_idx
+                assert not gap_idx, f'表 {name} 迁移缺索引：{sorted(gap_idx)}'
             assert 'alembic_version' in actual
     finally:
         try:

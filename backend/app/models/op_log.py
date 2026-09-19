@@ -34,6 +34,9 @@ class OpLog(db.Model):
     __table_args__ = (
         db.Index('ix_op_logs_category_time', 'category', 'created_at'),
         db.Index('ix_op_logs_user_time', 'user_id', 'created_at'),
+        # /op-logs/meta 的 GROUP BY (action, category) 用它做覆盖扫描，免去全表扫 + 临时表；
+        # 同时充当「按 action 单列筛选」的索引前缀（原先 action 上的过滤条件无索引可用）
+        db.Index('ix_op_logs_action_category', 'action', 'category'),
     )
 
     def set_detail(self, data):

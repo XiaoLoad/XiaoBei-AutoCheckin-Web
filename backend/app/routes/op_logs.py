@@ -480,8 +480,8 @@ def op_log_meta():
 
     显式 ORDER BY action：不排时 MySQL 的返回顺序随执行计划变，同一份数据在不同版本
     或索引下会排出不同次序，下拉项看起来就是「乱跳」。
-    当前规模（万行量级）全表聚合在毫秒级，暂不为它加索引；真到十万行再上
-    (action, category) 联合索引——那正好覆盖这个查询。
+    覆盖索引 (action, category)（见 OpLog.__table_args__）：本查询是所有读取口径里唯一
+    要扫全表的，有了它按序覆盖扫描即可，不必等「涨到十万行」再处理。
     """
     rows = (db.session.query(OpLog.action, OpLog.category, func.count(OpLog.id))
             .group_by(OpLog.action, OpLog.category)

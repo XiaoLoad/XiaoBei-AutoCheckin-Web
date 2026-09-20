@@ -658,7 +658,9 @@ def resolve_image_group(uid, resolved, acc):
 def _account_group_image_id(uid, acc, kind):
     """账号所属分组绑定的图库 id；无归属分组或分组未绑图库返回 None。
     班级分组按 className 派生匹配，寝室分组按成员表匹配（与 group_push 口径一致）。"""
-    if acc is None:
+    # 无 id 的替身对象（测试桩）没有归属可查，直接回落默认图库，
+    # 不让一次 AttributeError 把整条推送打断
+    if acc is None or getattr(acc, 'id', None) is None:
         return None
     q = PushGroup.query.filter_by(user_id=uid, type=kind)
     if kind == PushGroup.TYPE_CLASS:
@@ -708,7 +710,7 @@ def _checkin_flow(schedule, acc, session, resolved, remark):
         'task_id': None, 'task_name': '', 'task_start': '', 'task_end': '',
         'need_photo': False, 'lng': None, 'lat': None, 'address': '',
         'location_str': '', 'submit_remark': None, 'image_id': None,
-        'strategy': strategy, 'warning': None,
+        'image_group_id': None, 'strategy': strategy, 'warning': None,
     }
     claimed = None
     try:
@@ -783,6 +785,9 @@ def _checkin_flow(schedule, acc, session, resolved, remark):
             return 'fail', '该任务需要上传签到图片，请在配置套中启用图库并确认有可用图片', attempt
         if image_cfg.get('enabled'):
             group = resolve_image_group(uid, resolved, acc)
+            # 记下本次实际命中的图库：byGroup 下它与配置套默认图库不是一个，
+            # 不记则推送只能读配置值，报出来的分组与实际取图不符
+            attempt['image_group_id'] = group
             claimed = claim_image_for_submit(uid, group, strategy)
             if not claimed:
                 return 'fail', '图库暂无可用图片，请先上传或调整取图范围', attempt
@@ -1150,12 +1155,20 @@ def dispatch_push(resolved, schedule, acc, status='success', reason='', image_ur
     # 墙钟时间由「各通道之和」降为「最慢单通道」，单通道异常仍隔离互不干扰。
     extra = extra or {}
     start, end = extra.get('task_start') or '', extra.get('task_end') or ''
+    # 卡片里的「图片分组」必须是本次实际取图的图库：byGroup 下分组绑定的图库与配置套
+    # 默认图库不是一个，直接读配置值会把分组报错（实测签到用 827、推送显示 829）。
+    # 认领时已解析过一次并记在 extra；早退路径（无进行中任务/已完成签到等尚未取图）
+    # 没有那次记录，故在此按同一函数补解析，口径与认领完全一致。
+    image_group_id = extra.get('image_group_id')
+    if image_group_id is None:
+        image_group_id = resolve_image_group(schedule.user_id, resolved, acc)
     ctx = build_ctx(acc, schedule, resolved, status, reason=reason,
                     image_url=image_url, remark=submitted_remark or None,
                     task_name=extra.get('task_name') or '',
                     task_window=f'{start}~{end}' if (start or end) else '',
                     need_photo=extra.get('need_photo'),
-                    initiator=extra.get('initiator') or '')
+                    initiator=extra.get('initiator') or '',
+                    image_group_id=image_group_id)
 
     if len(creds) == 1:
         ch, key = next(iter(creds.items()))

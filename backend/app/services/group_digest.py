@@ -170,7 +170,11 @@ def _member_records(member_ids, date):
 
 
 def _render_digest(g, date, member_rows):
-    """渲染合并消息标题与 markdown 正文（学号/班级/姓名/状态/任务/发起人/是否需要图片/时间）。"""
+    """渲染合并消息标题与 markdown 正文（学号/班级/姓名/状态/任务/发起人/是否需要图片/时间）。
+
+    失败与跳过另在表格后附「说明」列出原因：只给「跳过」两个字，收件人无法判断是
+    「已完成签到无需重复」还是「漏签」，与个人推送的失败/跳过原因口径对齐
+    （同一字段 sign_records.fail_reason）。无原因时不出现该段。"""
     label = '班级' if g.type == PushGroup.TYPE_CLASS else '寝室'
     title = f'小北自动打卡 · {g.name} {label}签到汇总'
     lines = [
@@ -182,6 +186,7 @@ def _render_digest(g, date, member_rows):
         '| --- | --- | --- | --- | --- | --- | --- | --- |',
     ]
     done = 0
+    notes = []
     for acc, rec in member_rows:
         profile = acc.profile if acc else {}
         name = profile.get('name') or (acc.account if acc else '未知')
@@ -200,9 +205,14 @@ def _render_digest(g, date, member_rows):
                 need_photo = '需要' if rec.need_photo else '不需要'
             if rec.status == 'success':
                 done += 1
+            reason = (rec.fail_reason or '').strip()
+            if rec.status in ('fail', 'skip') and reason:
+                notes.append(f'- {name}（{status}）：{reason}')
         lines.append(f'| {student_no} | {className} | {name} | {status} | {task} | {initiator} | {need_photo} | {sign_time} |')
     total = len(member_rows)
     lines += ['', f'> 共 {total} 人，已签 **{done}** 人']
+    if notes:
+        lines += ['', '**说明**'] + notes
     return title, '\n'.join(lines)
 
 

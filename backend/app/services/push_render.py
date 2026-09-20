@@ -4,7 +4,9 @@
 # 签到状态（类型/状态/时间）、个人信息（姓名/学号/专业/班级）、
 # 签到任务（任务名/时间段/发起人/是否需要图片）、签到参数（地址/经纬度/备注/图组/配置套）。
 # 通道差异：pushplus 按 template 渲染；serverchan 仅纯文本；email 支持 HTML——
-# template=html 时以 text/html 邮件发送，txt/markdown 回落纯文本。
+# template=html 时以 text/html 邮件发送，txt/markdown 回落纯文本；qq 回落 markdown。
+# 三个渲染器共用 reason_of() 取失败/跳过原因：各渠道内容必须一致，各自判状态会漏
+# （曾发生邮件有「跳过原因」、群推送只剩「跳过」两字）。
 # PushPlus 长度守卫：标题≤100 字、内容≤20000 字（取实名用户下限，会员更高，保守值避免被截断）。
 import logging
 import os
@@ -29,6 +31,8 @@ if not PUSH_VERIFY_SSL:
 PUSHPLUS_TITLE_MAX = 100
 PUSHPLUS_CONTENT_MAX = 20000
 STATUS_LABEL = {'success': '成功', 'skip': '跳过', 'fail': '失败'}
+# 原因行标签：跳过同样有原因（如「本时段任务已完成签到」），三个渲染器统一取这里
+REASON_LABEL = {'fail': '失败原因', 'skip': '跳过原因'}
 STATUS_COLOR = {'success': '#15a05a', 'skip': '#d97706', 'fail': '#e23b3b'}
 # 状态色浅底（用于 chip / 分组强调），与主色同源，保证配色统一
 STATUS_COLOR_SOFT = {'success': '#e7f6ee', 'skip': '#fdf2e3', 'fail': '#fdecec'}
@@ -47,6 +51,17 @@ def _esc(s):
             .replace('"', '&quot;').replace("'", '&#39;'))
 
 
+def reason_of(ctx):
+    """本次推送要展示的原因行 (标签, 原因)；成功或原因为空时返回 None。
+
+    唯一出口：html / txt / markdown 三个渲染器都从这里取，防止某个渠道漏掉原因。
+    曾只在 render_html 里对 skip 出原因（判 fail + skip），txt/markdown 却只判 fail，
+    于是同一次执行在邮件里能看到「跳过原因」、在 QQ / ServerChan 里只看到「跳过」。"""
+    label = REASON_LABEL.get(ctx.get('status'))
+    text = (ctx.get('reason') or '').strip()
+    return (label, text) if label and text else None
+
+
 def _lookup_location(location_id):
     """按位置池 id 取名称/经纬度/地址；缺失返回 None（推送里展示为未配置）。"""
     if not location_id:
@@ -61,12 +76,14 @@ def _lookup_location(location_id):
 
 
 def build_ctx(acc, schedule, resolved, status, reason='', signed_at=None, image_url='', remark=None,
-              task_name='', task_window='', need_photo=None, initiator=''):
+              task_name='', task_window='', need_photo=None, initiator='', image_group_id=None):
     """组装推送上下文：账号信息来自 acc.profile，任务/时间/位置来自 schedule 与 resolved。
     remark 显式传入时（调度器按本次实际提交选取的单条）优先使用；为 None 时回退到
     合并全部备注（凭证测试推送预览用，便于一眼看全已配置备注）。
     task_name/task_window/need_photo 来自 B 平台进行中任务（调度器执行时经 extra 传入；
     任务未找到或测试推送等场景留空，卡片显示「—」）。
+    image_group_id 显式传入时为本次实际命中的图库 id（调度器经 resolve_image_group 解析而来），
+    未传才退回配置里的取值。
     config_source 按 schedule.mode 推导：follow→配置套名，custom→自定义，standalone→独立配置。"""
     profile = getattr(acc, 'profile', None) or {}
     name = (profile.get('name') or '').strip() or (getattr(acc, 'account', '') or '未知账号')
@@ -80,10 +97,12 @@ def build_ctx(acc, schedule, resolved, status, reason='', signed_at=None, image_
     sign_at = signed_at or now_cst()
     sign_time = sign_at.strftime('%Y-%m-%d %H:%M')
     loc = _lookup_location((resolved or {}).get('locationId'))
-    # 图片分组名：从 resolved 配置的 image.groupId 解析（不展示图片本身，仅展示所用分组）
+    # 图片分组名：优先取调用方解析出的「本次实际命中」图库——byGroup 模式下分组绑定的图库
+    # 与配置套默认图库并非同一个，只读配置值会把推送里的分组报成默认值（实测签到用 827、
+    # 推送显示 829）。未传（凭证测试推送等无账号语境的预览）才退回配置取值。
     image_cfg = (resolved or {}).get('image') or {}
     image_group_name = ''
-    gid = image_cfg.get('groupId')
+    gid = image_group_id if image_group_id is not None else image_cfg.get('groupId')
     if gid:
         try:
             g = db.session.get(ImageGroup, int(gid))
@@ -178,12 +197,12 @@ def render_html(ctx):
                    f'<span style="opacity:.5;margin:0 6px;">·</span>{_esc(ctx["remark"] or "—")}</div>')
 
     reason_html = ''
-    if ctx['status'] in ('fail', 'skip') and ctx['reason']:
-        label = '失败原因' if ctx['status'] == 'fail' else '跳过原因'
+    rt = reason_of(ctx)
+    if rt:
         reason_html = (f'<div style="margin:14px 0 4px;padding:11px 13px;border-radius:10px;'
                        f'background:{color_soft};color:{color};font-size:13px;line-height:1.55;">'
-                       f'<span style="font-weight:700;">{label}</span>'
-                       f'<span style="opacity:.55;margin:0 6px;">·</span>{_esc(ctx["reason"])}</div>')
+                       f'<span style="font-weight:700;">{rt[0]}</span>'
+                       f'<span style="opacity:.55;margin:0 6px;">·</span>{_esc(rt[1])}</div>')
 
     hero = (f'<div style="padding:22px 22px 18px;border-bottom:1px solid #f2f3f5;">'
             f'<div style="display:flex;justify-content:space-between;align-items:center;">'
@@ -247,8 +266,9 @@ def render_txt(ctx):
         f"签到时间：{ctx['sign_time']}",
         f"发起人：{ctx['initiator']}",
     ]
-    if ctx['status'] == 'fail' and ctx['reason']:
-        lines += ['', f"失败原因：{ctx['reason']}"]
+    rt = reason_of(ctx)
+    if rt:
+        lines += ['', f'{rt[0]}：{rt[1]}']
     return _truncate('\n'.join(lines), PUSHPLUS_CONTENT_MAX)
 
 
@@ -277,8 +297,9 @@ def render_markdown(ctx):
         f"- **签到时间**：{ctx['sign_time']}",
         f"- **发起人**：{ctx['initiator']}",
     ]
-    if ctx['status'] == 'fail' and ctx['reason']:
-        md += ['', f"**失败原因**：{ctx['reason']}"]
+    rt = reason_of(ctx)
+    if rt:
+        md += ['', f'**{rt[0]}**：{rt[1]}']
     return _truncate('\n'.join(md), PUSHPLUS_CONTENT_MAX)
 
 

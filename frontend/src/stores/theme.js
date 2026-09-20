@@ -74,6 +74,49 @@ export function withAlpha(color, a) {
   return `rgba(${r}, ${g}, ${b}, ${a})`
 }
 
+// 折线图面积填充：顶部稍浓、底部近透明。lineSeries 已内置；非折线图若要用同款渐变底
+// 可直接取用。两处仪表盘都要它，各写一份必然分叉（管理端一度只有「成功」一条挂了
+// 8% 纯色填充、另两条干脆没有）。
+export function areaFill(color) {
+  return {
+    type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+    colorStops: [
+      { offset: 0, color: withAlpha(color, 0.22) },
+      { offset: 1, color: withAlpha(color, 0.02) },
+    ],
+  }
+}
+
+// 重叠感知的绘制层序。折线在数值为 0 处会与其它系列**完全重合**，而 ECharts 的 hover
+// 命中只取最上面的那个图形——被压住的系列会整条都点不亮（实测「失败」多数日子为 0、
+// 整条贴在基线上，悬停永远落到后画的「跳过」上）。按当前视图的合计值把**数值小的系列
+// 放到上层**，保证最容易被遮挡的那条也留得出可命中的位置。返回值直接喂给 lineSeries 的 z。
+export function overlapZOrder(rows, keys) {
+  const total = (k) => rows.reduce((n, r) => n + (Number(r[k]) || 0), 0)
+  const asc = keys.slice().sort((a, b) => total(a) - total(b))
+  const z = {}
+  asc.forEach((k, i) => { z[k] = asc.length - i })
+  return z
+}
+
+// 趋势折线系列的统一样式与交互：圆润曲线 + 描边端点 + 渐变面积 + hover 聚焦其余淡出。
+// 用户端与管理端仪表盘共用，各写一份必然走样——管理端一度只有 5px 裸点、无线宽与
+// 动画设置，端点也没描边。
+// borderColor 传**所在层的底色**（chart.border）：端点靠它从曲线上「抠」出来，故两侧
+// 图表必须落在同一种卡片底色上，否则描边会与背景对不上。
+// z 可选，由 overlapZOrder 算出来——折线重叠时它决定谁能被鼠标命中。
+export function lineSeries(name, data, color, borderColor, z) {
+  return {
+    name, type: 'line', smooth: true, symbol: 'circle', symbolSize: 7, showSymbol: true, data,
+    lineStyle: { width: 2.5, color },
+    itemStyle: { color, borderColor, borderWidth: 2 },
+    areaStyle: areaFill(color),
+    emphasis: { focus: 'series' },
+    z,
+    animationDuration: 1100, animationEasing: 'cubicOut',
+  }
+}
+
 const media = typeof window !== 'undefined' && window.matchMedia
   ? window.matchMedia('(prefers-color-scheme: dark)')
   : null

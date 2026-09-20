@@ -225,7 +225,7 @@ import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import BaseChart from '@/components/BaseChart.vue'
 import { useDashboardStore } from '@/stores/dashboard'
-import { useThemeStore, withAlpha } from '@/stores/theme'
+import { useThemeStore, lineSeries, overlapZOrder, withAlpha } from '@/stores/theme'
 import { accountTypeMetaByCode, taskTypeMeta } from '@/utils/accountType'
 
 const store = useDashboardStore()
@@ -257,6 +257,8 @@ const fType = ref('all')
 
 // ===== 派生：趋势 / 分布 / 完成情况 =====
 const activeTrend = computed(() => me.value.trend?.[fRange.value] || [])
+// 层序：数值小的系列画在上层，否则它整条被后画的系列压住、鼠标永远点不亮
+const trendZ = computed(() => overlapZOrder(activeTrend.value, ['success', 'fail', 'skip']))
 const typeTotal = computed(() => (me.value.typeDist?.dorm || 0) + (me.value.typeDist?.activity || 0))
 const taskSummaryTotal = computed(
   () => (me.value.taskSummary?.success || 0) + (me.value.taskSummary?.fail || 0) + (me.value.taskSummary?.skip || 0)
@@ -297,22 +299,6 @@ const C = {
   get axis()     { return themeStore.chart.axis },
   get border()   { return themeStore.chart.border },
 }
-// 折线面积渐变（顶部稍浓、底部透明）
-const areaFill = (hex) => ({
-  type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-  colorStops: [{ offset: 0, color: withAlpha(hex, 0.22) }, { offset: 1, color: withAlpha(hex, 0.02) }],
-})
-// 单条趋势线：圆润曲线 + 白色描边端点 + 柔和渐变 + hover 聚焦其余淡出
-function lineSeries(name, data, color) {
-  return {
-    name, type: 'line', smooth: true, symbol: 'circle', symbolSize: 7, showSymbol: true, data,
-    lineStyle: { width: 2.5, color },
-    itemStyle: { color, borderColor: C.border, borderWidth: 2 },
-    areaStyle: areaFill(color),
-    emphasis: { focus: 'series' },
-    animationDuration: 1100, animationEasing: 'cubicOut',
-  }
-}
 
 const trendOption = computed(() => ({
   grid: { left: 44, right: 18, top: 40, bottom: 28 },
@@ -330,9 +316,9 @@ const trendOption = computed(() => ({
   },
   yAxis: { type: 'value', min: 0, axisLabel: { color: C.ink, fontSize: 12 }, splitLine: { lineStyle: { color: C.grid, type: 'dashed' } } },
   series: [
-    lineSeries('成功', activeTrend.value.map((p) => p.success), C.success),
-    lineSeries('失败', activeTrend.value.map((p) => p.fail), C.fail),
-    lineSeries('跳过', activeTrend.value.map((p) => p.skip), C.skip),
+    lineSeries('成功', activeTrend.value.map((p) => p.success), C.success, C.border, trendZ.value.success),
+    lineSeries('失败', activeTrend.value.map((p) => p.fail), C.fail, C.border, trendZ.value.fail),
+    lineSeries('跳过', activeTrend.value.map((p) => p.skip), C.skip, C.border, trendZ.value.skip),
   ]
 }))
 

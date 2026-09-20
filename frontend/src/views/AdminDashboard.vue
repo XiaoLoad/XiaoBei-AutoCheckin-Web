@@ -647,7 +647,7 @@ import BaseChart from '@/components/BaseChart.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import Icon from '@/components/Icon.vue'
 import { useAdminOverviewStore } from '@/stores/adminOverview'
-import { useThemeStore, withAlpha } from '@/stores/theme'
+import { useThemeStore, lineSeries, overlapZOrder, withAlpha } from '@/stores/theme'
 import { taskTypeMeta } from '@/utils/accountType'
 import { channelDot, channelLabel } from '@/utils/pushChannels'
 
@@ -733,6 +733,7 @@ const CH = {
   get brandLight() { return themeStore.chart.brandLight },
   get success() { return themeStore.chart.success },
   get warning() { return themeStore.chart.warning },
+  get amber() { return themeStore.chart.amber },
   get danger() { return themeStore.chart.danger },
   get neutral() { return themeStore.chart.neutral },
   get categorical() { return themeStore.chart.categorical },
@@ -740,27 +741,45 @@ const CH = {
 
 // ===== 趋势图 =====
 const trendSeries = computed(() => dash.value.trend[fRange.value] || [])
+// 层序：数值小的系列画在上层。三条线在值为 0 处会完全重合，而 ECharts 的 hover 命中
+// 只取最上层——不这么排，被压住的那条整条都点不亮（「失败」多数日子为 0 即如此）。
+const trendZ = computed(() => overlapZOrder(trendSeries.value, ['success', 'fail', 'skip']))
 const trendOption = computed(() => ({
   grid: { left: 8, right: 16, top: 36, bottom: 8, containLabel: true },
-  tooltip: { trigger: 'axis' },
-  legend: { data: ['成功', '失败', '跳过'], top: 0, textStyle: { color: CH.ink, fontSize: 11 } },
-  xAxis: { type: 'category', boundaryGap: false, data: trendSeries.value.map((d) => d.date), axisLine: { lineStyle: { color: CH.axis } } },
-  yAxis: { type: 'value', splitLine: { lineStyle: { color: CH.grid } } },
+  tooltip: {
+    trigger: 'axis',
+    backgroundColor: withAlpha(themeStore.meta.panel, 0.92), borderWidth: 0, padding: [6, 10],
+    textStyle: { color: '#fff', fontSize: 12 },
+    axisPointer: { type: 'line', lineStyle: { color: CH.brand, type: 'dashed' } }
+  },
+  legend: { data: ['成功', '失败', '跳过'], top: 0, right: 0, icon: 'roundRect', itemWidth: 10, itemHeight: 10, textStyle: { color: CH.ink, fontSize: 12 } },
+  xAxis: {
+    type: 'category', boundaryGap: false, data: trendSeries.value.map((d) => d.date),
+    axisLine: { lineStyle: { color: CH.axis } }, axisTick: { show: false },
+    axisLabel: { color: CH.ink, fontSize: 12, interval: fRange.value === '30d' ? 4 : 0 }
+  },
+  yAxis: { type: 'value', min: 0, axisLabel: { color: CH.ink, fontSize: 12 }, splitLine: { lineStyle: { color: CH.grid, type: 'dashed' } } },
   series: [
-    { name: '成功', type: 'line', smooth: true, symbolSize: 5, data: trendSeries.value.map((d) => d.success), itemStyle: { color: CH.success }, areaStyle: { color: withAlpha(CH.success, 0.08) } },
-    { name: '失败', type: 'line', smooth: true, symbolSize: 5, data: trendSeries.value.map((d) => d.fail), itemStyle: { color: CH.danger } },
-    { name: '跳过', type: 'line', smooth: true, symbolSize: 5, data: trendSeries.value.map((d) => d.skip), itemStyle: { color: CH.warning } },
+    lineSeries('成功', trendSeries.value.map((d) => d.success), CH.success, CH.border, trendZ.value.success),
+    lineSeries('失败', trendSeries.value.map((d) => d.fail), CH.danger, CH.border, trendZ.value.fail),
+    lineSeries('跳过', trendSeries.value.map((d) => d.skip), CH.amber, CH.border, trendZ.value.skip),
   ],
 }))
 
 // ===== 失败原因分布（归类后） =====
 const failTotal = computed(() => dash.value.failCategories.reduce((n, c) => n + c.count, 0))
 const failOption = computed(() => ({
-  tooltip: { trigger: 'item', formatter: '{b}: {c} 次（{d}%）' },
+  tooltip: {
+    trigger: 'item',
+    backgroundColor: withAlpha(themeStore.meta.panel, 0.92), borderWidth: 0, padding: [6, 10],
+    textStyle: { color: '#fff', fontSize: 12 },
+    formatter: '{b}：{c} 次 ({d}%)'
+  },
   legend: { orient: 'vertical', right: 8, top: 'middle', textStyle: { color: CH.ink, fontSize: 11 } },
   series: [{
-    type: 'pie', radius: ['48%', '72%'], center: ['36%', '50%'],
+    type: 'pie', radius: ['48%', '72%'], center: ['36%', '50%'], avoidLabelOverlap: true,
     itemStyle: { borderRadius: 6, borderColor: CH.border, borderWidth: 2 },
+    emphasis: { scale: true, scaleSize: 6 },
     label: { show: false },
     data: dash.value.failCategories.map((c, i) => ({ name: c.category, value: c.count, itemStyle: { color: CH.categorical[i % CH.categorical.length] } })),
   }],
@@ -780,9 +799,18 @@ const quotaOption = computed(() => {
   ]
   return {
     grid: { left: 8, right: 16, top: 30, bottom: 8, containLabel: true },
-    tooltip: { trigger: 'axis', formatter: '{b}: {c} 人' },
-    xAxis: { type: 'category', data: data.map((d) => d.name), axisLine: { lineStyle: { color: CH.axis } } },
-    yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: CH.grid } } },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: withAlpha(themeStore.meta.panel, 0.92), borderWidth: 0, padding: [6, 10],
+      textStyle: { color: '#fff', fontSize: 12 },
+      formatter: '{b}：{c} 人'
+    },
+    xAxis: {
+      type: 'category', data: data.map((d) => d.name),
+      axisLine: { lineStyle: { color: CH.axis } }, axisTick: { show: false },
+      axisLabel: { color: CH.ink, fontSize: 12 }
+    },
+    yAxis: { type: 'value', minInterval: 1, axisLabel: { color: CH.ink, fontSize: 12 }, splitLine: { lineStyle: { color: CH.grid, type: 'dashed' } } },
     series: [{ type: 'bar', barWidth: 36, data, label: { show: true, position: 'top', color: CH.ink } }],
   }
 })

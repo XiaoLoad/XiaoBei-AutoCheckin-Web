@@ -181,52 +181,30 @@ def purge_expired_trash(days=7):
     return len(stale)
 
 
-def list_active_ids(user_id, group_id=None):
-    """签到取图预留：按用户（可选按分组）取 active 图片 id 列表（新→旧）。
-    签到图片提交链路落地时，配置 image.groupId 即按此过滤取图；
-    group_id 为 None 表示不分组过滤（全部图库）。"""
-    from app.models import PoolImage
+def _reclaim_used(user_id, group_id=None):
+    """recycle 回池：把取图范围内的 used 整批放回 active，返回回池张数。
 
-    q = PoolImage.query.filter_by(user_id=user_id, status='active')
-    if group_id is not None:
-        q = q.filter_by(group_id=group_id)
-    return [i.id for i in q.order_by(PoolImage.id.desc()).all()]
-
-
-def consume_image(image_id, user_id, strategy):
-    """消费图片流转（供调度器在真实签到提交时按 config.image.strategy 调用）。
-    recycle 循环复用 → used（保留、不入回收站、不受 7 天清理影响，可轮回取用）；
-    trash 用后入回收站 → trash（可 7 天内恢复）；
-    delete 用后删除 → 物理删除文件与记录；
-    缺省/未知策略 → trash（可恢复，避免误删）。
-
-    关键：recycle 不再走 trash，从而与回收站 7 天自动删除解耦，解决「轮回使用却被清理」的冲突。"""
+    「已使用」只是「本轮内别重复用同一张」的暂存态，不是终态：范围内 active 取尽即整批
+    回池、重新随机，图确实不够时才必然重复。本函数是**唯一的回池出口**——历史上认领链路
+    漏接了它（接了回池的是另一条已废弃的消费链路），于是签到取不到图直接判失败、第 5 人起
+    全部报「图库暂无可用图片」，而 UI 一直承诺「用完放回图库，之后仍会被抽中」。"""
+    from sqlalchemy import update
     from app.extensions import db
     from app.models import PoolImage
 
-    img = PoolImage.query.filter_by(id=image_id, user_id=user_id).first()
-    if not img:
-        return None
-    if strategy == 'recycle':
-        img.status = 'used'
-        img.trashed_at = None
-    elif strategy == 'delete':
-        delete_file(img.user_id, img.filename)
-        db.session.delete(img)
-    else:  # 'trash' 或未知：落回收站，沿用原可恢复语义
-        img.status = 'trash'
-        img.trashed_at = now_cst()
+    cond = [PoolImage.user_id == user_id, PoolImage.status == 'used']
+    if group_id is not None:
+        cond.append(PoolImage.group_id == group_id)
+    res = db.session.execute(
+        update(PoolImage).where(*cond)
+        .values(status='active', trashed_at=None)
+        .execution_options(synchronize_session=False))
     db.session.commit()
-    return img
+    return res.rowcount
 
 
-def claim_image_for_submit(user_id, group_id=None, strategy='trash'):
-    """提交签到链路的图片认领：随机选一张 active 图 → 读出字节 → 按策略原子认领。
-    与 consume_next_image 的区别：字节与认领严格对应（读文件后按 id 认领，认领失败换一张重试），
-    供调度器在提交前取图、失败后回滚。返回 {'id', 'bytes', 'orig_name', 'mime'}；无可用图返回 None。
-
-    认领语义与 consume_image 一致：recycle → used（轮回复用）；trash → 回收站；delete →
-    删除记录与文件（字节已先读出，供提交使用）。strategy 未知按 trash。"""
+def _claim_once(user_id, group_id=None, strategy='trash'):
+    """单轮认领：只从 active 里挑，不涉及回池（回池由 claim_image_for_submit 兜底）。"""
     from app.extensions import db
     from app.models import PoolImage
     from sqlalchemy import delete as sa_delete
@@ -254,13 +232,16 @@ def claim_image_for_submit(user_id, group_id=None, strategy='trash'):
         if strategy == 'delete':
             row = db.session.get(PoolImage, img.id)
             filename = row.filename
+            # commit 后对象过期，且该行已被删除、惰性刷新必然失败（ObjectDeletedError），
+            # 故全部字段须在 commit 前取出。
+            img_id, orig_name, mime = row.id, row.orig_name, row.mime
             res = db.session.execute(
                 sa_delete(PoolImage).where(*occupy).execution_options(synchronize_session=False))
             db.session.commit()
             if res.rowcount == 1:
                 delete_file(user_id, filename)
-                return {'id': img.id, 'bytes': data,
-                        'orig_name': row.orig_name, 'mime': row.mime}
+                return {'id': img_id, 'bytes': data,
+                        'orig_name': orig_name, 'mime': mime}
         else:
             recycle = strategy == 'recycle'
             res = db.session.execute(
@@ -273,6 +254,25 @@ def claim_image_for_submit(user_id, group_id=None, strategy='trash'):
                 return {'id': img.id, 'bytes': data,
                         'orig_name': img.orig_name, 'mime': img.mime}
     return None
+
+
+def claim_image_for_submit(user_id, group_id=None, strategy='trash'):
+    """提交签到链路的图片认领（**全系统唯一的取图实现**）：随机选一张 active 图 → 读出字节 →
+    按策略原子认领。字节与认领严格对应（读文件后按 id 认领，认领失败换一张重试），
+    供调度器在提交前取图、失败后回滚。返回 {'id', 'bytes', 'orig_name', 'mime'}；无可用图返回 None。
+
+    认领语义：recycle → used（轮回复用）；trash → 回收站；delete → 删除记录与文件
+    （字节已先读出，供提交使用）。strategy 未知按 trash。
+
+    recycle 轮回：active 取尽即把范围内 used 整批回池再取一轮（见 _reclaim_used）；
+    只有回池无图可回（图确实用完了）才判无图。演示 4 张图供 6 人签到由此成立——
+    前 4 人各用一张不同的，后 2 人从回池的 4 张里随机复用。"""
+    claimed = _claim_once(user_id, group_id, strategy)
+    if claimed is not None or strategy != 'recycle':
+        return claimed
+    if _reclaim_used(user_id, group_id) == 0:
+        return None
+    return _claim_once(user_id, group_id, strategy)
 
 
 def rollback_claim(image_id, user_id, strategy):
@@ -292,77 +292,3 @@ def rollback_claim(image_id, user_id, strategy):
         .execution_options(synchronize_session=False))
     db.session.commit()
     return res.rowcount == 1
-
-
-def consume_next_image(user_id, group_id=None, strategy='trash'):
-    """按取图范围随机消费一张图片（并发安全，供调度器打卡成功后调用）。
-
-    范围：group_id None=全部图库，否则限定分组（对齐 config.image.groupId 的 '' 口径）。
-    随机性：对范围内 active 图片 id 洗牌后逐一尝试。
-    防冲突：用「原子 UPDATE ... WHERE status='active'」抢占，命中 rowcount==1 才算消费成功；
-    多账号同分钟并发随机到同一张时，只有一个任务命中，其余自动改试下一张，无需显式加锁。
-    策略：recycle → used（轮回复用）；trash → 回收站；delete → 物理删除；未知 → trash。
-    recycle 轮回语义：范围内 active 取尽后，将范围内 used 整批放回 active（转入已使用的图片
-    重新可用），再取一轮；trash/delete 池空即无图可消费，不回池。
-
-    返回被消费图片的 id；范围内无可用图片返回 None。"""
-    from sqlalchemy import delete as sa_delete
-    from sqlalchemy import update
-
-    from app.extensions import db
-    from app.models import PoolImage
-
-    def _active_ids():
-        q = db.session.query(PoolImage.id).filter(
-            PoolImage.user_id == user_id, PoolImage.status == 'active')
-        if group_id is not None:
-            q = q.filter(PoolImage.group_id == group_id)
-        return [r.id for r in q.all()]
-
-    def _try_consume_once():
-        ids = _active_ids()
-        random.shuffle(ids)
-        for img_id in ids:
-            occupy = [PoolImage.id == img_id, PoolImage.status == 'active']
-            if strategy == 'delete':
-                row = db.session.get(PoolImage, img_id)
-                if row is None:
-                    continue
-                filename = row.filename  # 先取文件名，commit 后对象过期无法再惰性读取
-                res = db.session.execute(
-                    sa_delete(PoolImage).where(*occupy)
-                    .execution_options(synchronize_session=False))
-                db.session.commit()
-                if res.rowcount == 1:
-                    delete_file(user_id, filename)
-                    return img_id
-            else:
-                recycle = strategy == 'recycle'
-                res = db.session.execute(
-                    update(PoolImage).where(*occupy)
-                    .values(status='used' if recycle else 'trash',
-                            trashed_at=None if recycle else now_cst())
-                    .execution_options(synchronize_session=False))
-                db.session.commit()
-                if res.rowcount == 1:
-                    return img_id
-        return None
-
-    consumed = _try_consume_once()
-    if consumed is not None:
-        return consumed
-    if strategy != 'recycle':
-        return None
-
-    # recycle 回池：范围内 used 整批放回 active（used→active 幂等，并发重复回池无害）
-    reclaim = [PoolImage.user_id == user_id, PoolImage.status == 'used']
-    if group_id is not None:
-        reclaim.append(PoolImage.group_id == group_id)
-    res = db.session.execute(
-        update(PoolImage).where(*reclaim)
-        .values(status='active', trashed_at=None)
-        .execution_options(synchronize_session=False))
-    db.session.commit()
-    if res.rowcount == 0:
-        return None
-    return _try_consume_once()

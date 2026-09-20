@@ -19,7 +19,7 @@
       </div>
 
       <!-- 导航 -->
-      <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-6 sidebar-scroll">
+      <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-6">
         <div v-for="group in navGroups" :key="group.title">
           <p class="px-3 mb-2 text-[11px] font-semibold uppercase tracking-wider text-white/50">
             {{ group.title }}
@@ -177,7 +177,7 @@
       <!-- 内容滚动容器：保留 flex 列布局，使各页面根容器（flex-1）的高度分配与改动前一致，
            用户/账号管理等页的列表卡片固定高度与内部滚动不受影响。
            底部间距收归各页面根容器末尾的真实占位块（非滚动容器自身 padding，滚动时不被折叠），全站统一 24px。 -->
-      <main class="flex flex-col p-4 sm:px-6 sm:pt-6 content-scroll lg:flex-1 lg:overflow-y-auto">
+      <main class="flex flex-col p-4 sm:px-6 sm:pt-6 lg:flex-1 lg:overflow-y-auto">
         <RouterView />
       </main>
     </div>

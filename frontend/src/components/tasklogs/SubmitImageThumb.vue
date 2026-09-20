@@ -1,7 +1,7 @@
 <template>
   <div class="flex items-center gap-2.5">
-    <!-- delete 策略：图片已被物理删除，无法回看 -->
-    <template v-if="strategy === 'delete'">
+    <!-- delete 策略且确实取过图：图片已被物理删除，无法回看（无 image_id 说明压根没取到图，落到下方「无图」） -->
+    <template v-if="strategy === 'delete' && imageId">
       <span
         class="grid h-12 w-12 shrink-0 place-items-center rounded-lg border border-dashed border-ink/10 bg-cloud text-[11px] text-ink-muted"
         >已删除</span
@@ -28,7 +28,8 @@
       <span class="text-xs text-ink-muted">图片 ID {{ imageId }} · 策略 {{ strategyLabel }}</span>
     </template>
 
-    <span v-else class="text-xs text-ink-muted">无图（未启用图库或任务无需图）</span>
+    <!-- 三种成因都会走到这里：配置未启用图库、任务本身无需图、图库当时无图可抽（后端降级为无图提交） -->
+    <span v-else class="text-xs text-ink-muted">无图（未启用图库、任务无需图或图库暂无可抽图片）</span>
 
     <!-- 大图预览：自包含遮罩，点击空白处关闭 -->
     <Teleport to="body">

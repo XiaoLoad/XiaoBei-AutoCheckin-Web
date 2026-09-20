@@ -778,18 +778,22 @@ def _checkin_flow(schedule, acc, session, resolved, remark):
                                 f'超出围栏半径 {int(radius)} 米（请调整位置池坐标，'
                                 f'或在配置套中关闭围栏拦截）'), attempt
 
-        # ⑤ 图片：任务需要图但未启用图库 → fail（宁可失败可感知，不静默交白卷）；
-        #    启用则先认领（原子抢占防同组并发取同一张），失败提交后回滚
+        # ⑤ 图片：一律以配置项 image.enabled 为准。
+        #    未启用 → 不取图、不上传；只有平台任务确实要求图片时才判失败（宁可失败可感知，
+        #    不静默交白卷）。启用 → 取一张附上（原子抢占，防同组并发取同一张），失败再回滚。
+        #    ⚠️启用但取不到图时，只有 needPhoto 为真才判失败；任务并不要求图片的降级为无图提交，
+        #    否则一个本来不需要图就能签到的任务，会仅仅因为图库空了而失败。
         need_photo = bool(task.get('needPhoto'))
-        if need_photo and not image_cfg.get('enabled'):
-            return 'fail', '该任务需要上传签到图片，请在配置套中启用图库并确认有可用图片', attempt
-        if image_cfg.get('enabled'):
+        if not image_cfg.get('enabled'):
+            if need_photo:
+                return 'fail', '该任务需要上传签到图片，请在配置套中启用图库并确认有可用图片', attempt
+        else:
             group = resolve_image_group(uid, resolved, acc)
             # 记下本次实际命中的图库：byGroup 下它与配置套默认图库不是一个，
             # 不记则推送只能读配置值，报出来的分组与实际取图不符
             attempt['image_group_id'] = group
             claimed = claim_image_for_submit(uid, group, strategy)
-            if not claimed:
+            if not claimed and need_photo:
                 return 'fail', '图库暂无可用图片，请先上传或调整取图范围', attempt
 
         # ⑥ 提交（know 实证契约 / sign 镜像契约）

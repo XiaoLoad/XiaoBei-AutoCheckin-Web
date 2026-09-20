@@ -169,7 +169,7 @@
                   共 {{ health.invalidCredentials.total }}
                 </span>
               </div>
-              <ul class="health-scroll space-y-1.5 overflow-y-auto pr-1 lg:max-h-60">
+              <ul class="space-y-1.5 overflow-y-auto pr-1 lg:max-h-60">
                 <li
                   v-for="row in health.invalidCredentials.list"
                   :key="'ic' + row.account"
@@ -207,7 +207,7 @@
                   共 {{ health.staleSign.total }} · 刻度 {{ STALE_BAR_DAYS }} 天
                 </span>
               </div>
-              <ul class="health-scroll space-y-1.5 overflow-y-auto pr-1 lg:max-h-60">
+              <ul class="space-y-1.5 overflow-y-auto pr-1 lg:max-h-60">
                 <li
                   v-for="row in health.staleSign.list"
                   :key="'st' + row.account + row.taskType"
@@ -404,7 +404,7 @@
               占用 ≥ {{ quota.warnRatio }}% · 共 {{ quota.warnTotal }} 人
             </span>
           </div>
-          <div class="health-scroll overflow-y-auto lg:max-h-[340px]">
+          <div class="overflow-y-auto lg:max-h-[340px]">
             <table class="w-full text-sm">
               <thead class="sticky top-0 bg-elevated">
                 <tr class="text-left text-ink-muted border-b border-ink/5">
@@ -451,7 +451,7 @@
           <h3 class="font-semibold text-ink">高频失败风险用户</h3>
           <span class="rounded-full bg-danger/10 px-2.5 py-0.5 text-xs font-medium text-danger">近 7 天 · 失败 ≥ 3 次或失败率 ≥ 50%</span>
         </div>
-        <div class="health-scroll overflow-y-auto lg:max-h-[420px]">
+        <div class="overflow-y-auto lg:max-h-[420px]">
           <table class="w-full text-sm">
             <thead>
               <tr class="text-left text-ink-muted border-b border-ink/5">
@@ -498,7 +498,7 @@
           </div>
         </div>
         <!-- 容器高度 = 表头 41 + 行高 45 × 每页 10 条 = 491：一页正好一屏，翻页后不必再补滚 -->
-        <div class="health-scroll overflow-y-auto lg:max-h-[491px]">
+        <div class="overflow-y-auto lg:max-h-[491px]">
           <table class="w-full text-sm">
             <thead>
               <tr class="text-left text-ink-muted border-b border-ink/5">

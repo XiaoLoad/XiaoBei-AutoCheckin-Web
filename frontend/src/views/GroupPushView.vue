@@ -534,7 +534,8 @@ const savingQQ = ref(false)
 
 // 图库归属：选择器常驻在取图面板里，只有值与已保存的不一致时才出现保存 / 取消
 const imageGroups = ref([])
-const imageTotals = ref({ ungrouped: 0, total: 0 })
+// 「全部图库」的两档张数（各分组之和 + 未分组已含在其中）；口径见 imageGroupCount/imageGroupUsed
+const imageTotals = ref({ total: 0, totalUsed: 0 })
 const imageDraft = ref('')
 const savingImage = ref(false)
 
@@ -553,10 +554,19 @@ function imageGroupLabel(id) {
   return g ? g.name : '原图库分组已删除'
 }
 
-// 可抽张数：后端按 status='active' 统计（与图库页「可抽张数」同口径）
+// 「可抽张数」按生效配置套的策略分两档，与配置页 ImageSection::poolOf 同口径：
+//   trash/delete：只有 active 能抽（used 属历史残留，永不参与）
+//   recycle     ：active 取尽会把 used 整批回池，故 active + used 都算
+// 资源接口只给 count/usedCount 两个原始数，策略这一层在这里换算——同一图库可被不同策略的
+// 配置套引用，后端替我们选口径就会错。选中分组的那一行已提示本组实际是哪一级在生效。
 function imageGroupCount(id) {
   const g = imageGroups.value.find((x) => String(x.id) === String(id))
   return g ? g.count : 0
+}
+
+function imageGroupUsed(id) {
+  const g = imageGroups.value.find((x) => String(x.id) === String(id))
+  return g ? (g.used || 0) : 0
 }
 
 function typeLabel(type) {
@@ -799,9 +809,20 @@ const imageChain = computed(() => {
   const rep = matched[0] || byGroup[0] || sets[0] || null
   const groupOn = matched.length > 0
   const bound = !!g.imageGroupId
+  // recycle 下 used 取尽会整批回池，故「可抽」= active + used；其余策略只算 active（见 imageGroupCount 注释）
+  const recycle = !!rep && rep.config.image.strategy === 'recycle'
+  const pool = (id) => imageGroupCount(id) + (recycle ? imageGroupUsed(id) : 0)
+  const allPool = () => (imageTotals.value.total || 0) + (recycle ? (imageTotals.value.totalUsed || 0) : 0)
+  // 只说「N 张」会让人以为回收站里的也算，故把回池这部分单独点名
+  // id 为空 = 回退到「全部图库」，此时张数取自 allPool()，回池量也要按总和算，否则数字被抬高却不说原因
+  const usedHint = (id) => {
+    const n = recycle ? (id ? imageGroupUsed(id) : (imageTotals.value.totalUsed || 0)) : 0
+    return n ? `已用 ${n} 张取尽后自动回池` : ''
+  }
+  const withHint = (note, id) => [note, usedHint(id)].filter(Boolean).join('；')
   const fallbackId = rep ? rep.config.image.groupId : ''
   const fallbackName = fallbackId ? imageGroupLabel(fallbackId) : '全部图库'
-  const fallbackCount = fallbackId ? imageGroupCount(fallbackId) : (imageTotals.value.total || null)
+  const fallbackCount = fallbackId ? pool(fallbackId) : (allPool() || null)
 
   let tier1Sub
   if (!sets.length) tier1Sub = '还没有签到配置套，取图方式未定'
@@ -820,7 +841,7 @@ const imageChain = computed(() => {
     {
       no: 2,
       label: '本组图库归属',
-      value: bound ? `${imageGroupLabel(g.imageGroupId)} · ${imageGroupCount(g.imageGroupId)} 张` : '未绑定',
+      value: bound ? `${imageGroupLabel(g.imageGroupId)} · ${pool(g.imageGroupId)} 张` : '未绑定',
       sub: bound && !groupOn ? '已绑 · 配置套当前不按分组取图，这一级不参与' : '',
       tone: !groupOn ? 'dim' : (bound ? 'hit' : 'warn')
     },
@@ -837,11 +858,11 @@ const imageChain = computed(() => {
   if (!sets.length) {
     verdict = { name: '', count: null, note: '还没有签到配置套，先建一个才能确定取图方式', cls: 'border-ink/10 bg-ink/[0.03] text-ink-muted' }
   } else if (!groupOn) {
-    verdict = { name: fallbackName, count: fallbackCount, note: '配置套没按分组取图，本组归属不生效', cls: 'border-ink/10 bg-ink/[0.03] text-ink-soft' }
+    verdict = { name: fallbackName, count: fallbackCount, note: withHint('配置套没按分组取图，本组归属不生效', fallbackId), cls: 'border-ink/10 bg-ink/[0.03] text-ink-soft' }
   } else if (bound) {
-    verdict = { name: imageGroupLabel(g.imageGroupId), count: imageGroupCount(g.imageGroupId), note: '只取本组照片', cls: 'border-brand/25 bg-brand/10 text-brand' }
+    verdict = { name: imageGroupLabel(g.imageGroupId), count: pool(g.imageGroupId), note: withHint('只取本组照片', g.imageGroupId), cls: 'border-brand/25 bg-brand/10 text-brand' }
   } else {
-    verdict = { name: fallbackName, count: fallbackCount, note: `本组未绑，含其它${kindLabel}的照片`, cls: 'border-warning/30 bg-warning/10 text-warning' }
+    verdict = { name: fallbackName, count: fallbackCount, note: withHint(`本组未绑，含其它${kindLabel}的照片`, fallbackId), cls: 'border-warning/30 bg-warning/10 text-warning' }
   }
   return { tiers, verdict }
 })
@@ -918,7 +939,7 @@ async function loadImageGroups() {
   try {
     const res = await fetchImageGroupSummary()
     imageGroups.value = res.items
-    imageTotals.value = { ungrouped: res.ungrouped, total: res.total }
+    imageTotals.value = { total: res.total, totalUsed: res.totalUsed }
   } catch (e) {
     /* toast by interceptor */
   }

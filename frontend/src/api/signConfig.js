@@ -202,13 +202,22 @@ export async function fetchImageGroups() {
 
 // 图库分组 + 张数汇总：分组页要说清「全部图库」有多少张可抽，而未分组图片不落在任何分组上，
 // 故连同 ungrouped 一起取；fetchImageGroups 保持只回分组数组，账号管理页继续用它
+// used/ungroupedUsed 是「已使用但 recycle 下会整批回池」的张数——同一图库可被不同策略的
+// 配置套引用，故资源接口只给两档原始计数，由调用方按生效配置套的 image.strategy 换算，别在这里替它定口径
 export async function fetchImageGroupSummary() {
   const data = await request({ url: '/pools/image-groups', method: 'get' })
   const items = (data.items || []).map((g) => ({
-    id: String(g.id), name: g.name, count: g.count || 0
+    id: String(g.id), name: g.name, count: g.count || 0, used: g.usedCount || 0
   }))
   const ungrouped = data.ungrouped || 0
-  return { items, ungrouped, total: items.reduce((n, g) => n + g.count, 0) + ungrouped }
+  const ungroupedUsed = data.ungroupedUsed || 0
+  return {
+    items,
+    ungrouped,
+    ungroupedUsed,
+    total: items.reduce((n, g) => n + g.count, 0) + ungrouped,
+    totalUsed: items.reduce((n, g) => n + g.used, 0) + ungroupedUsed
+  }
 }
 
 // 位置池：scope = system | user

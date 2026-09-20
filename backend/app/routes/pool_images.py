@@ -45,14 +45,25 @@ def _clean_group_name(raw):
 def list_image_groups():
     user = request.current_user
     groups = ImageGroup.query.filter_by(user_id=user.id).order_by(ImageGroup.id.asc()).all()
-    counts = dict(
-        db.session.query(PoolImage.group_id, db.func.count(PoolImage.id))
-        .filter_by(user_id=user.id, status='active')
-        .group_by(PoolImage.group_id).all()
-    )
-    items = [{'id': g.id, 'name': g.name, 'count': counts.get(g.id, 0)} for g in groups]
+
+    # 张数分两档返回，避免把「策略」这一层混进资源接口（同一图库可被不同策略的配置套引用）：
+    #   count    = status='active'，当前可立即抽，trash/delete 策略下的真实口径
+    #   usedCount = status='used'，recycle 下取尽会整批回池，故 recycle 的「可抽」= count + usedCount
+    # 由调用方按生效配置套的 image.strategy 换算，别在这里替它选口径。
+    def _by_group(status):
+        return dict(
+            db.session.query(PoolImage.group_id, db.func.count(PoolImage.id))
+            .filter_by(user_id=user.id, status=status)
+            .group_by(PoolImage.group_id).all()
+        )
+
+    active, used = _by_group('active'), _by_group('used')
+    items = [{'id': g.id, 'name': g.name,
+              'count': active.get(g.id, 0), 'usedCount': used.get(g.id, 0)} for g in groups]
     ungrouped = PoolImage.query.filter_by(user_id=user.id, status='active', group_id=None).count()
-    return success({'items': items, 'ungrouped': ungrouped})
+    ungrouped_used = PoolImage.query.filter_by(user_id=user.id, status='used',
+                                               group_id=None).count()
+    return success({'items': items, 'ungrouped': ungrouped, 'ungroupedUsed': ungrouped_used})
 
 
 @bp.route('/image-groups', methods=['POST'])
@@ -183,7 +194,7 @@ def restore_image(image_id):
 @bp.route('/images/<int:image_id>/used', methods=['POST'])
 @token_required
 def mark_image_used(image_id):
-    """手动标记为已使用（图库页演示/手动流转）；真实消费由调度器按 config.image.strategy 调 consume_image"""
+    """手动标记为已使用（图库页演示/手动流转）；真实取图走 image_store.claim_image_for_submit"""
     img = _owned_image(image_id, request.current_user)
     if not img:
         return error(message='图片不存在', code=4040, status=404)

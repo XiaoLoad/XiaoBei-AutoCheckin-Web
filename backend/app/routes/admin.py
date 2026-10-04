@@ -666,3 +666,84 @@ def reveal_account_secret(account_id):
     resp = make_response(success({'password': plain}, message='密码已解密，请注意保管'))
     resp.headers['Cache-Control'] = 'no-store'
     return resp
+
+
+# ============ 运行日志（服务端 app.log 只读尾部，排障用） ============
+# 调度/推送的 INFO 级过程日志只落盘不上界面，线上排障必须登服务器翻文件。
+# 此端点把日志尾部透出给管理员：只读、限长、支持关键字过滤与跨轮转文件翻页。
+# 日志内容（坐标/账号名/任务名）均为 admin 已可见数据，无新增暴露面；不含密码/token。
+
+_RUNTIME_LOG_MAX_BYTES = 512 * 1024   # 单文件最多读取尾部 512KB，防大文件拖垮响应
+_RUNTIME_LOG_MAX_LINES = 2000         # 返回行数上限
+
+
+def _read_log_tail(path, max_bytes=_RUNTIME_LOG_MAX_BYTES):
+    """读文件尾部 ≤max_bytes 字节并按行拆分（首行可能被截半，丢弃）。
+    文件不存在返回空列表（轮转窗口刚切换时 app.log 可能短暂缺位）。"""
+    try:
+        size = os.path.getsize(path)
+        with open(path, 'rb') as f:
+            if size > max_bytes:
+                f.seek(size - max_bytes)
+            data = f.read()
+    except OSError:
+        return []
+    lines = data.decode('utf-8', errors='replace').splitlines()
+    # 从中间起读时首行大概率残缺；整文件不足 max_bytes 时只有一行也完整
+    if size > max_bytes and lines:
+        lines = lines[1:]
+    return lines
+
+
+@bp.route('/runtime-logs', methods=['GET'])
+@admin_required
+def runtime_logs():
+    """运行日志尾部（倒序：最新在前）。query 参数：
+    tail    单文件行数上限（默认 300，上限 2000）；
+    q       关键字过滤（大小写不敏感的原文匹配）；
+    rotated 是否并入轮转文件（app.log.1/.2/.3，按新旧次序拼接后再截断）；
+    format  json（默认，界面取数）| txt（导出纯文本附件，倒序原文）。"""
+    try:
+        tail = min(max(1, int(request.args.get('tail', 300))), _RUNTIME_LOG_MAX_LINES)
+    except (TypeError, ValueError):
+        tail = 300
+    keyword = (request.args.get('q') or '').strip().lower()
+    include_rotated = (request.args.get('rotated') or '').lower() in ('1', 'true')
+    export_txt = (request.args.get('format') or '').lower() == 'txt'
+
+    # routes/admin.py 位于 backend/app/routes/ 下，回退三级到 backend/（与
+    # app/__init__.py 的 _setup_logging 同一目录口径：backend/logs/app.log）
+    logs_dir = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__)))), 'logs')
+    files = ['app.log']
+    if include_rotated:
+        files += ['app.log.1', 'app.log.2', 'app.log.3']
+
+    collected = []
+    for name in files:
+        for line in reversed(_read_log_tail(os.path.join(logs_dir, name))):  # 新→旧
+            if keyword and keyword not in line.lower():
+                continue
+            collected.append({'file': name, 'line': line})
+            if len(collected) >= tail:
+                break
+        if len(collected) >= tail:
+            break
+
+    if export_txt:
+        # 导出：把筛选结果作为纯文本附件下发。文件名带时间戳与关键字标记，
+        # 多个排障会话的导出文件不会互相覆盖；no-store 防中间层缓存旧日志。
+        stamp = now_cst().strftime('%Y%m%d_%H%M%S')
+        tag = re.sub(r'[^\w\u4e00-\u9fff]+', '_', keyword)[:32].strip('_') if keyword else 'all'
+        rotated_tag = '_rotated' if include_rotated else ''
+        body = '\n'.join(
+            f'[{it["file"]}] {it["line"]}' for it in collected)
+        resp = make_response(body)
+        filename = f'runtime_logs_{tag}_{stamp}{rotated_tag}.txt'
+        resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        resp.headers['Content-Type'] = 'text/plain; charset=utf-8'
+        resp.headers['Cache-Control'] = 'no-store'
+        return resp
+
+    return success({'items': collected, 'tail': tail, 'q': keyword,
+                    'rotated': include_rotated})

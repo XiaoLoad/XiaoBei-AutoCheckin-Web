@@ -83,6 +83,13 @@ const dynamicRoutes = [
     component: () => import('@/views/UserLogsView.vue'),
     // [权限判断] 用户日志（平台操作审计）仅管理员可访问：含全员用户名、IP、UA 与权限变更明细
     meta: { title: '用户日志', requiresAuth: true, roles: ['admin'], group: '运营管理', icon: 'shield', order: 2 }
+  },
+  {
+    path: '/runtime-logs',
+    name: 'runtime-logs',
+    component: () => import('@/views/RuntimeLogsView.vue'),
+    // [权限判断] 运行日志仅管理员可访问：服务端 app.log 只读尾部（调度/推送过程排障）
+    meta: { title: '运行日志', requiresAuth: true, roles: ['admin'], group: '系统', icon: 'records' }
   }
 ]
 

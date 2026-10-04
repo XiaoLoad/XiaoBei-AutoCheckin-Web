@@ -249,9 +249,10 @@ def test_reconcile_missed_runs_same_day_only(app, chain_user, monkeypatch):
 
     now = now_cst()
     with app.app_context():
-        # 当天 02:00（已过时刻，但在当天）→ 补跑
-        db.session.get(Schedule, sid_today).next_run_at = now.replace(
-            hour=2, minute=0, second=0, microsecond=0)
+        # 「今天已过时刻」= 现在的前一分钟（不能硬编码如 02:00：零点到两点之间
+        # 运行测试时 02:00 尚未到来，任务不满足 next_run_at <= now，用例必失败）
+        past_today = now - timedelta(minutes=1)
+        db.session.get(Schedule, sid_today).next_run_at = past_today
         # 昨天 21:20 → 跨天，不补跑
         db.session.get(Schedule, sid_stale).next_run_at = (
             now - timedelta(days=1)).replace(hour=21, minute=20, second=0, microsecond=0)

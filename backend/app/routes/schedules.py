@@ -216,7 +216,8 @@ def batch_manage():
     if not isinstance(raw, list):
         return error(message='缺少操作目标', code=4401, status=400)
 
-    # 去重 + 过滤非法项（taskType 仅接受两种签到类型）
+    # 去重 + 过滤非法项（taskType 仅接受两种签到类型；accountId 非整数同样跳过——
+    # 直接 int() 会让畸形 payload 变成未处理 500，而不是计入「无效目标」）
     seen = set()
     targets = []
     for t in raw:
@@ -225,7 +226,10 @@ def batch_manage():
         acc_id, task_type = t.get('accountId'), t.get('taskType')
         if acc_id is None or task_type not in ('dorm', 'activity'):
             continue
-        key = (int(acc_id), task_type)
+        try:
+            key = (int(acc_id), task_type)
+        except (TypeError, ValueError):
+            continue
         if key not in seen:
             seen.add(key)
             targets.append(key)

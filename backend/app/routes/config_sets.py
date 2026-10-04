@@ -85,11 +85,33 @@ def delete_set(set_id):
     s = ConfigSet.query.filter_by(id=set_id, user_id=request.current_user.id).first()
     if not s:
         return error(message='配置套不存在', code=4040, status=404)
-    # 任务已自持配置快照且解绑（config_set_id 仅作源自标签），删除配置套不再受引用限制
-    Schedule.query.filter_by(config_set_id=s.id).update({'config_set_id': None})
+
+    # standalone 任务已自持配置快照，config_set_id 仅是来源标签，删除不受影响；
+    # follow 任务实时引用配置套（无自持配置），删除会让它成为「配置孤儿」——
+    # 保持启用但每次执行都缺配置失败。先停用这类任务、统一摘除引用（FK 无级联，
+    # 不摘会 1451）再删，并把明细反馈给调用方。
+    follow_scheds = Schedule.query.filter_by(config_set_id=s.id, mode='follow').all()
+    disabled_count = 0
+    from app.services.scheduler import remove_job
+    for sc in follow_scheds:
+        if sc.enabled:
+            sc.enabled = False
+            sc.next_run_at = None
+            disabled_count += 1
+            remove_job(sc.id)
+
+    detached = (Schedule.query
+                .filter_by(config_set_id=s.id)
+                .update({'config_set_id': None}))
     db.session.delete(s)
     db.session.commit()
-    return success(message='删除成功')
+
+    msg = '删除成功'
+    if disabled_count:
+        msg += f'；{disabled_count} 个跟随该套的启用任务已自动停用（原配置依赖本套）'
+    return success({'disabledFollowCount': disabled_count,
+                    'detachedCount': detached},
+                   message=msg)
 
 
 @bp.route('/<int:set_id>/apply-batch', methods=['POST'])
@@ -110,7 +132,8 @@ def apply_set_batch(set_id):
     if not isinstance(raw, list):
         return error(message='缺少应用目标', code=4401, status=400)
 
-    # 去重 + 过滤非法项（taskType 仅接受两种签到类型）
+    # 去重 + 过滤非法项（taskType 仅接受两种签到类型；accountId 非整数同样跳过——
+    # 直接 int() 会让畸形 payload 变成未处理 500，而不是计入「无效目标」）
     seen = set()
     targets = []
     for t in raw:
@@ -119,7 +142,10 @@ def apply_set_batch(set_id):
         acc_id, task_type = t.get('accountId'), t.get('taskType')
         if acc_id is None or task_type not in ('dorm', 'activity'):
             continue
-        key = (int(acc_id), task_type)
+        try:
+            key = (int(acc_id), task_type)
+        except (TypeError, ValueError):
+            continue
         if key not in seen:
             seen.add(key)
             targets.append(key)

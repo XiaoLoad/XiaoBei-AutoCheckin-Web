@@ -11,4 +11,7 @@ from app import create_app
 if __name__ == '__main__':
     env = os.getenv('FLASK_ENV', 'development')
     app = create_app(env)
-    app.run(host='0.0.0.0', port=5000, debug=app.config['DEBUG'])
+    # 调试模式只绑定回环地址：Werkzeug 调试器 PIN 一旦泄露即可任意代码执行，
+    # DEBUG=True 时不允许以 0.0.0.0 暴露到局域网；需要局域网联调请用 production 配置
+    host = '127.0.0.1' if app.config['DEBUG'] else '0.0.0.0'
+    app.run(host=host, port=5000, debug=app.config['DEBUG'])

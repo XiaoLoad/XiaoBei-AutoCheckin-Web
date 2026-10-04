@@ -79,6 +79,12 @@ python run.py                 # http://127.0.0.1:5000
 > 先将 Web 进程置 `SCHEDULER_ENABLED=0`，由独立常驻进程接管调度。
 > 调度相关环境变量（并发线程池 / 补跑宽限等）见 `backend/.env.example` 的「定时任务调度器」段。
 
+> **环境变量**：`config/__init__.py` 启动时自动加载 `backend/.env`（已 gitignore；复制
+> `.env.example` 修改即可），systemd/docker 注入的环境变量优先于 `.env`。
+> 生产入口 `app.py`（gunicorn / `python app.py`）缺省以 production 启动，密钥仍为开发
+> 默认值时拒绝启动；本地开发请用 `python run.py`（缺省 development，且调试模式只绑定
+> 127.0.0.1）。
+
 ### 数据库迁移
 
 表结构以 `backend/migrations/` 迁移链为唯一事实源（Alembic / Flask-Migrate），应用启动时自动对齐：

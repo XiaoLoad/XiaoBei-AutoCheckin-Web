@@ -2,6 +2,14 @@
 # 通过环境变量 ENV 切换不同配置（development / production）
 import os
 
+from dotenv import load_dotenv
+
+# .env 必须在下方任何 os.getenv 求值（Config 类属性 import 时即取值）之前加载。
+# 显式锚定 backend/.env：CLI（flask db ...）、gunicorn、脚本的工作目录各不相同，
+# 依赖 find_dotenv 的 cwd 探测会有一边找不到。override=False（默认）：已注入的
+# 环境变量（systemd/docker/命令行）优先级高于 .env，符合 12-factor 预期。
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env'))
+
 
 def _str_list(value, default):
     """把逗号分隔的字符串还原为去空白列表，过滤空串"""

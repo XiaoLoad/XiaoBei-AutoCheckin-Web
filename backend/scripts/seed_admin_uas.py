@@ -7,18 +7,9 @@ import sys
 # 1) 关掉调度器（必须在 import app 之前）
 os.environ.setdefault('SCHEDULER_ENABLED', '0')
 
-# 2) 把项目根目录的 .env 注入环境（应用自身不 load_dotenv，这里脚本侧补上，确保连到同一库）
+# 2) .env 由 config/__init__.py 的 load_dotenv 统一加载（不再脚本侧手动解析）
+
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # backend/
-_env_path = os.path.join(_ROOT, '.env')
-if os.path.exists(_env_path):
-    with open(_env_path, 'r', encoding='utf-8') as _f:
-        for _line in _f:
-            _line = _line.strip()
-            if not _line or _line.startswith('#') or '=' not in _line:
-                continue
-            _k, _v = _line.split('=', 1)
-            _k, _v = _k.strip(), _v.strip().strip('"').strip("'")
-            os.environ.setdefault(_k, _v)
 
 sys.path.insert(0, _ROOT)
 

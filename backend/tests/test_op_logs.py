@@ -226,9 +226,10 @@ def test_login_success_and_failure_both_logged(app_ctx, audit_cleanup):
     assert ok is not None
     assert ok.username == 'tc_audit_target'
 
-    # 密码错误：无归属用户，但必须留痕（连续失败是排查暴力破解的唯一线索）
+    # 密码错误：无归属用户，但必须留痕（连续失败是排查暴力破解的唯一线索）。
+    # 对外统一为 1001「账号或密码错误」（防用户名枚举），审计 reason 仍是真实原因
     assert client.post('/api/auth/login', json={
-        'account': 'tc_audit_target', 'password': 'wrong-pw'}).get_json()['code'] == 1002
+        'account': 'tc_audit_target', 'password': 'wrong-pw'}).get_json()['code'] == 1001
     bad = (OpLog.query.filter_by(action='auth.login', result='fail')
            .order_by(OpLog.id.desc()).first())
     assert bad is not None

@@ -195,7 +195,7 @@ curl http://127.0.0.1:5000/api/example
   - 功能新增 / 开发结束 → minor +1（`0.y.z` → `0.y+1.0`）
   - 上线 / 破坏性变更 → major +1（`0.y.z` → `1.0.0`）
   - 修复 BUG 不单独增加版本号，仅并入当前功能提交
-- 每次「提交版本」流程：分析本次改动后，由助手给出 commit 文案草案与按规范递增的版本号（`VERSION` 与 `CHANGELOG.md` 一并更新），默认**由你手动执行 git 提交**；仅在你一次性明确授权时助手可代理执行（不 push）。
+- 每次「提交版本」流程：分析本次改动后，由助手给出 commit 文案草案并按规范递增版本号（`VERSION` 与 `CHANGELOG.md` 一并更新），**由助手代理执行 git 提交**（仅本地提交，不推送远程）。
 - 每次「提交版本」必须先加载 `no-negative-echo` 技能：commit 文案与 CHANGELOG 条目只描述最终接受的行为，不把会话中被否决的中间方案、用户纠正过程写进版本产物。
 - 递增版本：`python scripts/version_bump.py minor`（或 `major`）。
 - 提交信息遵循 Conventional Commits，type 用英文、subject/body 用中文祈使句，风格务实不堆砌术语。

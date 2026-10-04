@@ -556,10 +556,15 @@ def _prune_old_sign_records():
             op_days = get_setting('op_log_retention_days') or 365
             op_cutoff = now_cst() - timedelta(days=int(op_days))
             op_deleted = OpLog.query.filter(OpLog.created_at < op_cutoff).delete(synchronize_session=False)
+            # 登录失败计数（防爆破）过期清理：锁定态最长 15 分钟，7 天前的记录必然失去意义
+            from app.services.login_guard import purge_expired as purge_login_failures
+            lf_deleted = purge_login_failures(days=7)
             if deleted:
                 log.info('清理超期签到日志 %d 条（保留 %d 天）', deleted, int(days))
             if op_deleted:
                 log.info('清理超期用户日志 %d 条（保留 %d 天）', op_deleted, int(op_days))
+            if lf_deleted:
+                log.info('清理超期登录失败计数 %d 条', lf_deleted)
             db.session.commit()
         except Exception as e:
             db.session.rollback()

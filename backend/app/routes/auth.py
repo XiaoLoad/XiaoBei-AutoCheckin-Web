@@ -7,6 +7,8 @@ from flask import Blueprint, request
 from app.extensions import db
 from app.models.system_config import get_setting
 from app.models.user import User, now_cst
+from app.services import login_guard
+from app.services.op_log import client_ip
 from app.utils.auth import blacklist_token, generate_token, token_required
 from app.utils.response import error, success
 from app.events import auth_logged_out, auth_login, auth_password_changed
@@ -17,10 +19,10 @@ bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 @bp.route('/login', methods=['POST'])
 def login():
     """
-    登录：校验账号密码 → 生成 JWT → 返回 token 与用户基本信息
-    错误码：1000 参数缺失 / 1001 账号不存在 / 1003 账号禁用 / 1002 密码错误
-    四个失败分支同样发布 auth_login（result='fail'），审计日志据此留痕——
-    连续失败是排查暴力破解与「账号是不是被锁了」的唯一线索。
+    登录：防爆破查锁 → 校验账号密码 → 生成 JWT → 返回 token 与用户基本信息
+    错误码：1000 参数缺失 / 1001 账号或密码错误（不区分不存在与密码错，防枚举）
+            / 1003 账号禁用（仅在密码正确时可见）/ 1004 触发防爆破锁定
+    失败分支同样发布 auth_login（result='fail'），审计日志据此留痕。
     """
     payload = request.get_json(silent=True) or {}
     account = (payload.get('account') or '').strip()
@@ -28,16 +30,31 @@ def login():
     if not account or not password:
         return error(message='账号和密码不能为空', code=1000, status=400)
 
+    ip = client_ip()
+
+    # ① 防爆破查锁：账号×IP / 账号全局 / IP 全局任一锁定中即拒绝。
+    #    锁定响应不提示剩余时间——固定话术避免给攻击者提供探测信息。
+    locked = login_guard.check_locked(account, ip)
+    if locked:
+        auth_login.send('auth.login', result='fail', username=account, reason='防爆破锁定中')
+        return error(message='尝试过于频繁，请稍后再试', code=1004, status=429)
+
     user = User.query.filter_by(username=account).first()
-    if not user:
-        auth_login.send('auth.login', result='fail', username=account, reason='账号不存在')
-        return error(message='账号不存在', code=1001, status=401)
+    # ② 先验密码、后查禁用：向无密码者只暴露统一的凭据错误，
+    #    持正确密码者才可见「账号已被禁用」（需要告知原因的合法场景）
+    if user is None or not user.check_password(password):
+        login_guard.record_failure(account, ip)
+        db.session.commit()
+        reason = '账号不存在' if user is None else '密码错误'
+        auth_login.send('auth.login', result='fail', username=account, reason=reason)
+        return error(message='账号或密码错误', code=1001, status=401)
     if not user.enabled:
         auth_login.send('auth.login', result='fail', username=account, reason='账号已被禁用')
         return error(message='账号已被禁用', code=1003, status=403)
-    if not user.check_password(password):
-        auth_login.send('auth.login', result='fail', username=account, reason='密码错误')
-        return error(message='密码错误', code=1002, status=401)
+
+    # ③ 成功：清掉该账号全部失败计数再发 token
+    login_guard.clear_failures(account)
+    db.session.commit()
 
     token = generate_token(user)
     user.last_login = now_cst()

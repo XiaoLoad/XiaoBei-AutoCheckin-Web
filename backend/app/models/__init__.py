@@ -10,6 +10,7 @@ from app.models.schedule import Schedule
 from app.models.sign_record import SignRecord
 from app.models.push_log import PushLog
 from app.models.op_log import OpAnomalyAck, OpLog
+from app.models.login_failure import LoginFailure
 from app.models.jwxt import JwAccount, JwSemester, JwTimetable, ActivityWindow
 from app.models.group_push import (
     PushGroup, PushGroupMember, PushGroupDigestLog, PushGroupDigestPending,
@@ -19,7 +20,7 @@ __all__ = [
     'db', 'User', 'TokenBlacklist', 'SystemConfig',
     'BAccount', 'ConfigSet',
     'PoolLocation', 'PoolCredential', 'PoolUa', 'PoolImage', 'ImageGroup',
-    'Schedule', 'SignRecord', 'PushLog', 'OpLog', 'OpAnomalyAck',
+    'Schedule', 'SignRecord', 'PushLog', 'OpLog', 'OpAnomalyAck', 'LoginFailure',
     'JwAccount', 'JwSemester', 'JwTimetable', 'ActivityWindow',
     'PushGroup', 'PushGroupMember', 'PushGroupDigestLog', 'PushGroupDigestPending',
 ]

@@ -43,7 +43,8 @@ def test_admin_update_user_password_applied(app_ctx, admin_headers):
     assert res.get_json()['code'] == 0
     res = client.post('/api/auth/login',
                       json={'account': 'tc_pwd_reset', 'password': 'old-password-1'})
-    assert res.get_json()['code'] == 1002
+    # 1001 统一凭据错误（不区分不存在/密码错，防枚举）
+    assert res.get_json()['code'] == 1001
 
 
 def test_admin_update_user_other_fields_still_work(app_ctx, admin_headers):

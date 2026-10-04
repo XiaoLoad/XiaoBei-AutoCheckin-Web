@@ -221,6 +221,12 @@ _atexit_registered = False
 
 RECONCILE_JOB_ID = '_reconcile'
 _RECONCILE_SECONDS = 30
+# 启动对账补跑宽限：仅补跑「计划时刻在当天」的任务。两类任务的时间规律都锚定当天——
+# 寝室签到按辅导员节奏当天发布当晚有效（如周日/周四晚），活动签到按上午/下午时段
+# 当天有效；跨天之后平台任务窗口必然已关闭，补跑只会产出必然失败的噪音记录与推送，
+# 改为落一条 skip 说明并推进 next_run_at。环境变量可调：0 = 不限（不推荐）。
+_RECONCILE_SAME_DAY_ONLY = (os.getenv('SCHEDULER_RECONCILE_SAME_DAY', '1').lower()
+                            not in ('0', 'false'))
 # 超期日志清理周期（每日一次）
 _PRUNE_INTERVAL_HOURS = 24
 
@@ -324,12 +330,15 @@ def register_all_enabled():
 def _reconcile_missed_runs():
     """启动漏跑对账：进程重启落在签到时刻附近时，重新注册的 cron 只会排
     「下一次未来时刻」，刚过去的触发被静默丢失——无记录、无失败、无推送。
-    以 DB 缓存的 next_run_at 为基准：enabled 且 next_run_at <= now 的任务，
-    安排一次立即补跑（每任务错峰 2 秒，避免重启瞬间集中打向 B 平台）。
+    以 DB 缓存的 next_run_at 为基准：enabled 且 next_run_at <= now 的任务分两档：
+    计划时刻在**当天**（SCHEDULER_RECONCILE_SAME_DAY=1，默认开）→ 安排立即补跑
+    （每任务错峰 2 秒，避免重启瞬间集中打向 B 平台）；计划时刻在**昨天及更早**
+    → 平台任务窗口必然已关闭（两类签到任务都只当天有效），补跑只会产出必然
+    失败的噪音记录与推送，改为落一条 skip 说明并推进 next_run_at。
 
     补跑走完整执行链路（run_schedule）：内部自会做账号可用性与平台时间窗校验，
-    不适用的场景（如宕机过久、平台无进行中任务）会如实落 skip/fail 记录而非凭空
-    消失，并把 next_run_at 推进到未来、不会重复进入本对账。
+    不适用的场景（如平台无进行中任务）会如实落 skip/fail 记录而非凭空消失，
+    并把 next_run_at 推进到未来、不会重复进入本对账。
 
     防重复提交：_commit_result 中签到记录与 next_run_at 同事务原子提交——
     已成功执行的任务 next_run_at 必已推进到未来，不会进入本对账；唯一残留歧义是
@@ -343,16 +352,38 @@ def _reconcile_missed_runs():
              .all())
     if not stale:
         return
-    log.info('启动对账：发现 %d 个任务的计划执行时刻已过，安排补跑', len(stale))
-    sched = get_scheduler()
-    for idx, s in enumerate(stale):
-        sched.add_job(
-            run_schedule,
-            trigger=DateTrigger(run_date=now + timedelta(seconds=2 * idx)),
-            args=[s.id, True],
-            id=f'_reconcile_{s.id}',
-            replace_existing=True,
-        )
+    runnable, expired = [], []
+    for s in stale:
+        # 同日判定：计划时刻的日期 == 今天才补跑（跨天即视为平台窗口已关）
+        if not _RECONCILE_SAME_DAY_ONLY or s.next_run_at.date() == now.date():
+            runnable.append(s)
+        else:
+            expired.append(s)
+    if runnable:
+        log.info('启动对账：发现 %d 个任务的计划执行时刻已过，安排补跑', len(runnable))
+        sched = get_scheduler()
+        for idx, s in enumerate(runnable):
+            sched.add_job(
+                run_schedule,
+                trigger=DateTrigger(run_date=now + timedelta(seconds=2 * idx)),
+                args=[s.id, True],
+                id=f'_reconcile_{s.id}',
+                replace_existing=True,
+            )
+    if expired:
+        # 跨天超期任务：不补跑，落一条 skip 说明留痕（_commit_result 自会推进
+        # next_run_at 到下一次未来时刻），保持「任何结局都有痕」；
+        # skip 结果照常走推送分发（notify.skip 开关裁决），与正常路径同口径。
+        log.info('启动对账：%d 个任务的计划时刻在昨天及更早，不补跑，仅推进计划时刻',
+                 len(expired))
+        for s in expired:
+            missed_at = s.next_run_at
+            acc = db.session.get(BAccount, s.account_id)
+            rec = _commit_result(s, acc, 'skip',
+                                 f'计划执行时刻（{missed_at:%m-%d %H:%M}）已跨天，'
+                                 f'平台任务窗口已关闭，启动对账不再补跑')
+            resolved = _resolve(s)
+            _push_outcome(s, acc, resolved, 'skip', rec.fail_reason, rec)
 
 
 def sync_schedule(schedule):
@@ -838,6 +869,29 @@ def _checkin_flow(schedule, acc, session, resolved, remark):
         raise
 
 
+def _push_outcome(schedule, acc, resolved, outcome, reason, rec, extra=None,
+                  submitted_remark=''):
+    """推送后置动作：按配置套 push 分发执行结果。与「执行结果落库」解耦——
+    内部异常仅记日志，绝不再写第二条 SignRecord，避免一次执行产生重复日志。
+    正常路径与异常失败路径（校验失败/平台异常/未预期异常）共用，保证
+    「凡落库必有推送机会」，notify 开关在 dispatch_push 内统一裁决。"""
+    try:
+        if outcome is None:
+            return
+        # 成功且图片策略可回看时，推送带签到凭证图 URL（delete 已物理删除故无 URL）
+        ex = extra or {}
+        image_url = ''
+        if outcome == 'success' and ex.get('image_id') and ex.get('strategy') in ('recycle', 'trash'):
+            base = os.getenv('PUSH_IMAGE_BASE', '').strip().rstrip('/')
+            if base:
+                image_url = f"{base}/api/pools/images/{ex['image_id']}/file"
+        dispatch_push(resolved, schedule, acc, outcome, reason,
+                      image_url=image_url, submitted_remark=submitted_remark, extra=ex,
+                      sign_record_id=rec.id if rec else None)
+    except Exception as e:
+        log.warning('任务 %s 后置动作失败（已落库的执行记录不受影响）：%s', schedule.id, e)
+
+
 def _execute(schedule, allow_retry=True, course_name=None):
     acc = db.session.get(BAccount, schedule.account_id)
     if acc is None or not acc.enabled:
@@ -854,8 +908,9 @@ def _execute(schedule, allow_retry=True, course_name=None):
                 res = get_adapter().verify_and_fetch(acc.account, acc.get_password())
             except BPlatformError as e:
                 log.warning('任务 %s 账号校验失败：%s', schedule.id, e.message)
-                _commit_result(schedule, acc, 'fail', f'账号校验失败：{e.message}',
-                               resolved=resolved, course_name=course_name)
+                rec = _commit_result(schedule, acc, 'fail', f'账号校验失败：{e.message}',
+                                     resolved=resolved, course_name=course_name)
+                _push_outcome(schedule, acc, resolved, 'fail', f'账号校验失败：{e.message}', rec)
                 return
             acc.set_token(res.token)
             acc.set_profile(res.profile)
@@ -904,8 +959,12 @@ def _execute(schedule, allow_retry=True, course_name=None):
         if e.kind == 'credential':
             acc.verify_status = 'fail'  # 凭证失效，下次执行触发 reverify
         log.warning('任务 %s 执行异常（B 平台）：%s', schedule.id, e.message)
-        _commit_result(schedule, acc, 'fail', f'B 平台错误：{e.message}', resolved=resolved,
-                       course_name=course_name)
+        fail_reason = f'B 平台错误：{e.message}'
+        rec = _commit_result(schedule, acc, 'fail', fail_reason, resolved=resolved,
+                             course_name=course_name)
+        # 异常失败同样推送（notify.fail 开关裁决），不再静默——此前网络类失败
+        # （如验证码超时）只落库不出通知，用户感知不到当天签到已失败
+        _push_outcome(schedule, acc, resolved, 'fail', fail_reason, rec)
         # 网络类失败：安排窗口内补跑（请求层已有 3 次指数退避，此处覆盖更长的平台抖动；
         # credential 已在上方就地重登重试过、业务失败重跑无意义，均不补跑）
         if e.kind == 'network' and allow_retry:
@@ -913,25 +972,16 @@ def _execute(schedule, allow_retry=True, course_name=None):
         return
     except Exception as e:
         log.exception('任务 %s 执行异常', schedule.id)
-        _commit_result(schedule, acc, 'fail', f'执行异常：{e}', resolved=resolved,
-                       course_name=course_name)
+        fail_reason = f'执行异常：{e}'
+        rec = _commit_result(schedule, acc, 'fail', fail_reason, resolved=resolved,
+                             course_name=course_name)
+        _push_outcome(schedule, acc, resolved, 'fail', fail_reason, rec)
         return
 
-    # 后置动作（推送）与「执行结果落库」解耦：失败仅记日志，
-    # 绝不再写第二条 SignRecord，避免一次执行产生「成功 + 失败」两条重复日志
-    try:
-        if outcome is not None:
-            # 成功且图片策略可回看时，推送带签到凭证图 URL（delete 已物理删除故无 URL）
-            image_url = ''
-            if outcome == 'success' and extra.get('image_id') and extra.get('strategy') in ('recycle', 'trash'):
-                base = os.getenv('PUSH_IMAGE_BASE', '').strip().rstrip('/')
-                if base:
-                    image_url = f"{base}/api/pools/images/{extra['image_id']}/file"
-            dispatch_push(resolved, schedule, acc, outcome, reason,
-                          image_url=image_url, submitted_remark=submitted_remark, extra=extra,
-                          sign_record_id=rec.id if rec else None)
-    except Exception as e:
-        log.warning('任务 %s 后置动作失败（已落库的执行记录不受影响）：%s', schedule.id, e)
+    # 后置动作（推送）与「执行结果落库」解耦：成功/失败/跳过统一走 _push_outcome，
+    # 其内部自捕获异常，不再产生「成功 + 失败」两条重复日志
+    _push_outcome(schedule, acc, resolved, outcome, reason, rec,
+                  extra=extra, submitted_remark=submitted_remark)
 
 
 # ===== 网络失败补跑（窗口内重试）=====
@@ -949,6 +999,7 @@ def runtime_settings():
     """
     return {
         'reconcileSeconds': _RECONCILE_SECONDS,
+        'reconcileSameDayOnly': _RECONCILE_SAME_DAY_ONLY,
         'pruneIntervalHours': _PRUNE_INTERVAL_HOURS,
         'retryDelayMinutes': _RETRY_DELAY_MINUTES,
         'logRetentionDays': int(get_setting('sign_log_retention_days') or 180),

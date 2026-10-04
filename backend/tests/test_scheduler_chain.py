@@ -83,7 +83,10 @@ def chain_user(app_ctx):
     db.session.commit()
     uid = u.id
     yield {'Authorization': f'Bearer {generate_token(u)}'}
-    # teardown：清理本用户全部关联数据，杜绝跨测试残留
+    # teardown：清理本用户全部关联数据，杜绝跨测试残留。
+    # op_logs 只解外键不删行（审计留痕口径同 purge_user），否则 DELETE users 撞 1451
+    from app.models.op_log import OpLog
+    OpLog.query.filter_by(user_id=uid).update({'user_id': None}, synchronize_session=False)
     SignRecord.query.filter_by(user_id=uid).delete()
     Schedule.query.filter_by(user_id=uid).delete()
     ConfigSet.query.filter_by(user_id=uid).delete()
@@ -222,6 +225,62 @@ def test_reconcile_removes_orphan_and_registers_missing(app, chain_user):
     assert sch.get_scheduler().get_job(sch._job_id(sid2)) is not None
 
 
+def test_reconcile_missed_runs_same_day_only(app, chain_user, monkeypatch):
+    """启动对账同日判定：计划时刻在当天 → 安排补跑；计划时刻在昨天及更早 →
+    不补跑，落 skip 说明且 next_run_at 推进到未来（两类签到任务都只当天有效，
+    补跑几天前的计划只会产出必然失败的噪音）。"""
+    from datetime import timedelta
+
+    from app.models.user import now_cst
+
+    c = app.test_client()
+    acc_id = _create_account(c, chain_user)
+    cs_id = _create_config_set(c, chain_user)
+    sid_today = _create_schedule(c, chain_user, acc_id)
+    sid_stale = _create_schedule(c, chain_user, acc_id, task_type='activity')
+    _enable(c, chain_user, sid_today, cs_id)
+    # activity 任务与 dorm 配置套类型不符，路由会拒绝；照 register_all_enabled
+    # 用例的口径直接 ORM 建立关联（对账逻辑不关心配置套类型）
+    s_stale_row = db.session.get(Schedule, sid_stale)
+    s_stale_row.enabled = True
+    s_stale_row.config_set_id = cs_id
+    s_stale_row.mode = 'follow'
+    db.session.commit()
+
+    now = now_cst()
+    with app.app_context():
+        # 当天 02:00（已过时刻，但在当天）→ 补跑
+        db.session.get(Schedule, sid_today).next_run_at = now.replace(
+            hour=2, minute=0, second=0, microsecond=0)
+        # 昨天 21:20 → 跨天，不补跑
+        db.session.get(Schedule, sid_stale).next_run_at = (
+            now - timedelta(days=1)).replace(hour=21, minute=20, second=0, microsecond=0)
+        db.session.commit()
+
+    pushed = []
+    monkeypatch.setattr(sch, '_push_outcome',
+                        lambda *a, **k: pushed.append((a[3], a[4])))
+    sch._reconcile_missed_runs()
+
+    # 当天：有补跑 job；跨天：无 job
+    assert sch.get_scheduler().get_job(f'_reconcile_{sid_today}') is not None
+    assert sch.get_scheduler().get_job(f'_reconcile_{sid_stale}') is None
+
+    # 跨天任务：next_run_at 已推进到未来 + 落了一条 skip 记录
+    with app.app_context():
+        s_stale = db.session.get(Schedule, sid_stale)
+        assert s_stale.next_run_at > now_cst()
+        rec = (SignRecord.query.filter_by(schedule_id=sid_stale, status='skip')
+               .order_by(SignRecord.id.desc()).first())
+        assert rec is not None
+        assert '跨天' in (rec.fail_reason or '')
+    # skip 说明照常推送（notify.skip 开关裁决在 dispatch_push 内）
+    assert any(status == 'skip' and '跨天' in reason for status, reason in pushed), pushed
+
+    # 清理补跑 job，避免污染后续用例（_clean_scheduler 亦兜底）
+    sch.get_scheduler().remove_all_jobs()
+
+
 def test_register_all_enabled(app, chain_user):
     c = app.test_client()
     acc_id = _create_account(c, chain_user)
@@ -306,3 +365,142 @@ def test_resolve_merges_overrides(app, chain_user):
 
     hour, minute, weekdays = extract_schedule_time(db.session.get(Schedule, sid))
     assert (hour, minute, weekdays) == (7, 30, [1])
+
+
+class _PushRecorder:
+    """捕获 _push_outcome → dispatch_push 的调用参数（status/reason），不真发请求。"""
+    calls = []
+
+    @classmethod
+    def record(cls, resolved, schedule, acc, status, reason='', **kw):
+        cls.calls.append({'status': status, 'reason': reason})
+
+
+def _push_cfg():
+    """带推送通道的配置（直接填写 serverchan），notify 三态全开。"""
+    cfg = _cfg()
+    cfg['push'] = {'channels': ['serverchan'], 'useOwnCredential': False,
+                   'credIds': {}, 'cred': {'serverchanKey': 'SCTx'},
+                   'notify': {'success': True, 'skip': True, 'fail': True}}
+    return cfg
+
+
+@pytest.fixture()
+def _record_push(monkeypatch):
+    _PushRecorder.calls = []
+    monkeypatch.setattr(sch, 'dispatch_push', _PushRecorder.record)
+    return _PushRecorder
+
+
+def test_run_schedule_platform_error_pushes_fail(app, chain_user, _record_push):
+    """回归：BPlatformError 异常路径（如验证码超时）此前只落库不推送，
+    失败通知被静默吞掉——现在异常失败同样分发推送（notify.fail 裁决）。"""
+    c = app.test_client()
+    acc_id = _create_account(c, chain_user)
+    cs_id = _create_config_set(c, chain_user)
+    sid = _create_schedule(c, chain_user, acc_id)
+    _enable(c, chain_user, sid, cs_id)
+
+    class TimeoutAdapter:
+        name = 'timeout'
+
+        def verify_and_fetch(self, *a, **k):
+            return VerifyResult(ok=True, token='t', bp_uid=1, profile={})
+
+        def find_active_task(self, session, task_type):
+            raise BPlatformError('network', '获取验证码失败：Read timed out')
+
+    from pytest import MonkeyPatch
+    mp = MonkeyPatch()
+    mp.setattr(sch, 'get_adapter', lambda: TimeoutAdapter())
+    try:
+        # 网络失败会安排补跑 job，测试结束清掉（_clean_scheduler 亦兜底）
+        sch.run_schedule(sid)
+    finally:
+        mp.undo()
+    db.session.commit()
+
+    assert len(_PushRecorder.calls) == 1, _PushRecorder.calls
+    call = _PushRecorder.calls[0]
+    assert call['status'] == 'fail'
+    assert 'B 平台错误' in call['reason']
+
+    recs = _records(c, chain_user, acc_id)
+    assert any(r['result'] == 'fail' for r in recs), recs
+
+
+def test_run_schedule_unexpected_error_pushes_fail(app, chain_user, _record_push):
+    """未预期异常（非 BPlatformError）同样落库 + 推送，两条路径口径一致。"""
+    c = app.test_client()
+    acc_id = _create_account(c, chain_user)
+    cs_id = _create_config_set(c, chain_user)
+    sid = _create_schedule(c, chain_user, acc_id)
+    _enable(c, chain_user, sid, cs_id)
+
+    class BoomAdapter:
+        name = 'boom'
+
+        def verify_and_fetch(self, *a, **k):
+            return VerifyResult(ok=True, token='t', bp_uid=1, profile={})
+
+        def find_active_task(self, session, task_type):
+            raise ValueError('意外错误')
+
+    from pytest import MonkeyPatch
+    mp = MonkeyPatch()
+    mp.setattr(sch, 'get_adapter', lambda: BoomAdapter())
+    try:
+        sch.run_schedule(sid)
+    finally:
+        mp.undo()
+    db.session.commit()
+
+    assert len(_PushRecorder.calls) == 1, _PushRecorder.calls
+    assert _PushRecorder.calls[0]['status'] == 'fail'
+    assert '执行异常' in _PushRecorder.calls[0]['reason']
+
+
+def test_run_schedule_notify_fail_off_skips_push(app, chain_user, monkeypatch):
+    """notify.fail 关闭时异常失败不发推送——开关语义在 dispatch_push 内裁决，
+    故此处 mock requests.post 断言无网络请求（而非 mock dispatch_push 本身）。"""
+    c = app.test_client()
+    acc_id = _create_account(c, chain_user)
+    cs_id = _create_config_set(c, chain_user)
+    sid = _create_schedule(c, chain_user, acc_id)
+    _enable(c, chain_user, sid, cs_id)
+
+    # 把配置套 push 的 notify.fail 关掉
+    with app.app_context():
+        cs_row = db.session.get(ConfigSet, cs_id)
+        cfg = cs_row.config
+        cfg['push'] = {'channels': ['serverchan'], 'useOwnCredential': False,
+                       'credIds': {}, 'cred': {'serverchanKey': 'SCTx'},
+                       'notify': {'success': True, 'skip': True, 'fail': False}}
+        cs_row.set_config(cfg)
+        db.session.commit()
+
+    http_calls = []
+
+    def fake_post(url, **kw):
+        http_calls.append(url)
+        return type('R', (), {'status_code': 200,
+                              'json': lambda self: {'code': 0, 'message': ''}})()
+
+    monkeypatch.setattr(sch.requests, 'post', fake_post)
+
+    class TimeoutAdapter:
+        name = 'timeout'
+
+        def verify_and_fetch(self, *a, **k):
+            return VerifyResult(ok=True, token='t', bp_uid=1, profile={})
+
+        def find_active_task(self, session, task_type):
+            raise BPlatformError('network', '断网')
+
+    monkeypatch.setattr(sch, 'get_adapter', lambda: TimeoutAdapter())
+    sch.run_schedule(sid)
+    db.session.commit()
+
+    assert http_calls == [], http_calls  # notify.fail 关闭：无任何推送请求发出
+    recs = _records(c, chain_user, acc_id)
+    assert any(r['result'] == 'fail' for r in recs), recs  # 失败记录仍正常落库

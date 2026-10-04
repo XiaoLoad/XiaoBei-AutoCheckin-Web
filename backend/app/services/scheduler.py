@@ -31,7 +31,7 @@ from app.services import geo
 from app.services.b_platform import get_adapter
 from app.services.b_platform.base import BPlatformError
 from app.services.b_platform.real import generate_image_filename
-from app.services.crypto import decrypt
+from app.services.crypto import decrypt, InvalidToken
 from app.services.image_store import claim_image_for_submit, rollback_claim
 from app.services.jwxt.sync import expand_windows_daily, expand_windows_for_schedule
 from app.services.push_render import build_ctx, send_channel
@@ -903,6 +903,22 @@ def _execute(schedule, allow_retry=True, course_name=None):
     extra = {}
     resolved = None
     try:
+        # 凭据解密单独前置校验：密钥轮换/数据损坏时 Fernet 抛 InvalidToken（str 为空，
+        # 落进通用 Exception 分支只会得到一条「执行异常：」的无因失败）。此处就地给出
+        # 可操作文案并置 verify_status='fail'，下次执行自动重校验拿新 token 自愈。
+        try:
+            acc.get_password()
+            acc.get_token()
+        except InvalidToken:
+            log.warning('任务 %s 凭据解密失败（密钥不匹配或数据损坏），账号转入待重校验', schedule.id)
+            acc.verify_status = 'fail'
+            db.session.commit()
+            rec = _commit_result(schedule, acc, 'fail',
+                                 '账号凭据解密失败（服务端密钥可能已轮换），请重新校验该账号',
+                                 resolved=resolved, course_name=course_name)
+            _push_outcome(schedule, acc, resolved, 'fail', rec.fail_reason, rec)
+            return
+
         if acc.verify_status != 'ok':
             try:
                 res = get_adapter().verify_and_fetch(acc.account, acc.get_password())

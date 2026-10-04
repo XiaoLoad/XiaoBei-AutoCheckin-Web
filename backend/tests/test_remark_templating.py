@@ -71,6 +71,7 @@ def remark_scenario(app_ctx, monkeypatch):
     db.session.add(u)
     db.session.flush()
     acc = BAccount(user_id=u.id, account=f'acc_{uname}', password_enc='x')
+    acc.set_password('pw-remark')  # 合法 Fernet 密文：_execute 前置解密校验要求可解
     acc.verify_status = 'ok'          # 跳过 verify_and_fetch，避免真实联网
     acc.set_token('tok')
     acc.set_profile({'name': '贺鑫', 'studentNo': '2021001'})

@@ -3,7 +3,7 @@
 # 泄露 SECRET_KEY 才可能；密钥派生含版本盐，未来轮换口径时递增版本即可。
 import base64
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from flask import current_app

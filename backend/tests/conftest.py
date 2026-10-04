@@ -14,6 +14,34 @@ import pytest
 from app import create_app
 
 
+@pytest.fixture(scope='session', autouse=True)
+def _purge_test_users_after_session():
+    """测试会话结束自动清理全部 tc_* 测试用户（级联清掉名下账号/任务/记录等）。
+
+    测试会在库里创建批量 tc_ 前缀用户并留下启用任务——不清理的话，这些任务
+    会在每次平台启动对账时被反复扫到，日志刷「缺少有效执行时刻」噪音、
+    执行链还会以解密失败等方式产生无意义的 fail 记录。
+    固定用户名（tc_user/tc_admin/tc_push_user 等）由各 fixture 懒创建，
+    下次会话自动重建，删除无副作用。MySQL 不可用时静默跳过（纯逻辑用例照常）。"""
+    yield
+    try:
+        app = create_app('development')
+        with app.app_context():
+            from app.extensions import db
+            from app.models.user import User
+            from app.services.user_service import purge_user
+
+            victims = User.query.filter(User.username.like('tc\\_%')).all()
+            for u in victims:
+                try:
+                    purge_user(u)
+                except Exception:
+                    db.session.rollback()
+    except Exception:
+        # MySQL 未启动等环境缺失场景：让位给用例自身的跳过逻辑
+        pass
+
+
 @pytest.fixture()
 def app():
     return create_app('development')

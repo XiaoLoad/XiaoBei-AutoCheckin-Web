@@ -513,22 +513,22 @@
             </thead>
             <tbody>
               <tr v-for="r in recentLogs.items" :key="r.id" class="border-b border-ink/5 last:border-0">
-                <td class="py-3 pr-4 text-ink-muted tabular-nums">{{ r.time }}</td>
+                <td class="py-3 pr-4 text-ink-muted tabular-nums whitespace-nowrap">{{ r.time }}</td>
                 <td class="py-3 pr-4 font-medium text-ink">{{ r.username }}</td>
-                <td class="py-3 pr-4 text-ink-muted">{{ r.studentName || '—' }}</td>
+                <td class="py-3 pr-4 text-ink-muted whitespace-nowrap">{{ r.studentName || '—' }}</td>
                 <td class="py-3 pr-4 text-ink-muted">{{ r.account }}</td>
                 <td class="py-3 pr-4">
-                  <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium" :class="taskTypeMeta(r.taskType).cls">
+                  <span class="inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium" :class="taskTypeMeta(r.taskType).cls">
                     {{ taskTypeMeta(r.taskType).label }}
                   </span>
                 </td>
                 <td class="py-3 pr-4">
-                  <span class="inline-flex items-center gap-1.5 text-xs font-medium" :class="statusMeta[r.status].cls">
+                  <span class="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-medium" :class="statusMeta[r.status].cls">
                     <span class="h-1.5 w-1.5 rounded-full" :class="statusMeta[r.status].dot"></span>
                     {{ statusMeta[r.status].label }}
                   </span>
                 </td>
-                <td class="py-3 text-ink-muted">{{ r.failReason || '—' }}</td>
+                <td class="py-3 text-ink-muted [overflow-wrap:anywhere]">{{ r.failReason || '—' }}</td>
               </tr>
               <tr v-if="!recentLogs.items.length"><td colspan="7" class="py-6 text-center text-ink-muted">当前筛选条件下无日志</td></tr>
             </tbody>

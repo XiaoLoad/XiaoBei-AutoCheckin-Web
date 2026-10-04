@@ -78,7 +78,9 @@ service.interceptors.response.use(
     if (res.code !== 0 && res.code !== undefined) {
       const message = res.message || '请求失败'
       if (!response.config.silent) toast(message, 'error')
-      return Promise.reject(new Error(message))
+      // 业务码随错误透出：调用方按 code 细分处理（如登录页凭据失败标红字段）。
+      // 同样挂 bizCode —— Error 对象虽无 code 冲突，但两处口径保持一致
+      return Promise.reject(Object.assign(new Error(message), { bizCode: res.code }))
     }
     return res.data
   },
@@ -120,6 +122,11 @@ service.interceptors.response.use(
       toast(message, 'error')
     }
     error.message = message
+    // 后端 JSON 信封的业务码（若有）随错误透出，供调用方按 code 细分处理。
+    // axios 错误对象自带 code 字段（如 ERR_BAD_REQUEST），业务码挂到 bizCode 避免冲突
+    if (res && res.code !== undefined) {
+      error.bizCode = res.code
+    }
     return Promise.reject(error)
   }
 )

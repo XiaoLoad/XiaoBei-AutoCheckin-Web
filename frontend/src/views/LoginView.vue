@@ -96,7 +96,20 @@
             已内置平台打卡能力，授权账号后按时自动完成，你只管正常生活。
           </p>
 
-          <form class="mt-8 space-y-5" @submit.prevent="handleLogin">
+          <form ref="formRef" class="mt-8 space-y-5" @submit.prevent="handleLogin">
+            <!-- 登录失败横幅的常驻容器：显式 height:0 + overflow hidden，无错误时不占任何布局空间。
+                 展开由 GSAP 动画 height:auto 实现——从 0 平滑过渡到自然高度，
+                 下方元素被逐渐推开而非瞬间跳位，消除 v-if 插拔导致的布局抖动。 -->
+            <div ref="bannerWrap" class="h-0 overflow-hidden">
+              <div
+                class="login-error-banner flex items-start gap-2.5 rounded-xl border border-danger/25 bg-danger/10 px-3.5 py-2.5"
+                role="alert"
+              >
+                <Icon name="alert" :size="16" class="mt-0.5 shrink-0 text-danger" />
+                <p class="text-sm leading-relaxed text-danger">{{ formError }}</p>
+              </div>
+            </div>
+
             <!-- 账号 -->
             <div class="login-field">
               <label for="account" class="mb-1.5 block text-sm font-medium text-ink-soft">账号</label>
@@ -109,6 +122,8 @@
                   autocomplete="username"
                   placeholder="请输入学号 / 手机号"
                   class="login-input pr-11"
+                  :class="{ 'login-input-invalid': fieldErrors.account || credInvalid }"
+                  @input="clearFieldError('account')"
                 />
                 <!-- 一键清除：右侧内边距常驻（不随按钮显隐变化），
                      否则首个字符一敲、按钮冒出来的同时文字会被挤着横跳一下。
@@ -126,6 +141,9 @@
                   <Icon name="close" :size="13" :stroke-width="2.4" />
                 </button>
               </div>
+              <p v-if="fieldErrors.account" class="mt-1.5 text-xs font-medium text-danger">
+                {{ fieldErrors.account }}
+              </p>
             </div>
 
             <!-- 密码 -->
@@ -140,6 +158,8 @@
                   autocomplete="current-password"
                   placeholder="请输入密码"
                   class="login-input pwd-input pr-[5.75rem]"
+                  :class="{ 'login-input-invalid': fieldErrors.password || credInvalid }"
+                  @input="clearFieldError('password')"
                 />
                 <!-- 清除钮排在「显示 / 隐藏」左侧，与它留 4px 间隔；两者共占右侧 5.75rem -->
                 <button
@@ -161,6 +181,9 @@
                   {{ showPassword ? '隐藏' : '显示' }}
                 </button>
               </div>
+              <p v-if="fieldErrors.password" class="mt-1.5 text-xs font-medium text-danger">
+                {{ fieldErrors.password }}
+              </p>
             </div>
 
             <!-- 记住我 / 忘记密码 -->
@@ -199,26 +222,20 @@
         </div>
       </div>
     </main>
-
-    <MessageModal
-      v-model="loginMsg.show"
-      :type="loginMsg.type"
-      :title="loginMsg.title"
-      :message="loginMsg.message"
-    />
   </div>
 </template>
 
 <script setup>
 import { reactive, ref } from 'vue'
 import { useRouter, useRoute, RouterLink } from 'vue-router'
+import { gsap } from 'gsap'
 import { useAuthStore } from '@/stores/auth'
 import { useLoginAnimations } from '@/composables/useLoginAnimations'
 import BaseCheckbox from '@/components/BaseCheckbox.vue'
-import MessageModal from '@/components/MessageModal.vue'
 import Icon from '@/components/Icon.vue'
 
 const root = ref(null)
+const formRef = ref(null)
 const loading = ref(false)
 const showPassword = ref(false)
 const accountInput = ref(null)
@@ -243,27 +260,97 @@ const form = reactive({
 // 一键清除：清空后把焦点交还输入框，省去再点一次才能接着输入
 function clearField(key) {
   form[key] = ''
+  clearFieldError(key)
   const el = key === 'account' ? accountInput.value : passwordInput.value
   el?.focus()
 }
 
-// 登录结果提示：统一走通用模态框（替代原生 alert）
-const loginMsg = reactive({ show: false, type: 'info', title: '', message: '' })
-function showMsg(type, title, message) {
-  loginMsg.type = type
-  loginMsg.title = title
-  loginMsg.message = message
-  loginMsg.show = true
+// 提示体系（无模态）：字段级错误内联在输入框下、登录失败以表单顶部横幅常驻。
+// 横幅不自动消失——失败原因需要时间读，重新输入时自动清除（clearFieldError）。
+const fieldErrors = reactive({ account: '', password: '' })
+// 凭据类失败的红边标记：无内联文字（原因已在横幅说明），只给两个输入框描红边
+const credInvalid = ref(false)
+// 登录失败横幅文案（表单顶部，常驻至重新输入时清除）
+const formError = ref('')
+// 横幅常驻容器：GSAP 用它在 0 ↔ auto 高度间平滑展开/收起（避免 v-if 插拔抖动）
+const bannerWrap = ref(null)
+
+function clearFieldError(key) {
+  fieldErrors[key] = ''
+  credInvalid.value = false
+  // 横幅收起：高度补回 0 并淡出，下方内容平滑回流（无 v-if 插拔的瞬间跳动）
+  if (formError.value) {
+    formError.value = ''
+    gsap.to(bannerWrap.value, {
+      height: 0,
+      duration: 0.3,
+      ease: 'power2.inOut',
+      overwrite: 'auto'
+    })
+  }
+}
+
+// 横幅展开入场：先在常驻容器上做 0→auto 高度动画（下方元素被平滑推开，消除重排跳位），
+// 横幅本体再做「下移 10px + 95% 缩放 + 淡入」的品牌向入场——transform/opacity 走合成器，
+// 不触发重排；power3.out 前快后缓，与登录页其余 GSAP 入场同一节奏语言。
+// reduced-motion 用户跳过全部动画：高度直接到位、无位移淡入，静态呈现。
+const REDUCED_MOTION =
+  typeof window !== 'undefined' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+function expandBanner() {
+  const wrap = bannerWrap.value
+  const banner = wrap?.querySelector('.login-error-banner')
+  if (!wrap || !banner) return
+
+  if (REDUCED_MOTION) {
+    gsap.set(wrap, { height: 'auto' })
+    return
+  }
+
+  // 先铺初值（横幅本体的位移/缩放/透明），容器高度随后动画到自然高度；
+  // height: 'auto' 由 GSAP 在补间开始瞬间量取目标高度，期间下方内容的推移完全连续
+  gsap.set(banner, { y: -10, scale: 0.97, autoAlpha: 0 })
+  gsap.to(wrap, {
+    height: 'auto',
+    duration: 0.38,
+    ease: 'power3.out',
+    overwrite: 'auto'
+  })
+  gsap.to(banner, {
+    y: 0,
+    scale: 1,
+    autoAlpha: 1,
+    duration: 0.42,
+    ease: 'power3.out',
+    overwrite: 'auto'
+  })
+}
+
+// 横幅强调动画：入场展开落定后的轻微左右摇摆（幅度仅 ±4px，纯 transform），
+// overwrite:'auto' 防止与进行中的入场补间互相拉扯；reduced-motion 用户跳过。
+function shakeBanner() {
+  if (REDUCED_MOTION) return
+  const banner = bannerWrap.value?.querySelector('.login-error-banner')
+  banner &&
+    gsap.to(banner, {
+      keyframes: { x: [-4, 4, -2, 2, 0] },
+      duration: 0.38,
+      delay: 0.3,
+      ease: 'power1.inOut',
+      overwrite: 'auto'
+    })
 }
 
 // 初始化 GSAP 动画（自动处理挂载/销毁生命周期）
 useLoginAnimations(root)
 
 async function handleLogin() {
-  if (!form.account.trim() || !form.password.trim()) {
-    showMsg('warning', '提示', '请填写账号和密码')
-    return
-  }
+  // 提交前校验：空字段直接内联标注，不再弹窗打断
+  fieldErrors.account = form.account.trim() ? '' : '请输入账号'
+  fieldErrors.password = form.password ? '' : '请输入密码'
+  if (fieldErrors.account || fieldErrors.password) return
+
   loading.value = true
   try {
     // 调用后端 /api/auth/login，store 内写入 token 与用户信息；
@@ -275,8 +362,15 @@ async function handleLogin() {
     const redirect = route.query.redirect
     router.replace(typeof redirect === 'string' ? redirect : '/')
   } catch (e) {
-    // 后端已返回清晰错误（账号不存在 / 密码错误 / 账号已禁用）
-    showMsg('error', '登录失败', e.message || '登录失败')
+    // 后端已返回清晰错误（账号或密码错误 / 账号已被禁用 / 尝试过于频繁）
+    formError.value = e.message || '登录失败，请稍后重试'
+    // 凭据类失败（1001）同时描红两个输入框，指明出错的就是这两个字段；
+    // 禁用（1003）/限频（1004）与字段无关，仅横幅提示
+    if (e.bizCode === undefined || e.bizCode === 1001 || e.bizCode === 1002) {
+      credInvalid.value = true
+    }
+    expandBanner()
+    shakeBanner()
   } finally {
     loading.value = false
   }

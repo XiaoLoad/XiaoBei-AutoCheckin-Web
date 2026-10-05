@@ -820,7 +820,12 @@ async function onChangePassword() {
   pwdSubmitting.value = true
   try {
     await authApi.changePassword({ old_password: pwdForm.old, new_password: pwdForm.next })
-    toast('密码修改成功', 'success')
+    // 改密即吊销全部存量 token（pwd_ver 递增），当前会话也随之失效：
+    // 主动清理并跳登录页，避免后续请求逐个吃 401。延迟提示一拍让用户看清结果。
+    toast('密码修改成功，请重新登录', 'success')
+    setTimeout(() => {
+      auth.logout()
+    }, 1200)
     pwdForm.old = ''
     pwdForm.next = ''
     pwdForm.confirm = ''

@@ -111,6 +111,8 @@ def update_user(user_id):
         setattr(user, key, value)
     if password:
         user.set_password(password)
+        # 管理员重置密码同样递增 pwd_ver，吊销该用户全部存量 token（S7 同口径）
+        user.pwd_ver = (user.pwd_ver or 1) + 1
     db.session.commit()
     user_changed.send('users.update', user=user, before=before, password_changed=bool(password))
     return success(user.to_dict(), message='保存成功')

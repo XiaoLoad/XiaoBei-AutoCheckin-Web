@@ -93,6 +93,8 @@ def change_password():
     """
     修改当前登录用户密码：校验原密码 → 按系统配置的密码最小长度校验新密码 → 重设哈希。
     错误码：1000 参数缺失 / 1002 原密码错误 / 4002 新密码不合规
+    改密成功即递增 pwd_ver：该用户所有存量 token（含其他设备/标签页）立即失效，
+    需重新登录——本请求所在会话也不例外，由前端在收到 401 后清理并跳转登录页。
     """
     u = request.current_user
     payload = request.get_json(silent=True) or {}
@@ -110,6 +112,7 @@ def change_password():
         return error(message='原密码错误', code=1002, status=400)
 
     u.set_password(new_password)
+    u.pwd_ver = (u.pwd_ver or 1) + 1
     db.session.commit()
     auth_password_changed.send('auth.password', user=u)
     return success(message='密码修改成功')

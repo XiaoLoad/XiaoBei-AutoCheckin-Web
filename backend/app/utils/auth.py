@@ -45,11 +45,13 @@ def _jwt_expires_hours():
 
 
 def generate_token(user):
-    """生成 JWT：payload 携带 uid、role、唯一 jti 与过期时间"""
+    """生成 JWT：payload 携带 uid、role、签发时密码版本号、唯一 jti 与过期时间。
+    pwd_ver 用于修改密码后吊销存量 token（见 token_required 中的比对）。"""
     now = datetime.datetime.utcnow()
     payload = {
         'uid': user.id,
         'role': user.role,
+        'pwd_ver': user.pwd_ver or 1,
         'jti': uuid.uuid4().hex,
         'iat': now,
         'exp': now + datetime.timedelta(hours=_jwt_expires_hours()),
@@ -122,6 +124,11 @@ def token_required(view):
             return _fail('USER_GONE')
         if not user.enabled:
             return _fail('DISABLED')
+
+        # 密码版本比对：token 签发后密码若已变更（本人改密/管理员重置），该 token 立即
+        # 吊销——被盗凭证改密后不再存活至 exp（S7）。历史 token 无 pwd_ver 视为版本 1。
+        if payload.get('pwd_ver', 1) != (user.pwd_ver or 1):
+            return _fail('REVOKED')
 
         # 将当前用户与解密后的 payload 挂载到 request，供视图/注销接口直接使用
         request.current_user = user

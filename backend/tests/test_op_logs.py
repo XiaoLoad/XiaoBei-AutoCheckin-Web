@@ -194,22 +194,26 @@ def test_sessions_group_login_to_logout(app_ctx, admin_headers, audit_cleanup):
     headers = {'Authorization': f'Bearer {token}'}
     client.put('/api/auth/password', headers=headers,
                json={'old_password': 'pw-123456', 'new_password': 'pw-abcdef'})
-    client.post('/api/auth/logout', headers=headers)
+    # 改密即吊销旧 token（pwd_ver 递增，S7）：以新密码重新登录再登出，会话才能正常收口
+    token2 = client.post('/api/auth/login', json={
+        'account': 'tc_audit_target', 'password': 'pw-abcdef'}).get_json()['data']['token']
+    client.post('/api/auth/logout', headers={'Authorization': f'Bearer {token2}'})
 
     data = client.get('/api/op-logs/sessions?keyword=tc_audit_target',
                       headers=admin_headers).get_json()['data']
-    assert data['total'] >= 1
-    session = data['items'][0]
+    # 改密即吊销 token（S7）：改密后必须重新登录，原段被顶替、新段正常收口，切成两段
+    assert data['total'] >= 2
+    # 契约校验放在收口段上（不取 items[0]——两段可能同秒开始，排序不稳定）
+    session = next(s for s in data['items'] if s['closeReason'] == 'logout')
     assert {'id', 'userId', 'username', 'role', 'ip', 'startAt', 'endAt', 'startTime',
             'durationSeconds', 'running', 'closeReason', 'eventCount', 'events'} <= set(session)
-    assert session['closeReason'] == 'logout'
     assert session['running'] is False
-    actions = [e['action'] for e in session['events']]
-    # 登录、改密都在同一段里，且顺序为时间升序
-    assert actions[0] == 'auth.login'
-    assert 'auth.password' in actions
-    assert actions[-1] == 'auth.logout'
+    assert [e['action'] for e in session['events']] == ['auth.login', 'auth.logout']
     assert session['eventCount'] == len(session['events'])
+    # 改密事件落在被顶替的段里，审计不丢
+    pwd_session = next(s for s in data['items']
+                       if 'auth.password' in [e['action'] for e in s['events']])
+    assert pwd_session['closeReason'] == 'superseded'
     # 段内事件也要给前端的 camelCase 契约
     assert {'id', 'time', 'createdAt', 'action', 'category', 'result',
             'summary', 'detail', 'ip'} <= set(session['events'][0])
@@ -248,7 +252,11 @@ def test_logout_and_password_change_logged(app_ctx, audit_cleanup):
         'old_password': 'pw-123456', 'new_password': 'pw-654321'}).get_json()['code'] == 0
     assert _latest('auth.password') is not None
 
-    assert client.post('/api/auth/logout', headers=headers).get_json()['code'] == 0
+    # 改密即吊销旧 token（S7）：换新密码重新登录后登出，登出事件照常落审计
+    res2 = client.post('/api/auth/login', json={
+        'account': 'tc_audit_pwd', 'password': 'pw-654321'}).get_json()
+    headers2 = {'Authorization': f"Bearer {res2['data']['token']}"}
+    assert client.post('/api/auth/logout', headers=headers2).get_json()['code'] == 0
     assert _latest('auth.logout') is not None
 
 

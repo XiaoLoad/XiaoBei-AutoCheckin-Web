@@ -29,6 +29,9 @@ class User(db.Model):
     # 额度：quota 为总额度，used_quota 为已使用额度（如可创建的打卡任务/资源次数）
     quota = db.Column(db.Integer, nullable=False, default=100)
     used_quota = db.Column(db.Integer, nullable=False, default=0)
+    # 密码版本号：每次密码变更（本人改密/管理员重置）自增。JWT 携带签发时的
+    # pwd_ver，鉴权时与库值比对——不等即吊销，使改密后所有存量 token 立即失效。
+    pwd_ver = db.Column(db.Integer, nullable=False, default=1, server_default='1')
     created_at = db.Column(db.DateTime, default=now_cst)
     last_login = db.Column(db.DateTime)
 

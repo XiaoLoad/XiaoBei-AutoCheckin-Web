@@ -217,3 +217,16 @@ def test_secret_view_throttled_within_interval(app_ctx, admin_headers, audit_cle
     assert first.status_code == 200
     second = c.post(f'/api/admin/accounts/{acc.id}/secret', headers=admin_headers, json=body)
     assert second.status_code == 429
+
+
+def test_secret_view_throttle_not_bypassed_by_switching_accounts(app_ctx, admin_headers, audit_cleanup):
+    """换账号不重置限流：限流键若拼上 account_id 会按账号分桶，
+    持 N 个账号即得 N 次/分钟的登录密码在线爆破速率（S9）。"""
+    acc_a = _seed_account('tc_audit_sec')
+    acc_b = _seed_account('tc_audit_b')
+    c = app_ctx.test_client()
+    body = {'login_password': 'pw-tc_admin'}
+    assert c.post(f'/api/admin/accounts/{acc_a.id}/secret', headers=admin_headers, json=body).status_code == 200
+    # 换一个 account_id 依旧 429——限流窗口归属管理员本人，与查看哪个账号无关
+    r = c.post(f'/api/admin/accounts/{acc_b.id}/secret', headers=admin_headers, json=body)
+    assert r.status_code == 429 and r.get_json()['code'] == 4290

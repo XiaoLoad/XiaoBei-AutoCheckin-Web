@@ -647,7 +647,9 @@ def reveal_account_secret(account_id):
     if acc is None:
         return error(message='账号不存在', code=4040, status=404)
 
-    if _secret_throttle.hit(f'{request.current_user.id}:{account_id}'):
+    # 限流键只含管理员 id：拼上 account_id 会按账号分桶，持 N 个账号即得
+    # N 次/分钟的 check_password 在线爆破速率；同管理员每 60s 总共一次
+    if _secret_throttle.hit(f'{request.current_user.id}'):
         return error(message='操作过于频繁，请 1 分钟后再试', code=4290, status=429)
 
     if not request.current_user.check_password(login_password):

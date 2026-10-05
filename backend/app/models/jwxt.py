@@ -92,6 +92,10 @@ class ActivityWindow(db.Model):
     __tablename__ = 'activity_windows'
     __table_args__ = (
         db.Index('ix_activity_windows_schedule_date', 'schedule_id', 'date'),
+        # 唯一约束（T6 兜底）：窗口展开是删插事务，并发下唯一键拦住重复行，
+        # 防同一课程窗口重复 → 同一活动发起两次签到
+        db.UniqueConstraint('schedule_id', 'date', 'course_name', 'sections',
+                            name='uq_activity_windows_schedule_date_course_sections'),
     )
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)

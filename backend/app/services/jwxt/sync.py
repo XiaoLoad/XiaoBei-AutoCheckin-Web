@@ -273,7 +273,7 @@ def expand_windows_for_account(b_account_id, today=None):
     total = 0
     schedules = Schedule.query.filter_by(account_id=b_account_id, task_type='activity', enabled=True).all()
     for s in schedules:
-        total += expand_windows_for_schedule(s, today=today)
+        total += expand_windows_for_schedule_locked(s, today=today)
     db.session.commit()
     return total
 
@@ -357,10 +357,28 @@ def expand_windows_for_schedule(schedule, today=None):
 
     for w in existing:
         db.session.delete(w)
+    # SQLAlchemy 同一次 flush 内 INSERT 先于 DELETE 执行：删插一次 commit 会让
+    # 新行先撞上尚未删除的旧行（唯一键 1062）。先 flush 删除再挂新行，保证
+    # DELETE 在 INSERT 之前落库（T6 配套修复）。
+    db.session.flush()
     for row in new_rows:
         db.session.add(row)
     db.session.commit()
     return len(new_rows)
+
+
+# 窗口展开全局锁（T6）：「读现有窗口 → 删除 → 插入 → commit」不是原子操作，
+# 每日展开 job 与 30s 对账内的事件钩子展开并发时，互相看不到对方未提交的行，
+# 会插出重复窗口 → 同一课程发起两次签到。进程内串行化删插事务消除该竞态；
+# 跨进程部署受「调度器单实例」约束（见 scheduler.py 头注），进程内锁即完备。
+_EXPAND_LOCK = threading.Lock()
+
+
+def expand_windows_for_schedule_locked(schedule, today=None):
+    """expand_windows_for_schedule 的加锁包装：并发入口统一走这里。
+    持锁期间等待的调用方拿到锁后重新读库，天然基于最新已提交状态展开。"""
+    with _EXPAND_LOCK:
+        return expand_windows_for_schedule(schedule, today=today)
 
 
 def expand_windows_daily():
@@ -375,7 +393,7 @@ def expand_windows_daily():
     for s in schedules:
         if resolve_activity_cfg(s) is None:
             continue
-        expanded += expand_windows_for_schedule(s, today=today)
+        expanded += expand_windows_for_schedule_locked(s, today=today)
     if removed or expanded:
         log.info('活动窗口每日展开：清理过期 %d 条，重建当日 %d 条', removed, expanded)
     return expanded

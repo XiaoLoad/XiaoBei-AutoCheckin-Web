@@ -240,7 +240,11 @@ class RealAdapter:
         结果判定（旧版生产实证）：成功 = code==200&&msg=='操作成功' 或 code==6111；
         code==200&&msg=='302' 为风控行为验证码（判失败，需人工）；msg 含 token 失效/认证失败
         → credential（上层重登后重试一次）；业务错误（含中文提示）不重试直接失败；
-        网络异常指数退避重试 ≤3 次。CHECKIN_DRYRUN=1 时完整构造但不发送（演练模式）。"""
+        网络异常指数退避重试 ≤3 次。CHECKIN_DRYRUN=1 时完整构造但不发送（演练模式）。
+
+        重试安全边界（T5）：仅「请求未抵达平台」的异常可安全重试——连接失败
+        （ConnectionError/ConnectTimeout）时请求从未发出；读超时（ReadTimeout）时
+        请求已发出、平台可能已受理签到，重发会造成重复提交，立即终止重试。"""
         mod = _module(task_type)
         data = {
             mod['task_id_field']: str(platform_task_id),
@@ -302,6 +306,11 @@ class RealAdapter:
             except BPlatformError:
                 raise
             except requests.RequestException as e:
+                # 读超时 = 请求已发出、平台可能已受理签到：重发会重复提交（T5），
+                # 立即终止；连接类失败请求从未抵达平台，退避后重试安全。
+                if isinstance(e, (requests.ReadTimeout, requests.Timeout)) \
+                        and not isinstance(e, requests.ConnectTimeout):
+                    raise BPlatformError('network', f'提交读超时（平台可能已受理，不重发）：{e}')
                 last_err = e
                 if attempt < _MAX_NET_RETRIES - 1:
                     time.sleep(1 * (2 ** attempt))

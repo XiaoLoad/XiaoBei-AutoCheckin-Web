@@ -33,7 +33,7 @@ from app.services.b_platform.base import BPlatformError
 from app.services.b_platform.real import generate_image_filename
 from app.services.crypto import decrypt, InvalidToken
 from app.services.image_store import claim_image_for_submit, rollback_claim
-from app.services.jwxt.sync import expand_windows_daily, expand_windows_for_schedule
+from app.services.jwxt.sync import expand_windows_daily, expand_windows_for_schedule_locked
 from app.services.push_render import build_ctx, send_channel
 from app.utils.schedule_utils import (compute_next_run, extract_jitter_minutes,
                                       extract_schedule_time, resolve_activity_cfg,
@@ -394,7 +394,7 @@ def sync_schedule(schedule):
         _register_job(schedule)
         try:
             if resolve_activity_cfg(schedule) is not None:
-                expand_windows_for_schedule(schedule)
+                expand_windows_for_schedule_locked(schedule)
         except Exception:
             log.exception('任务 %s 课表窗口展开失败（不影响 cron 注册）', schedule.id)
     else:

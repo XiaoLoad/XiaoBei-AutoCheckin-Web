@@ -96,7 +96,8 @@ class PushGroupDigestLog(db.Model):
 
 
 class PushGroupDigestPending(db.Model):
-    """待触发护栏：记录每组当天应在 flush_at 触发合并推送；reconcile 兜底（防延迟 job 丢失，非 EOD 补发）。"""
+    """待触发护栏：记录每组当天应在 flush_at 触发合并推送；reconcile 兜底（防延迟 job 丢失，非 EOD 补发）。
+    发送前以「删除本行」原子认领（谁删到谁发），发送失败按 attempts 重排队，见 group_digest.flush_digest。"""
     __tablename__ = 'push_group_digest_pending'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -105,6 +106,7 @@ class PushGroupDigestPending(db.Model):
                          nullable=False, index=True)
     date = db.Column(db.Date, nullable=False, index=True)
     flush_at = db.Column(db.DateTime, nullable=False)   # 计划触发时刻（最晚任务窗结束 + 缓冲）
+    attempts = db.Column(db.Integer, nullable=False, default=0, server_default='0')  # 已尝试发送次数
 
     __table_args__ = (
         db.UniqueConstraint('group_id', 'date', name='uq_push_group_digest_pending_group_date'),

@@ -206,27 +206,34 @@ def list_members(group_id):
 @bp.route('/groups/<int:group_id>/members', methods=['POST'])
 @token_required
 def add_members(group_id):
-    g = PushGroup.query.filter_by(id=group_id, user_id=request.current_user.id,
-                                  type=PushGroup.TYPE_DORM).first()
-    if not g:
-        return error(message='分组不存在', code=4040, status=404)
     payload = request.get_json(silent=True) or {}
     ids = payload.get('accountIds') or []
     if not isinstance(ids, list):
         return error(message='accountIds 须为数组', code=4402, status=400)
+    if len(ids) > 200:
+        return error(message='单次添加不能超过 200 个成员', code=4402, status=400)
+    g = PushGroup.query.filter_by(id=group_id, user_id=request.current_user.id,
+                                  type=PushGroup.TYPE_DORM).first()
+    if not g:
+        return error(message='分组不存在', code=4040, status=404)
+
+    # 批量解析：去重后 2 次查询取回有效账号与已有成员（原逐条 2N 次查询的长事务隐患）
+    unique_ids = list(dict.fromkeys(
+        aid for aid in (int(i) for i in ids if isinstance(i, int) or
+                        (isinstance(i, str) and i.isdigit()))
+    ))
+    if not unique_ids:
+        return success({'added': 0}, message='已添加 0 个成员')
+    valid = {a.id for a in BAccount.query.filter(
+        BAccount.id.in_(unique_ids), BAccount.user_id == request.current_user.id).all()}
+    existing = {r.account_id for r in PushGroupMember.query.filter(
+        PushGroupMember.group_id == group_id,
+        PushGroupMember.account_id.in_(unique_ids)).all()}
     added = 0
-    for raw in ids:
-        try:
-            aid = int(raw)
-        except (TypeError, ValueError):
-            continue
-        acc = BAccount.query.filter_by(id=aid, user_id=request.current_user.id).first()
-        if not acc:
-            continue
-        if PushGroupMember.query.filter_by(group_id=group_id, account_id=aid).first():
-            continue
-        db.session.add(PushGroupMember(group_id=group_id, account_id=aid))
-        added += 1
+    for aid in unique_ids:
+        if aid in valid and aid not in existing:
+            db.session.add(PushGroupMember(group_id=group_id, account_id=aid))
+            added += 1
     db.session.commit()
     return success({'added': added}, message=f'已添加 {added} 个成员')
 

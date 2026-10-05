@@ -9,6 +9,10 @@ from app.utils.response import error, success
 
 bp = Blueprint('config_sets', __name__, url_prefix='/api/config-sets')
 
+# 批量接口 targets 上限：与 schedules.batch_manage 同口径。超限 400，
+# 防超大批量构造单请求长事务锁表（8MB 请求体可塞 ~20 万个 target）。
+MAX_BATCH_TARGETS = 200
+
 
 def _resolve_location(user, raw_cfg):
     """提取配置体 locationId 并校验可见性（系统位置或本人私有）→ (列值, err_resp)"""
@@ -123,14 +127,17 @@ def apply_set_batch(set_id):
     config_set_id 退化为来源标签；实例不存在的账号任务现场补建（默认停用，不自动开启）。
     账号不存在或未启用则跳过；已启用的任务覆盖后重算下次执行时间并对齐调度器 job。
     """
-    s = ConfigSet.query.filter_by(id=set_id, user_id=request.current_user.id).first()
-    if not s:
-        return error(message='配置套不存在', code=4040, status=404)
-
     payload = request.get_json(silent=True) or {}
     raw = payload.get('targets')
     if not isinstance(raw, list):
         return error(message='缺少应用目标', code=4401, status=400)
+    if len(raw) > MAX_BATCH_TARGETS:
+        return error(message=f'单次批量应用不能超过 {MAX_BATCH_TARGETS} 个目标',
+                     code=4402, status=400)
+
+    s = ConfigSet.query.filter_by(id=set_id, user_id=request.current_user.id).first()
+    if not s:
+        return error(message='配置套不存在', code=4040, status=404)
 
     # 去重 + 过滤非法项（taskType 仅接受两种签到类型；accountId 非整数同样跳过——
     # 直接 int() 会让畸形 payload 变成未处理 500，而不是计入「无效目标」）
@@ -157,6 +164,7 @@ def apply_set_batch(set_id):
 
     user = request.current_user
     updated = created = skipped = mismatched = 0
+    to_sync = []  # 已启用任务：commit 成功后再统一对齐调度器（先 sync 后 commit 会留孤儿 job）
     for acc_id, task_type in targets:
         # 类型过滤：寝室套不套到活动任务、活动套不套到寝室任务（配置语义错配防护）
         if task_type != s.task_type:
@@ -179,9 +187,11 @@ def apply_set_batch(set_id):
             created += 1
         if sc.enabled:
             sc.next_run_at = compute_next_run(sc)
-            sync_schedule(sc)
+            to_sync.append(sc)
         updated += 1
     db.session.commit()
+    for sc in to_sync:
+        sync_schedule(sc)
 
     msg = f'已套用到 {updated} 个账号任务'
     if created:

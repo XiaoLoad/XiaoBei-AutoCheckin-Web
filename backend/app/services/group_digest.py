@@ -5,7 +5,8 @@
 #   收集组内全体成员当日 dorm 任务窗（weekday 命中且 enabled），flush_at = 最晚窗结束 + 缓冲；
 #   当日无任何成员有寝室任务 → 跳过（off-day 天然不推送）。
 # 发送：flush_at 到点（延迟 job + reconcile 双保险）拉成员当日 dorm 记录渲染合并消息 →
-#   pushplus 开放接口发到 QQ 群；push_group_digest_log 唯一约束保证同组同天只发一次。
+#   pushplus 开放接口发到 QQ 群；发送前先 DELETE pending 行原子认领（谁删到谁发），
+#   双保险同刻触发也只发一次；失败按 attempts 线性退避重排队，超限记 fail 终态。
 # 个人 1-to-1 推送由 dispatch_push 照常并发，本服务仅负责群组汇总。
 import json
 import logging
@@ -27,6 +28,8 @@ log = logging.getLogger('push')
 BUFFER_MINUTES = 3
 # 合并推送凭证：用户级 pushplus-open（消息 Token），全部分组共用一份
 DIGEST_CREDENTIAL_CHANNEL = 'pushplus-open'
+# 发送失败重排队次数上限：重试间隔随次数线性退避（1/2/3/4 分钟），超限记 fail 终态
+MAX_FLUSH_ATTEMPTS = 5
 
 
 # ───────────────────────── 分组解析 ─────────────────────────
@@ -226,12 +229,25 @@ def _write_log(group_id, date, status, member_total, member_done, message=None):
 
 
 def flush_digest(group_id, date, force=False):
-    """执行合并推送：拉成员当日 dorm 记录 → 渲染 → 发 QQ 群 → 写审计（幂等）。"""
+    """执行合并推送：拉成员当日 dorm 记录 → 渲染 → 发 QQ 群 → 写审计（幂等）。
+
+    发送前原子认领：DELETE 已到点的 pending 行并检查 rowcount，谁删到谁发——延迟 job 与
+    30s 对账兜底同刻触发时只有一方能认领成功，另一方直接退出，杜绝重复推送
+    （此前「查 log 再发」的防重挡不住双路径并发窗口内的第二次网络请求）。
+    发送失败按 attempts 重排队（线性退避），超限记 fail 终态不再重试。"""
     g = db.session.get(PushGroup, group_id)
     if g is None or not g.bound:
         return
     if not force and PushGroupDigestLog.query.filter_by(group_id=group_id, date=date).first():
         return  # 同组同天只发一次
+
+    if force:
+        prev_attempts = 0
+    else:
+        prev_attempts = _claim_pending(group_id, date)
+        if prev_attempts is None:
+            return  # 认领失败：pending 行已被延迟 job / 对账另一方删走，由对方发送
+
     members = group_members(g)
     member_rows = _member_records(members, date) if members else []
     member_total = len(members)
@@ -251,10 +267,56 @@ def flush_digest(group_id, date, force=False):
         _write_log(group_id, date, status, member_total, member_done)
         log.info('群合并推送成功 group=%s(%s) date=%s done=%d/%d',
                  g.id, g.name, date, member_done, member_total)
+        _clear_pending(group_id, date)
     else:
-        _write_log(group_id, date, PushGroupDigestLog.STATUS_FAIL, member_total, member_done, errmsg)
-        log.warning('群合并推送失败 group=%s(%s) date=%s: %s', g.id, g.name, date, errmsg)
-    _clear_pending(group_id, date)
+        _requeue_failed_flush(group_id, date, prev_attempts + 1, member_total, errmsg)
+        log.warning('群合并推送失败 group=%s(%s) date=%s: %s',
+                    g.id, g.name, date, errmsg)
+
+
+def _claim_pending(group_id, date):
+    """原子认领「已到点」的待触发记录：DELETE pending 行并按 rowcount 判归属，谁删到谁发。
+
+    只认领 flush_at <= now 的行——失败重排队的新行（flush_at 在未来）不可被同刻的
+    另一发送路径立即抢走，重试严格由到点后的对账驱动；SELECT 与 DELETE 都带时间
+    过滤，认领前行被删走（claimed=0）返回 None，调用方放弃发送——重复推送在结构上
+    不再可能。返回认领前行携带的 attempts（供失败重排队延续计数）。"""
+    now = now_cst()
+    try:
+        scope = (PushGroupDigestPending.group_id == group_id,
+                 PushGroupDigestPending.date == date,
+                 PushGroupDigestPending.flush_at <= now)
+        prev = (PushGroupDigestPending.query.filter(*scope)
+                .with_entities(PushGroupDigestPending.attempts).first())
+        if prev is None:
+            return None
+        claimed = (PushGroupDigestPending.query.filter(*scope)
+                   .delete(synchronize_session=False))
+        db.session.commit()
+        return prev[0] if claimed else None
+    except Exception:
+        db.session.rollback()
+        log.exception('群合并推送认领失败 group=%s date=%s', group_id, date)
+        return None
+
+
+def _requeue_failed_flush(group_id, date, attempts, member_total, errmsg):
+    """发送失败重排队：按已尝试次数线性退避；超过上限记 fail 终态，对账不再重试。
+
+    认领时 pending 行已删除，重排队即重插一行携带累计 attempts；这是发送失败后的
+    唯一出路，不再走 _clear_pending（否则重排队行会被立刻清掉，重试失效）。"""
+    try:
+        if attempts >= MAX_FLUSH_ATTEMPTS:
+            _write_log(group_id, date, PushGroupDigestLog.STATUS_FAIL,
+                       member_total, 0, f'重试 {attempts} 次仍失败：{errmsg[:200]}')
+            return
+        db.session.add(PushGroupDigestPending(
+            group_id=group_id, date=date,
+            flush_at=now_cst() + timedelta(minutes=attempts), attempts=attempts))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        log.exception('群合并推送失败重排队异常 group=%s date=%s', group_id, date)
 
 
 def _clear_pending(group_id, date):

@@ -16,6 +16,10 @@ from app.services.scheduler import sync_schedule, remove_job
 
 bp = Blueprint('schedules', __name__, url_prefix='/api/schedules')
 
+# 批量接口 targets 上限：超限直接 400。8MB 请求体能塞 ~20 万个 target，不设上限时
+# 一次请求就是一个几十万次查询的巨型长事务，锁表拖垮调度器写路径。
+MAX_BATCH_TARGETS = 200
+
 
 def _acc_display_name(acc):
     """账号展示名：优先 B 平台回填的姓名，回落登录账号（审计 summary 用）"""
@@ -215,6 +219,9 @@ def batch_manage():
     raw = payload.get('targets')
     if not isinstance(raw, list):
         return error(message='缺少操作目标', code=4401, status=400)
+    if len(raw) > MAX_BATCH_TARGETS:
+        return error(message=f'单次批量操作不能超过 {MAX_BATCH_TARGETS} 个目标',
+                     code=4402, status=400)
 
     # 去重 + 过滤非法项（taskType 仅接受两种签到类型；accountId 非整数同样跳过——
     # 直接 int() 会让畸形 payload 变成未处理 500，而不是计入「无效目标」）
@@ -246,6 +253,7 @@ def batch_manage():
     affected = skipped_count = 0
     skipped_reasons = []
     affected_list = []
+    succeeded = []  # 待 commit 后统一 sync 的任务实例（commit 失败则一个都不注册）
     task_label = {'dorm': '寝室签到', 'activity': '活动签到'}
 
     # 跳过项统一登记：保证 skipped 计数与明细不会因分支增多而漏计/重复
@@ -286,7 +294,7 @@ def batch_manage():
                 continue
             sc.enabled = False
             sc.next_run_at = None
-            sync_schedule(sc)
+            succeeded.append(sc)
             succeed(acc_id, task_type, name)
             continue
 
@@ -307,9 +315,6 @@ def batch_manage():
                               mode='standalone', enabled=False, config_set_id=apply_set.id)
                 sc.set_config(apply_set.config)
                 db.session.add(sc)
-                # 新建实例尚未 flush，sc.id 为 None；sync_schedule 注册 job 依赖 schedule.id，
-                # 须先 flush 拿到真实主键，否则 job 注册成 sched_None 且 run_schedule 回查不到。
-                db.session.flush()
 
         if not sc:
             skip(acc_id, task_type, name, '任务实例不存在且未选配置套，无法启用（请先在签到配置中配置该任务）')
@@ -343,10 +348,15 @@ def batch_manage():
 
         sc.enabled = True
         sc.next_run_at = compute_next_run(sc)
-        sync_schedule(sc)
+        succeeded.append(sc)
         succeed(acc_id, task_type, name)
 
     db.session.commit()
+    # 事务成功后再对齐调度器 job（与单任务 update_schedule 同序）：先 sync 后 commit 时，
+    # commit 失败会留下一批指向已回滚任务状态的孤儿 job；停用分支的 sync 内部含 commit，
+    # 循环中调用还会把前半批未提交改动隐式提交，破坏事务边界。
+    for sc in succeeded:
+        sync_schedule(sc)
 
     # 事件钩子：批量启停的审计（affected 为 0 说明没有实效，不记行）
     schedule_changed.send('schedules.batch', action=action, affected_list=affected_list,

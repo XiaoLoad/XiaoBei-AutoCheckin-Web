@@ -8,8 +8,9 @@ from flask import Blueprint, request, send_file
 from app.extensions import db
 from app.models import ImageGroup, PoolImage
 from app.models.user import now_cst
-from app.services.image_store import (IMAGE_LIMIT, ImageError, delete_file,
-                                      normalize_image, save_file, user_dir)
+from app.services.image_store import (IMAGE_LIMIT, MAX_UPLOAD_BYTES, ImageError,
+                                      delete_file, normalize_image, save_file,
+                                      user_dir)
 from app.utils.auth import token_required
 from app.utils.response import error, success
 
@@ -135,8 +136,10 @@ def upload_image():
     f = request.files.get('file')
     if not f or not f.filename:
         return error(message='请选择要上传的图片', code=4330, status=400)
-    raw = f.read()
-    if len(raw) > 5 * 1024 * 1024:
+    # 流式读取：只读「上限 + 1」字节即可判定超限，超大文件不会整读进内存
+    # （MAX_CONTENT_LENGTH 8MB 拦请求体总量，此处拦单文件 5MB 业务上限）
+    raw = f.read(MAX_UPLOAD_BYTES + 1)
+    if len(raw) > MAX_UPLOAD_BYTES:
         return error(message='原图不能超过 5MB', code=4331, status=400)
     user = request.current_user
     if PoolImage.query.filter_by(user_id=user.id).count() >= IMAGE_LIMIT:

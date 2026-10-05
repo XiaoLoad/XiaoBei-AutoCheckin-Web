@@ -20,6 +20,13 @@ from app.models.user import now_cst
 MAX_SIDE = 1920
 TARGET_KB = 180
 IMAGE_LIMIT = 50
+# 上传原图字节上限（与路由层 multipart 校验同源；MAX_CONTENT_LENGTH 8MB 是请求体总上限，
+# 此处是单文件业务上限——路由先按 Content-Length / 流式读取拒绝超大文件，此处兜底双保险）
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+# 解压炸弹防护：PIL 默认 ~1.79 亿像素才报错（且 0.89 亿仅告警），一张几 MB 的 PNG 可
+# 解码成数百 MB 位图。本系统提交端最大 1920 边（约 369 万像素），放宽到 4 倍余量；
+# 超限直接拒绝，不给「告警后继续解码」留空间。
+MAX_IMAGE_PIXELS = 4000 * 4000
 
 # 原格式 → (落盘扩展名, MIME)
 _FMT_MAP = {
@@ -94,6 +101,27 @@ def _save_png(im, out):
     im.save(out, format='PNG', optimize=True)
 
 
+def _open_image(raw_bytes):
+    """按防护口径打开图片：像素上限收紧 + 解压炸弹异常转 ImageError。
+    Image.open 只读头部（不解码像素），随后 im.load() 才真正分配位图内存——
+    像素上限在 load() 前生效，头部声明超限的文件根本不会进入解码。"""
+    from PIL import ImageFile
+
+    Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+    try:
+        im = Image.open(io.BytesIO(bytes(raw_bytes or b'')))
+        im.load()
+    except Image.DecompressionBombError:
+        raise ImageError('图片尺寸过大（疑似解压炸弹），已拒绝')
+    except Exception:
+        raise ImageError('文件不是有效图片')
+    # 截断式损坏图片（声明尺寸与实际数据不符）默认会在 load() 抛 OSError，
+    # 但容错截断模式（LOAD_TRUNCATED_IMAGES）被其他库打开时可能静默产出残图，
+    # 这里显式关闭容错，保证「不是有效图片」的判定不被环境变量放大
+    ImageFile.LOAD_TRUNCATED_IMAGES = False
+    return im
+
+
 def normalize_image(raw):
     """上传归一化：保留原格式（不强制转 JPEG），仅做尺寸收缩与按格式压缩。
     返回 (bytes, width, height, ext, mime)：
@@ -102,11 +130,9 @@ def normalize_image(raw):
       - 其它未知格式：兜底转 JPEG。
     GIF 不被接受（B 平台仅支持 JPEG），直接报错。"""
     raw_bytes = bytes(raw or b'')
-    try:
-        im = Image.open(io.BytesIO(raw_bytes))
-        im.load()
-    except Exception:
-        raise ImageError('文件不是有效图片')
+    if len(raw_bytes) > MAX_UPLOAD_BYTES:
+        raise ImageError('原图不能超过 5MB')
+    im = _open_image(raw_bytes)
     fmt = (im.format or '').upper()
     if fmt == 'GIF':
         raise ImageError('不支持 GIF 格式，请上传 JPG / PNG / WEBP')
@@ -136,12 +162,9 @@ def normalize_image(raw):
 def prepare_submit_image(raw_bytes, mime):
     """提交签到前的格式归一化（Module E 真实提交时调用）：B 平台仅接受 JPEG，
     故无论原始格式（PNG/WEBP/JPEG/未知均含）一律转 JPEG ≤180KB。
-    对应「上传保留原格式、提交时统一转 JPEG」的口径；GIF 已在上传端拒绝，不会到达此处。"""
-    try:
-        im = Image.open(io.BytesIO(bytes(raw_bytes or b'')))
-        im.load()
-    except Exception:
-        raise ImageError('图片无法解析，无法提交')
+    对应「上传保留原格式、提交时统一转 JPEG」的口径；GIF 已在上传端拒绝，不会到达此处。
+    数据来源为已归一化的自存文件，仍走同一 _open_image 防护（防库内容被外部篡改）。"""
+    im = _open_image(raw_bytes)
     im = ImageOps.exif_transpose(im).convert('RGB')
     im = _downscale(im)
     out = io.BytesIO()

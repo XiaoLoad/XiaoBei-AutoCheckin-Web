@@ -5,7 +5,8 @@ import os
 import pytest
 from PIL import Image
 
-from app.services.image_store import (ImageError, delete_file, normalize_image,
+from app.services.image_store import (MAX_IMAGE_PIXELS, MAX_UPLOAD_BYTES,
+                                      ImageError, delete_file, normalize_image,
                                       prepare_submit_image, purge_expired_trash,
                                       save_file, user_dir)
 
@@ -35,6 +36,47 @@ def _gif_animated(w=200, h=150, frames=4):
 def test_rejects_non_image(app_ctx):
     with pytest.raises(ImageError):
         normalize_image(b'not-an-image-at-all')
+
+
+def test_rejects_oversized_raw_bytes(app_ctx):
+    """超过单文件字节上限的原图在归一化前即被拒绝（不进入 PIL 解码）。"""
+    bomb = b'\xff\xd8\xff\xe0' + b'\0' * (MAX_UPLOAD_BYTES + 1)
+    with pytest.raises(ImageError) as ei:
+        normalize_image(bomb)
+    assert '5MB' in str(ei.value)
+
+
+def test_rejects_decompression_bomb(app_ctx):
+    """头部声明超限像素的图片（解压炸弹）必须拒绝，不得进入像素解码。
+    构造 PNG 头声明 16000×16000（2.56 亿像素 > 4000×4000 上限）：
+    文件体可极小，但 PIL 在 load() 时按声明尺寸分配位图内存——这正是炸弹原理。"""
+    import struct
+    import zlib
+
+    def _chunk(tag, data):
+        c = struct.pack('>I', len(data)) + tag + data
+        return c + struct.pack('>I', zlib.crc32(tag + data) & 0xffffffff)
+
+    w = h = 16000
+    ihdr = struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)  # 8bit RGB
+    png = (b'\x89PNG\r\n\x1a\n'
+           + _chunk(b'IHDR', ihdr)
+           + _chunk(b'IDAT', zlib.compress(b'\0' * 64))
+           + _chunk(b'IEND', b''))
+    assert len(png) < 1024  # 头部合法、体积极小——典型炸弹形态
+    with pytest.raises(ImageError) as ei:
+        normalize_image(png)
+    assert '解压炸弹' in str(ei.value)
+
+
+def test_bomb_guard_allows_large_but_legitimate_image(app_ctx):
+    """防护不误伤：像素恰在上限内的合法图片照常归一化（16000 边以内、4000 边内）。"""
+    im = Image.new('RGB', (3999, 3999), 'red')
+    buf = io.BytesIO()
+    im.save(buf, format='PNG')
+    data, w, h, ext, mime = normalize_image(buf.getvalue())
+    assert max(w, h) <= 4000  # 下游 1920 收缩前允许通过
+    assert ext == '.png'
 
 
 def test_normalize_small_jpeg_keeps_format_and_size(app_ctx):

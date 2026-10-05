@@ -150,12 +150,18 @@ function confirmDel(c) {
   confirmingId.value = null
   store.deleteCredential(c.id)
 }
+// 成功文案按通道实际投递目标区分：pushplus-open 走 QQ（选填群编码，留空发本人），其余推微信 / 邮箱
+function pushToastText(c, qqCode) {
+  if (c.type === 'email') return '测试邮件已发送，请到邮箱查收'
+  if (c.type === 'pushplus-open') return qqCode ? '群测试推送已发送，请到 QQ 群查收' : '测试推送已发送，请到本人 QQ 查收'
+  return '测试推送已发送，请到微信查收'
+}
 async function testPush(c) {
   testing.value = c.id
   const qqCode = (qqCodes.value[c.id] || '').trim()
   try {
     await store.testPushCredential(c.id, 'html', qqCode)
-    toast(qqCode ? '群测试推送已发送，请到 QQ 群查收' : '测试推送已发送，请到本人 QQ 查收', 'success')
+    toast(pushToastText(c, qqCode), 'success')
   } catch (e) {
     toast('测试推送失败，请检查凭证或通道配置', 'error')
   } finally {

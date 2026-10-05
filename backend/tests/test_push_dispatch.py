@@ -202,6 +202,77 @@ def test_build_ctx_initiator_passthrough():
     assert ctx_default['initiator'] == '—'
 
 
+# ── S5 回归：TLS 校验默认开启 + 网络异常脱敏 ──
+
+def test_push_verify_ssl_defaults_on(monkeypatch):
+    """推送平台是公共服务，证书链完整：PUSH_VERIFY_SSL 默认必须开启（防中间人窃取密钥）。
+    环境变量未设置时模块级默认为 True；显式 '0' 才降级。"""
+    import importlib
+    import os
+
+    import app.services.push_render as pr
+    saved = os.environ.pop('PUSH_VERIFY_SSL', None)
+    try:
+        importlib.reload(pr)
+        assert pr.PUSH_VERIFY_SSL is True
+        os.environ['PUSH_VERIFY_SSL'] = '0'
+        importlib.reload(pr)
+        assert pr.PUSH_VERIFY_SSL is False
+    finally:
+        if saved is None:
+            os.environ.pop('PUSH_VERIFY_SSL', None)
+        else:
+            os.environ['PUSH_VERIFY_SSL'] = saved
+        importlib.reload(pr)
+
+
+def test_push_requests_carry_verify_flag(monkeypatch):
+    """send_channel 的 HTTP 请求必须带上 verify=PUSH_VERIFY_SSL（而不是无脑 False）"""
+    from app.services import push_render as pr
+    captured = {}
+
+    def fake_post(url, **kw):
+        captured['verify'] = kw.get('verify')
+        return type('R', (), {'status_code': 200,
+                              'json': lambda self: {'code': 0, 'message': ''}})()
+
+    monkeypatch.setattr(pr.requests, 'post', fake_post)
+    ctx = pr.build_ctx(_FakeAcc(), _FakeSchedule(1), {}, 'success')
+    pr.send_channel('serverchan', 'SCTx', ctx)
+    assert captured['verify'] is pr.PUSH_VERIFY_SSL
+
+
+def test_network_exception_err_is_sanitized(monkeypatch):
+    """网络异常的 errmsg 不得包含 URL/异常原文（token 拼在路径里会随原文泄入日志与 PushLog），
+    只保留「异常类型 + 目标域名」。"""
+    import requests as rq
+
+    from app.services import push_render as pr
+
+    class _FakeReq:
+        url = 'https://sctapi.ftqq.com/SCT-SECRET-KEY-123.send'
+
+    class _FakeConnErr(rq.exceptions.ConnectionError):
+        pass
+
+    err_obj = _FakeConnErr(
+        "HTTPSConnectionPool(host='sctapi.ftqq.com', port=443): Max retries exceeded "
+        "with url: /SCT-SECRET-KEY-123.send (Caused by ConnectTimeoutError)")
+    err_obj.request = _FakeReq()
+
+    def fake_post(url, **kw):
+        raise err_obj
+
+    monkeypatch.setattr(pr.requests, 'post', fake_post)
+    ctx = pr.build_ctx(_FakeAcc(), _FakeSchedule(1), {}, 'success')
+    ok, err = pr.send_channel('serverchan', 'SCT-SECRET-KEY-123', ctx)
+    assert ok is False
+    assert 'SCT-SECRET-KEY-123' not in err, f'密钥泄漏进 errmsg：{err}'
+    assert 'Max retries' not in err and 'HTTPSConnectionPool' not in err
+    # 类型名 + 域名都在摘要里（fake 类名是 _FakeConnErr）
+    assert '_FakeConnErr' in err and 'sctapi.ftqq.com' in err
+
+
 def _resolved_multi(uid=None):
     return {'push': {
         'channels': ['pushplus', 'email'],

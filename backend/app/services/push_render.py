@@ -22,9 +22,12 @@ from urllib3.exceptions import InsecureRequestWarning
 
 log = logging.getLogger('push')
 
-# 推送目标（Server酱 / PushPlus）与 B 平台同理：部分域名证书链不完整（缺中间签发者），
-# 本机标准校验必失败；默认关闭校验与 B 平台对齐。PUSH_VERIFY_SSL=1 可开启（配合系统信任库）。
-PUSH_VERIFY_SSL = (os.getenv('PUSH_VERIFY_SSL') or '').lower() in ('1', 'true')
+# 推送目标（Server酱 / PushPlus）为公共服务，证书链完整，默认**开启**校验：
+# TLS 开着时中间人伪造证书必失败、抓包只见密文；关掉等于把推送密钥明文送到
+# 任何网络路径上的窃听者手里。仅当部署机信任库确有缺陷（如缺中间 CA）时，
+# 用 PUSH_VERIFY_SSL=0 显式降级——这是逃生开关而非默认姿势。
+# 与 B 平台的 BP_VERIFY_SSL 相互独立：B 平台证书确实失效，那边保持关闭不受本处影响。
+PUSH_VERIFY_SSL = (os.getenv('PUSH_VERIFY_SSL') or '1').lower() not in ('0', 'false')
 if not PUSH_VERIFY_SSL:
     warnings.simplefilter('ignore', InsecureRequestWarning)
 
@@ -43,6 +46,32 @@ TEMPLATES = ('html', 'txt', 'markdown')
 def _truncate(s, n):
     s = s or ''
     return s if len(s) <= n else s[: n - 1] + '…'
+
+
+def _safe_err(e):
+    """网络异常的脱敏摘要：异常类型 + 目标域名，不含 URL/异常原文。
+
+    requests 的连接类异常 str() 形如
+    'HTTPSConnectionPool(host=..., port=443): Max retries exceeded with url: /SCTxxx.send ...'
+    —— token 拼在 URL 路径里（ServerChan / pushplus 开放接口的官方设计），异常原文会把
+    密钥原样带出去；这条 err 会落 PushLog（前端任务日志可见）并进服务端日志。密钥长期
+    有效且不可撤销（只能去平台重置），故 err 一律只保留「什么错 + 打到哪个域名」，
+    足够定位问题又不泄密；诊断细节用 log.debug 保留在本地调试时可见。"""
+    host = ''
+    resp = getattr(e, 'response', None)
+    req = getattr(e, 'request', None)
+    url = getattr(req, 'url', '') or ''
+    if url:
+        try:
+            from urllib.parse import urlparse
+            host = urlparse(url).netloc
+        except ValueError:
+            host = ''
+    if not host:
+        host = getattr(getattr(e, 'pool', None), 'host', '') or ''
+    summary = f'{type(e).__name__}' + (f'（{host}）' if host else '')
+    log.debug('推送请求异常详情：%s', e)
+    return summary
 
 
 def _esc(s):
@@ -347,7 +376,7 @@ def send_channel(channel, key_or_fields, ctx, template='html'):
                                  data={'title': title, 'desp': render_txt(ctx)}, timeout=8,
                                  verify=PUSH_VERIFY_SSL)
         except Exception as e:
-            return False, str(e)
+            return False, _safe_err(e)
         try:
             body = resp.json()
         except ValueError:
@@ -364,7 +393,7 @@ def send_channel(channel, key_or_fields, ctx, template='html'):
                                        'content': render(ctx, fmt), 'template': fmt},
                                  timeout=8, verify=PUSH_VERIFY_SSL)
         except Exception as e:
-            return False, str(e)
+            return False, _safe_err(e)
         try:
             body = resp.json()
         except ValueError:
@@ -382,7 +411,8 @@ def send_channel(channel, key_or_fields, ctx, template='html'):
                 send_email(key_or_fields, title, render_txt(ctx))
             return True, ''
         except Exception as e:
-            return False, str(e)
+            # SMTP 凭证（授权码）在 smtplib 异常里可能出现，同样只回类型摘要
+            return False, _safe_err(e)
     if channel == 'qq':
         # pushplus 开放接口（QQ 机器人）：消息 token 走 URL 路径 /send/{token}，channel=qq 路由到 QQ；
         # qqCode 为群配置编码，省略则发给机器人绑定的本人（自测可用性用）。
@@ -403,7 +433,7 @@ def send_channel(channel, key_or_fields, ctx, template='html'):
             resp = requests.post(f'https://www.pushplus.plus/send/{token}',
                                  json=body, timeout=8, verify=PUSH_VERIFY_SSL)
         except Exception as e:
-            return False, str(e)
+            return False, _safe_err(e)
         try:
             rb = resp.json()
         except ValueError:
@@ -431,7 +461,7 @@ def send_qq(token, qq_code, title, content, template='markdown'):
                                    'template': template, 'channel': 'qq', 'option': qq_code},
                              timeout=8, verify=PUSH_VERIFY_SSL)
     except Exception as e:
-        return False, str(e)
+        return False, _safe_err(e)
     try:
         body = resp.json()
     except ValueError:

@@ -188,6 +188,22 @@ def delete_file(user_id, filename):
         pass
 
 
+def purge_user_files(user_id):
+    """删除用户的整个图片目录（F2：purge_user 只删库不删盘，uuid 文件名无索引可清，
+    pool_images/{uid}/ 会永久残留）。必须在 purge_user 的 DB 事务成功后调用——
+    目录删了但回滚了，图片就真丢了。目录已不存在视为已清理，静默。"""
+    import shutil
+    d = os.path.join(upload_root(), 'pool_images', str(user_id))
+    try:
+        shutil.rmtree(d, ignore_errors=False)
+    except FileNotFoundError:
+        pass
+    except OSError:
+        # 删不掉不阻塞用户删除主流程：残留目录已无 DB 记录引用，仅是磁盘垃圾
+        import logging
+        logging.getLogger('app').warning('用户图片目录清理失败 uid=%s', user_id, exc_info=True)
+
+
 def purge_expired_trash(days=7):
     """物理清除移入回收站超过 days 天的图库记录与文件（应用启动时调用）"""
     from app.extensions import db

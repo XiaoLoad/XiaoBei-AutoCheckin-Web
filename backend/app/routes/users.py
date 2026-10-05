@@ -181,5 +181,9 @@ def delete_user(user_id):
     from app.services.scheduler import remove_job
     for sid in result.get('scheduleIds') or []:
         remove_job(sid)
+    # 磁盘图片目录在 DB 事务成功后清理（F2）：uuid 文件名无索引可寻，不删则永久残留。
+    # 失败只记日志不回滚——库已删完，残留目录不再有任何引用。
+    from app.services.image_store import purge_user_files
+    purge_user_files(user.id)
     user_changed.send('users.delete', user_id=user.id, snapshot=snapshot, cascade=result['counts'])
     return success(message='删除成功')

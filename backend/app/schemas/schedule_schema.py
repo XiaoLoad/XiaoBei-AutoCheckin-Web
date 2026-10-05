@@ -2,6 +2,9 @@
 _WEEKDAYS = set(range(1, 8))
 # overrides 允许覆盖的顶层配置键（与配置套 config 顶层结构对应）；浅合并语义，键整体替换
 _OVERRIDE_KEYS = {'time', 'locationId', 'remarks', 'image', 'push', 'advanced', 'fence', 'activity'}
+# custom 内联随机延迟上限（F3）：与 config_schema 的 time.randomDelayMax 同口径
+_RANDOM_DELAY_MAX_MIN = 0
+_RANDOM_DELAY_MAX_LIMIT = 60
 
 
 def _as_bool(v):
@@ -26,8 +29,10 @@ def _clean_custom(raw):
     if not isinstance(h, int) or not isinstance(m, int) or not (0 <= h <= 23) or not (0 <= m <= 59):
         return False, None
     cfg = {'hour': h, 'minute': m, 'weekdays': wd}
-    if isinstance(raw.get('randomDelayMax'), int):
-        cfg['randomDelayMax'] = raw['randomDelayMax']
+    if isinstance(raw.get('randomDelayMax'), int) and not isinstance(raw['randomDelayMax'], bool):
+        # 随机延迟上限 clamp 到 0~60 分钟（F3）：过大值会让任务近乎永不触发
+        cfg['randomDelayMax'] = max(_RANDOM_DELAY_MAX_MIN,
+                                    min(_RANDOM_DELAY_MAX_LIMIT, raw['randomDelayMax']))
     return True, cfg
 
 

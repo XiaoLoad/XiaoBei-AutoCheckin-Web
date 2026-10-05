@@ -202,12 +202,24 @@ class RealAdapter:
               'fence': 围栏列表, 'finished_task': 本人已签到的进行中任务 或 None}
         ——不返回 None：`/list` 会同时给出本人已签到的行，据此区分「本来就没任务」与
         「已签到无需重复提交」，否则两者都只能报「无进行中任务」，会被误当漏签排查。
-        会话 token 失效由 _check 抛 credential。"""
+        会话 token 失效由 _check 抛 credential。
+
+        分页拉全（F3）：固定 pageSize=50 时，多班级集中发布导致进行中任务超 50 条，
+        目标任务不在首屏 → 误判「无进行中任务」而 skip。若依信封的 total 给出全量行数，
+        按页翻完再找目标；上限 10 页（500 条）防平台脏 total 造成无限翻页。"""
         mod = _module(task_type)
-        data = self._request('GET', mod['list'].lstrip('/'), token=session.get('token'),
-                             params={'pageNum': 1, 'pageSize': 50}, ua=session.get('ua'))
-        rows = data.get('rows') or []
         finish_field = mod['finish_field']
+        page_size = 50
+        rows = []
+        for page in range(1, 11):
+            data = self._request('GET', mod['list'].lstrip('/'), token=session.get('token'),
+                                 params={'pageNum': page, 'pageSize': page_size},
+                                 ua=session.get('ua'))
+            page_rows = data.get('rows') or []
+            rows.extend(page_rows)
+            total = data.get('total')
+            if not page_rows or not isinstance(total, int) or len(rows) >= total:
+                break
         task = next((r for r in rows if str(r.get(finish_field)) == '0'), None)
         if task is None:
             done = next((r for r in rows if str(r.get(finish_field)) == '1'), None)

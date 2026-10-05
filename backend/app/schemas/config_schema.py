@@ -5,6 +5,10 @@ _ALLOWED_TOP = {'presetSetId', 'time', 'locationId', 'remarks', 'image', 'push',
                 'fence', 'activity'}
 _WEEKDAYS = set(range(1, 8))
 _MAX_NAME = 64
+# 随机延迟上限边界（F3）：10**9 会让任务近乎永不触发。前端 TimeSection 未设 max，
+# 后端写入端统一 clamp（超出边界取边界值而非拒绝，存量配置不受影响）
+_RANDOM_DELAY_MAX_MIN = 0
+_RANDOM_DELAY_MAX_LIMIT = 60
 
 
 def _clean_name(v):
@@ -106,6 +110,11 @@ def sanitize_config(raw):
         if not ok_act:
             return False, None
         raw['activity'] = act
+    # time.randomDelayMax 边界收敛（F3）：非负整数 clamp 到 0~60 分钟
+    t = raw.get('time') or {}
+    if isinstance(t.get('randomDelayMax'), int) and not isinstance(t['randomDelayMax'], bool):
+        t['randomDelayMax'] = max(_RANDOM_DELAY_MAX_MIN,
+                                  min(_RANDOM_DELAY_MAX_LIMIT, t['randomDelayMax']))
     return True, raw
 
 

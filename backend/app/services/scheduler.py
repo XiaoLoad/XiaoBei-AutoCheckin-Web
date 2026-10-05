@@ -582,12 +582,18 @@ def _prune_old_sign_records():
             # 登录失败计数（防爆破）过期清理：锁定态最长 15 分钟，7 天前的记录必然失去意义
             from app.services.login_guard import purge_expired as purge_login_failures
             lf_deleted = purge_login_failures(days=7)
+            # 回收站超期图片每日扫尾（F2）：原先只在应用启动时执行一次，
+            # 长驻进程内 trash 记录与磁盘文件缓慢无界增长
+            from app.services.image_store import purge_expired_trash
+            trashed = purge_expired_trash()
             if deleted:
                 log.info('清理超期签到日志 %d 条（保留 %d 天）', deleted, int(days))
             if op_deleted:
                 log.info('清理超期用户日志 %d 条（保留 %d 天）', op_deleted, int(op_days))
             if lf_deleted:
                 log.info('清理超期登录失败计数 %d 条', lf_deleted)
+            if trashed:
+                log.info('清理超期回收站图片 %d 张', trashed)
             db.session.commit()
         except Exception as e:
             db.session.rollback()

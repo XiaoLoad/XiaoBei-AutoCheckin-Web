@@ -466,6 +466,29 @@ def _expand_windows_job():
             log.exception('活动窗口每日展开失败')
 
 
+def _dispatch_run(schedule_id, course_name):
+    """把完整签到链路派发到调度器线程池异步执行（T4）。
+
+    reconcile 是 30s interval job 且 max_instances=1：若在心跳线程内就地跑
+    run_schedule（登录/定位/提交/推送，最坏数分钟），心跳即被绑死——期间孤儿
+    清理、状态对账、群推送补发全部顺延。改为 DateTrigger 立即派发后，心跳只做
+    轻量对账，链路照常在线程池执行（30 workers 有充足余量）。
+    链路自容错（run_schedule 全程异常隔离），派发失败仅记日志、窗口保持 done，
+    由 cron 兜底（若启用）接管。"""
+    try:
+        sched = get_scheduler()
+        sched.add_job(
+            run_schedule, trigger=DateTrigger(run_date=now_cst()),
+            args=[schedule_id], kwargs={'allow_retry': True, 'course_name': course_name},
+            id=f'dispatch_{schedule_id}_{int(time.time() * 1000)}',
+            replace_existing=False, misfire_grace_time=120,
+        )
+        return True
+    except Exception:
+        log.exception('任务 %s（%s）签到链路派发失败', schedule_id, course_name)
+        return False
+
+
 def _poll_activity_windows():
     """活动课表窗口轮询（30s 心跳内调用）：对"窗口内 + 到达轮询间隔 + 未完结"的
     活动任务查询一次 B 平台；查到进行中活动 → 窗口完结并转完整签到链路
@@ -523,7 +546,7 @@ def _poll_activity_windows():
                 w.done = True
                 db.session.commit()
                 log.info('窗口 %s 轮询遇凭证失效，转完整链路重登', w.id)
-                run_schedule(s.id, allow_retry=True, course_name=w.course_name)
+                _dispatch_run(s.id, w.course_name)
             else:
                 log.info('窗口 %s 轮询失败（%s），下个周期再试', w.id, e.message)
             continue
@@ -535,7 +558,7 @@ def _poll_activity_windows():
         w.done = True
         db.session.commit()
         log.info('窗口 %s 命中活动任务（%s），转入签到流程', w.id, w.course_name)
-        run_schedule(s.id, allow_retry=True, course_name=w.course_name)
+        _dispatch_run(s.id, w.course_name)
 
 
 def _prune_old_sign_records():

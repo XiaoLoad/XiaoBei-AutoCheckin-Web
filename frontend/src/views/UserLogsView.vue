@@ -616,6 +616,10 @@ onMounted(() => {
 onUnmounted(() => {
   mm?.revert()
   gsap.killTweensOf(bodyRef.value || [])
+  // 防抖定时器清理（T9.3）：组件卸载后触发的 applyFilter 会写到已停用的 store，
+  // 是全项目唯一漏掉 clearTimeout 的防抖
+  if (kwTimer) clearTimeout(kwTimer)
+  kwTimer = null
 })
 
 // watch 一律写在脚本末尾：注册时即求一次源值，写在依赖声明之前会触发 TDZ，

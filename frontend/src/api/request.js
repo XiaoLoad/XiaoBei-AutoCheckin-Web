@@ -110,13 +110,22 @@ service.interceptors.response.use(
     // 此前只清 localStorage——不 emit AUTH_LOGOUT（并发请求取消、blob 缓存释放链失效）、
     // 不清 Pinia token（守卫仍放行死 token）。动态 import 避免
     // 与 stores/auth.js 的静态循环依赖（auth → api/auth → 本模块）。
-    // [权限判断] 前端清理只是体验优化，真正的拦截由后端鉴权装饰器保证
+    // [竞态修正 T9.1] 此前的 location.href 整页导航会让动态 import 的清理链
+    // （clearSession/AUTH_LOGOUT → 取消并发请求）在页面卸载时被丢弃——改为
+    // router.replace 站内跳转 + 先同步清 localStorage（内存态由清理链异步补齐，
+    // 即使微任务没跑完，守卫也能凭空的 localStorage 判定未登录并拦截）。
     if (status === 401 && !url.includes('/auth/login')) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      import('@/router').then(({ default: router }) => {
+        if (router.currentRoute.value.path !== '/login') {
+          router.replace({ path: '/login', query: { redirect: router.currentRoute.value.fullPath } })
+        }
+      })
       import('@/stores/auth').then(({ useAuthStore }) => {
         useAuthStore().clearSession()
         bus.emit(EVENTS.AUTH_LOGOUT)
       })
-      if (location.pathname !== '/login') location.href = '/login'
     } else if (!error.config?.silent) {
       // 统一错误提示（401 已由跳转登录页兜底，不再叠加 toast）
       toast(message, 'error')

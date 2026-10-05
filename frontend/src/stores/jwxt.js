@@ -15,6 +15,11 @@ export const useJwxtStore = defineStore('jwxt', () => {
   const overviews = ref({})
   const syncing = ref({})     // accountId → true（前端视角的同步进行中：已提交且未出结果）
   const loading = ref({})
+  const polling = ref({})     // accountId → true（waitSyncDone 轮询进行中，防重入）
+  // 轮询代数（T9.2）：waitSyncDone 是 150s 的长循环，旧实例无法被取消——
+  // 每次进入时自增代数，循环内发现代数已变（新一轮 bind/sync 开始）立即退出，
+  // 杜绝「绑 A → 秒解绑再绑 B，A 的旧轮询把 B 的结果覆盖成 A 的概览」的串扰。
+  let pollEpoch = 0
 
   function keyOf(id) {
     return String(id)
@@ -29,9 +34,10 @@ export const useJwxtStore = defineStore('jwxt', () => {
       overviews.value = { ...overviews.value, [key]: data }
       return data
     } catch (e) {
-      // 静默失败（接口 silent）：未绑定/未同步属常态，不弹全局 toast
-      overviews.value = { ...overviews.value, [key]: { bound: false, windows: [] } }
-      return overviews.value[key]
+      // 静默失败（接口 silent）：未绑定/未同步属常态，不弹全局 toast。
+      // [T9.2] 返回 null 而非伪造的空对象：waitSyncDone 据此区分「同步结束」与
+      // 「网络抖动」——误判结束会让按钮 spinner 提前消失、结果被报成失败。
+      return null
     } finally {
       loading.value = { ...loading.value, [key]: false }
     }
@@ -44,13 +50,30 @@ export const useJwxtStore = defineStore('jwxt', () => {
 
   // 轮询直到后台同步结束（syncRunning 转 false）或超时。
   // 返回最终 overview；期间 syncing 状态保持 true 驱动按钮 spinner。
+  // [T9.2] 入口防重入（同账号已有轮询直接复用）+ 代数守卫（新一轮 bind/sync
+  // 让旧轮询立即失效退出）；网络抖动轮次（load 返回 null）不视为同步结束，继续等。
   async function waitSyncDone(accountId) {
-    for (let i = 0; i < POLL_MAX_TIMES; i++) {
-      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
-      const data = await load(accountId, { force: true })
-      if (!data?.syncRunning) return data
+    const key = keyOf(accountId)
+    if (polling.value[key]) {
+      // 已有同账号轮询在跑：等它出结果即可，不再叠一层空转
+      while (polling.value[key]) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+      }
+      return load(accountId, { force: true })
     }
-    return load(accountId, { force: true })
+    polling.value = { ...polling.value, [key]: true }
+    const epoch = ++pollEpoch
+    try {
+      for (let i = 0; i < POLL_MAX_TIMES; i++) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+        if (epoch !== pollEpoch) return null  // 新一轮 bind/sync 已接管，本轮作废
+        const data = await load(accountId, { force: true })
+        if (data?.syncRunning === false) return data
+      }
+      return load(accountId, { force: true })
+    } finally {
+      polling.value = { ...polling.value, [key]: false }
+    }
   }
 
   function reportResult(accountId, overview, action) {
@@ -116,5 +139,5 @@ export const useJwxtStore = defineStore('jwxt', () => {
     return !!overviewOf(accountId)?.bound
   }
 
-  return { overviews, syncing, loading, load, loadMany, bind, sync, unbind, overviewOf, isBound }
+  return { overviews, syncing, loading, polling, load, loadMany, bind, sync, unbind, overviewOf, isBound }
 })

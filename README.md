@@ -1,34 +1,34 @@
 <div align="center">
 
-# 小北寝室自动打卡 · Web 端
+[![小北自动打卡](frontend/public/favicon-256x256.png)](frontend/public/favicon-256x256.png)
 
-面向寝室 / 活动签到自动化的前后端分离管理平台：后端 Flask 编排 B 平台签到链路与定时调度，前端 Vue 3 提供管理员 / 普通用户双视角控制台。
+**寝室 / 活动签到，交给后台自动跑。**
+
+前后端分离的自动签到管理平台：后端 Flask 编排 B 平台签到链路与课表驱动调度，前端 Vue 3 提供管理员 / 普通用户双视角控制台。
 
 [![Version](https://img.shields.io/badge/version-1.0.0-blue)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)](backend/requirements.txt)
 [![Flask](https://img.shields.io/badge/Flask-3.0-000000?logo=flask&logoColor=white)](backend/requirements.txt)
 [![Vue](https://img.shields.io/badge/Vue-3.5-4FC08D?logo=vuedotjs&logoColor=white)](frontend/package.json)
-[![Tests](https://img.shields.io/badge/tests-392%20passed-brightgreen)](backend/tests)
+[![Tests](https://img.shields.io/badge/tests-399%20passed-brightgreen)](backend/tests)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
+[功能特性](#功能特性) · [快速开始](#快速开始) · [配置](#配置) · [生产部署](#生产部署) · [使用指南](#使用指南) · [常见问题](#常见问题)
+
 </div>
-
-## 简介
-
-本项目对接高校「小北」平台（B 平台），实现寝室签到与活动签到的自动化提交：由教务课表驱动调度窗口，按配置的定位、图片与备注自动完成签到，并通过多通道推送结果。内置管理员 / 普通用户双角色控制台，覆盖账号、任务、资源池、日志与系统设置的全套管理界面。
 
 > 当前功能针对强智教务系统与本校 B 平台接口实测开发；其他学校的平台如接口一致亦可复用。
 
 ## 功能特性
 
-- **双视角控制台**：管理员（用户 / 账号 / 定时任务 / 配置套 / 全站签到记录巡检 / 仪表盘 / 系统设置）与普通用户（我的资源 / 任务配置 / 签到记录 / 仪表盘）按角色分发。
-- **自动签到链路**：找进行中任务 → 平台时间窗校验 → 定位（位置池坐标 + 随机偏移 / 围栏中心回退）→ 围栏拦截 → 认领图库图片 → 提交 B 平台 → 落库推送；含演练开关与诊断脚本。
-- **课表驱动调度**：对接教务系统，按课表展开当日时间窗低频轮询；跨时段课程自动拆分窗口，避免午休后发布的签到漏签。
-- **资源池体系**：位置池（高德地图拾取）、图库、凭证池（Server 酱 / PushPlus / 邮箱）、UA 模板。
-- **配置套**：寝室 / 活动类型化配置快照，支持批量套用与漂移检测；任务实例自持配置。
-- **多通道推送**：邮件 / Server 酱 / PushPlus / QQ 群摘要；凭证可按配置套共享或按账号自带，落库推送结果。
-- **调度可靠性**：连接池对齐并发、网络重试与窗口内补跑、启动漏跑对账；单实例部署约束。
-- **多主题与响应式**：六套主题色 + GSAP 色彩补间；桌面端应用框式布局，移动端文档流自然滚动。
+* **双视角控制台** —— 管理员（用户 / 账号 / 定时任务 / 配置套 / 全站签到记录巡检 / 仪表盘 / 系统设置）与普通用户（我的资源 / 任务配置 / 签到记录 / 仪表盘）按角色分发。
+* **自动签到链路** —— 找进行中任务 → 平台时间窗校验 → 定位（位置池坐标 + 随机偏移 / 围栏中心回退）→ 围栏拦截 → 认领图库图片 → 提交 B 平台 → 落库推送；含演练开关与诊断脚本。
+* **课表驱动调度** —— 对接教务系统，按课表展开当日时间窗低频轮询；跨时段课程自动拆分窗口，避免午休后发布的签到漏签。
+* **资源池体系** —— 位置池（高德地图拾取）、图库、凭证池（Server 酱 / PushPlus / 邮箱）、UA 模板。
+* **配置套** —— 寝室 / 活动类型化配置快照，支持批量套用与漂移检测；任务实例自持配置。
+* **多通道推送** —— 邮件 / Server 酱 / PushPlus / QQ 群摘要；凭证可按配置套共享或按账号自带，落库推送结果。
+* **调度可靠性** —— 连接池对齐并发、网络重试与窗口内补跑、启动漏跑对账；单实例部署约束。
+* **多主题与响应式** —— 六套主题色 + GSAP 色彩补间；桌面端应用框式布局，移动端文档流自然滚动。
 
 ## 技术栈
 
@@ -127,6 +127,8 @@ gunicorn -w 1 --threads 8 "app:create_app()"    # 或 python app.py
 
 生产环境安全守护：`SECRET_KEY` / `JWT_SECRET_KEY` 仍为开发默认值、`CORS_ORIGINS` 含 `*`、数据库连接串为开发默认值时，应用启动即拒绝，避免带弱配置上线。
 
+**首次启动引导**：全新部署首次启动时（系统中无任何账号），应用自动创建管理员 `admin` 并生成随机密码，仅在启动日志（stderr 与 `backend/logs/app.log`）打印一次——请立即登录并修改密码。错过打印时，删除该账号记录后重启可重新引导，或使用 `scripts/create_admin.py` 手动创建。
+
 ## 使用指南
 
 ### 自动签到链路
@@ -217,7 +219,7 @@ Web端/
 │   ├── requirements.txt
 │   ├── .env.example         # 环境变量示例
 │   ├── migrations/          # 表结构迁移链（唯一事实源）
-│   ├── scripts/             # init_db / diag_bp_checkin 等工具脚本
+│   ├── scripts/             # init_db / create_admin / diag_bp_checkin 等工具脚本
 │   ├── tests/               # 后端测试（pytest）
 │   ├── config/              # 配置层（按环境切换）
 │   └── app/
@@ -238,24 +240,23 @@ cd backend
 .venv/Scripts/python -m pytest -q        # Windows；Linux/macOS: python -m pytest -q
 ```
 
-当前 392 条用例全部通过，覆盖签到链路、调度、教务解析、推送、权限与安全守护等模块。
+当前 399 条用例全部通过，覆盖签到链路、调度、教务解析、推送、权限与安全守护等模块。
 
 ## 常见问题
 
 **全新生产库如何创建第一个管理员？**
-生产环境的管理员账号由管理员在界面内创建，系统不提供注册入口；全新库需要手动插入首个管理员：
+无需手动操作：首次启动时应用检测到系统中无任何账号，会自动创建管理员 `admin` 并把随机密码打印到启动日志（仅一次），登录后请立即修改密码。
+
+错过日志的恢复方式（二选一）：
 
 ```bash
+# ① 删除 users 表中该账号记录后重启应用，重新触发引导
+# ② 手动创建（系统中已有任何账号时脚本会拒绝执行）：
 cd backend
-python -c "import bcrypt; print(bcrypt.hashpw(b'你的密码', bcrypt.gensalt()).decode())"
+python scripts/create_admin.py admin
 ```
 
-```sql
-INSERT INTO users (username, password_hash, role, enabled, quota, used_quota, pwd_ver, created_at)
-VALUES ('admin', '<上一步输出的哈希>', 'admin', 1, 100, 0, 1, NOW());
-```
-
-`scripts/init_db.py` 仅用于开发库初始化（带安全守卫：生产环境或非开发默认库一律拒绝执行），种子密码随机生成且仅终端打印一次。
+`scripts/init_db.py` 仅用于开发库初始化（生产环境或非开发默认库一律拒绝执行），种子密码随机生成且仅终端打印一次。
 
 **为什么 B 平台默认关闭 TLS 校验？**
 B 平台为校园服务器，证书链已失效，开启校验即无法通信（`BP_VERIFY_SSL=0` 为默认）；推送通道为公共服务，默认开启校验（`PUSH_VERIFY_SSL=1`）。
@@ -269,4 +270,4 @@ B 平台为校园服务器，证书链已失效，开启校验即无法通信（
 
 ## License
 
-本项目基于 [MIT License](LICENSE) 开源。
+MIT

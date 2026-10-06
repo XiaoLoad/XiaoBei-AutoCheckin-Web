@@ -2,6 +2,7 @@
 import logging
 import logging.handlers
 import os
+import secrets
 
 from flask import Flask
 from flask_cors import CORS
@@ -85,9 +86,11 @@ def create_app(env_name=None):
 
     # 启动时对齐数据库结构与种子数据；失败不阻断应用启动，
     # 但必须记日志——否则数据库不可用时应用照常起来，排障无从下手。
+    bootstrap_password = None
     try:
         with app.app_context():
             _init_database(app)
+            bootstrap_password = _bootstrap_first_admin(app)
             _seed_default_config_sets(app)
             _purge_trash_safely(app)
     except Exception:
@@ -97,6 +100,14 @@ def create_app(env_name=None):
     # 该调用会清掉 root 上已有的处理器并把级别改回 WARNING（[logger_root] level=WARN），
     # 装在前面会被当场销毁，logs/app.log 永远是空文件。
     _setup_logging(app)
+
+    # 首次启动引导的管理员密码必须在日志装配完成后再落日志，
+    # 否则只进 stderr 不进 logs/app.log，错过 stderr 就找不回凭据了
+    if bootstrap_password:
+        app.logger.warning(
+            '首次启动引导：已创建管理员 admin，随机密码 %s ——仅本次打印，'
+            '请立即登录并修改密码；如错过，删除该账号记录后重启本应用可重新引导'
+            '（或使用 scripts/create_admin.py 手动创建）', bootstrap_password)
 
     # 启动调度器主链路（事件钩子 + 对账兜底）；失败不阻断应用启动。
     try:
@@ -208,6 +219,22 @@ def _init_database(app):
         # flask_migrate 把 alembic 的 CommandError 打印后转成 sys.exit(1)；
         # SystemExit 不走 except Exception，这里转回普通异常交给调用方记日志
         raise RuntimeError('数据库迁移执行失败（ alembic 错误已打印在上方）')
+
+
+def _bootstrap_first_admin(app, username='admin'):
+    """首个管理员引导：全新部署后 users 表为空、系统又无注册入口，启动时
+    自动创建管理员并生成随机密码（Jenkins 初始密码模式）。密码由调用方在
+    日志装配完成后打印一次，不落库不留存。
+    users 非空即跳过——以「表空」为引导条件天然幂等，无需独立标记位；
+    手动兜底路径为 scripts/create_admin.py（users 非空时同样拒绝）。"""
+    if User.query.count() > 0:
+        return None
+    password = secrets.token_urlsafe(12)
+    admin = User(username=username, role='admin', enabled=True)
+    admin.set_password(password)
+    db.session.add(admin)
+    db.session.commit()
+    return password
 
 
 def _seed_default_config_sets(app):

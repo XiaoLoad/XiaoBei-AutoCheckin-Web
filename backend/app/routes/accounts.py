@@ -26,11 +26,14 @@ bp = Blueprint('accounts', __name__, url_prefix='/api/accounts')
 # 【长期关闭】B 平台无风控（用户确认），间隔设 0 永不节流，不再恢复 60 秒限制
 _VERIFY_INTERVAL = 0
 _last_verify_at = {}
+_VERIFY_MAX_KEYS = 10000  # key 含用户可控账号名，超限整批清空防内存无界增长
 
 
 def _throttled(key):
     now = time.monotonic()
     last = _last_verify_at.get(key)
+    if last is None and len(_last_verify_at) >= _VERIFY_MAX_KEYS:
+        _last_verify_at.clear()
     _last_verify_at[key] = now
     return last is not None and now - last < _VERIFY_INTERVAL
 

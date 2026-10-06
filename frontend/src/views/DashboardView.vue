@@ -14,10 +14,13 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, defineAsyncComponent } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import AdminDashboard from '@/views/AdminDashboard.vue'
-import UserDashboard from '@/views/UserDashboard.vue'
+
+// 异步引入：普通用户永远用不到 AdminDashboard（924 行、带 ECharts），
+// 静态引入会把它打进首屏 chunk 让所有人多下载一份；按角色异步分包后各取所需。
+const AdminDashboard = defineAsyncComponent(() => import('@/views/AdminDashboard.vue'))
+const UserDashboard = defineAsyncComponent(() => import('@/views/UserDashboard.vue'))
 
 // [权限判断] 角色由后端按 token 返回，前端仅据其分发两套页面
 const auth = useAuthStore()

@@ -1,5 +1,7 @@
 # 用户领域服务：收纳路由可复用的数据查询 / 聚合片段，路由只做 HTTP 适配。
 # 不做完整 service 框架，仅把跨路由复用的逻辑下沉，降低路由层厚度与重复。
+import json
+
 from app.extensions import db
 from app.models.user import User
 
@@ -70,17 +72,36 @@ def user_delete_blockers(user):
     ua_rows = PoolUa.query.filter_by(user_id=user.id).all()
     cred_rows = PoolCredential.query.filter_by(user_id=user.id).all()
     if ua_rows or cred_rows:
-        others = ConfigSet.query.filter(ConfigSet.user_id != user.id).all()
-        other_accs = BAccount.query.filter(BAccount.user_id != user.id).all()
-        ua_refs = sum(1 for cs in others for ua in ua_rows
-                      if ((cs.config or {}).get('advanced') or {}).get('uaTemplateId') == ua.id)
+        # 引用判定所需的全部信息都在 config_json / push_cred_json 里，
+        # with_entities 只取这两列，整行（含无关字段）不再加载。
+        others = (ConfigSet.query.filter(ConfigSet.user_id != user.id)
+                  .with_entities(ConfigSet.config_json).all())
+        other_accs = (BAccount.query.filter(BAccount.user_id != user.id)
+                      .with_entities(BAccount.push_cred_json).all())
+        ua_ids = {ua.id for ua in ua_rows}
+        cred_ids = {c.id for c in cred_rows}
+        ua_refs = 0
+        cred_refs = 0
+        for (config_json,) in others:
+            try:
+                cfg = json.loads(config_json) if config_json else {}
+            except (ValueError, TypeError):
+                continue
+            if ua_ids and ((cfg.get('advanced') or {}).get('uaTemplateId') in ua_ids):
+                ua_refs += 1
+            if cred_ids and (cred_ids & set(((cfg.get('push') or {}).get('credIds') or {}).values())):
+                cred_refs += 1
+        for (pcj,) in other_accs:
+            if not pcj:
+                continue
+            try:
+                creds = json.loads(pcj)
+            except (ValueError, TypeError):
+                continue
+            if cred_ids & {binding_cred_id(v) for v in creds.values()}:
+                cred_refs += 1
         if ua_refs:
             blockers.append({'kind': 'ua', 'label': 'UA 模板', 'refs': ua_refs})
-        cred_ids = {c.id for c in cred_rows}
-        cred_refs = sum(1 for cs in others
-                        if cred_ids & set((((cs.config or {}).get('push') or {}).get('credIds') or {}).values()))
-        cred_refs += sum(1 for a in other_accs
-                         if cred_ids & {binding_cred_id(v) for v in (a.push_creds or {}).values()})
         if cred_refs:
             blockers.append({'kind': 'credential', 'label': '推送凭证', 'refs': cred_refs})
 

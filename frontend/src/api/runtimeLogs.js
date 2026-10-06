@@ -17,8 +17,9 @@ export async function fetchRuntimeLogs(params = {}) {
 }
 
 // 导出当前筛选的日志为 txt：走 axios blob（复用统一鉴权与 401 处理；
-// blob 响应被 request.js 拦截器原样放行为 Blob 本体）。
+// blob 响应被 request.js 拦截器原样放行为 Blob 本体，headers 挂在 __headers__）。
 // 文件名由前端按筛选状态生成（后端不再回传 disposition），带关键字与时间戳防覆盖。
+// 命中行数取后端 X-Log-Lines 响应头（导出大文件时不为显示行数读整 blob 进内存）。
 export async function exportRuntimeLogs({ q = '', rotated = false } = {}) {
   const blob = await request({
     url: '/admin/runtime-logs',
@@ -32,5 +33,6 @@ export async function exportRuntimeLogs({ q = '', rotated = false } = {}) {
   const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '').replace(/-/g, '')
   const tag = (q || '').replace(/[^\w\u4e00-\u9fff]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 32) || 'all'
   const rotatedTag = rotated ? '_rotated' : ''
-  return { blob, filename: `runtime_logs_${tag}_${stamp}${rotatedTag}.txt` }
+  const lines = parseInt(blob.__headers__?.get?.('x-log-lines') || '', 10)
+  return { blob, filename: `runtime_logs_${tag}_${stamp}${rotatedTag}.txt`, count: Number.isNaN(lines) ? 0 : lines }
 }

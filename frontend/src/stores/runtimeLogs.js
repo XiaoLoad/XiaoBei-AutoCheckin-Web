@@ -61,12 +61,13 @@ export const useRuntimeLogsStore = defineStore('runtimeLogs', () => {
   // 导出当前筛选为 txt 附件：导出的是「当前筛选命中的原文」而非界面投影，
   // 行数上限用接口顶格 2000（界面 tail 只是显示密度，导出应尽量拿全）。
   // 返回 { filename, count }；count=0 时调用方提示无可导内容，不生成空文件。
+  // 行数统计走服务端响应头（X-Log-Lines），不再为显示一个数字把整个 blob 读进内存。
   const exporting = ref(false)
   async function exportLogs() {
     if (exporting.value) return null
     exporting.value = true
     try {
-      const { blob, filename } = await exportRuntimeLogs({
+      const { blob, filename, count } = await exportRuntimeLogs({
         q: keyword.value,
         rotated: rotated.value,
       })
@@ -76,8 +77,7 @@ export const useRuntimeLogsStore = defineStore('runtimeLogs', () => {
       a.download = filename
       a.click()
       URL.revokeObjectURL(url)
-      const count = blob.size ? blob.text().then((t) => t.split('\n').filter(Boolean).length) : 0
-      return { filename, count: await count }
+      return { filename, count: count ?? 0 }
     } finally {
       exporting.value = false
     }

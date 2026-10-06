@@ -71,8 +71,12 @@ service.interceptors.request.use(
 service.interceptors.response.use(
   (response) => {
     untrackRequest(response.config)
-    // blob 响应（图片流）不经 {code,message,data} 解包，原样放行
-    if (response.config.responseType === 'blob') return response.data
+    // blob 响应（图片流）不经 {code,message,data} 解包，原样放行；
+    // 附加 headers 供调用方读取（如运行日志导出的 X-Log-Lines 行数）
+    if (response.config.responseType === 'blob') {
+      response.data.__headers__ = response.headers
+      return response.data
+    }
     const res = response.data
     // 约定后端成功时 code === 0
     if (res.code !== 0 && res.code !== undefined) {

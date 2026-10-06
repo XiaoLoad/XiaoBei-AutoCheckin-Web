@@ -3,6 +3,11 @@
 # 本工具给「间隔不可为 0」的场景用（如密码回显接口，不限流就是爆破点）。
 import time
 
+# 单实例 key 上限：key 含用户可控字符串（如账号名）时，字典会随尝试次数无限增长。
+# 超限整批清空——节流的语义是「短间隔防重放」，全清最坏情况是攻击者趁机多打一发，
+# 不会破坏限流本身；远优于内存无界增长（DoS 面）。
+MAX_KEYS = 10000
+
 
 class Throttle:
     def __init__(self, interval):
@@ -14,5 +19,7 @@ class Throttle:
         必须在真正执行敏感动作之前调用——每次尝试都要刷新时间戳，连续尝试才会被拦住。"""
         now = time.monotonic()
         last = self._last.get(key)
+        if last is None and len(self._last) >= MAX_KEYS:
+            self._last.clear()
         self._last[key] = now
         return last is not None and now - last < self.interval

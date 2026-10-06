@@ -219,15 +219,22 @@ def _account_health():
     today = now_cst().date()
     threshold = today - timedelta(days=3)
 
+    def _usernames_of(user_ids):
+        """批量预取 user_id → username（两个列表页逐条 get(User) 的 N+1 消除）。"""
+        ids = list({i for i in user_ids if i})
+        if not ids:
+            return {}
+        return dict(db.session.query(User.id, User.username).filter(User.id.in_(ids)).all())
+
     invalid_rows = (BAccount.query
                     .filter(BAccount.verify_status != 'ok')
                     .order_by(BAccount.id.desc()).limit(8).all())
+    uname_map = _usernames_of(a.user_id for a in invalid_rows)
     invalid_list = []
     for a in invalid_rows:
-        u = db.session.get(User, a.user_id)
         invalid_list.append({
             'account': a.account,
-            'username': u.username if u else '',
+            'username': uname_map.get(a.user_id, ''),
             'verifyStatus': a.verify_status,
             'checkedAt': a.verified_at.strftime('%m-%d %H:%M') if a.verified_at else '',
         })
@@ -240,20 +247,25 @@ def _account_health():
             .filter(Schedule.enabled.is_(True), BAccount.enabled.is_(True))
             .all())
     stale = []
+    stale_uids = set()
     for sched, acc, last in rows:
         if last is None:
             days = None
         else:
             days = (today - last).days
         if days is None or days > 3:
-            u = db.session.get(User, acc.user_id)
+            stale_uids.add(acc.user_id)
             stale.append({
                 'account': acc.account,
-                'username': u.username if u else '',
+                'username': '',
                 'taskType': sched.task_type,
                 'lastSign': last.strftime('%m-%d') if last else '',
                 'days': days,
+                '_uid': acc.user_id,
             })
+    uname_map = _usernames_of(stale_uids)
+    for item in stale:
+        item['username'] = uname_map.get(item.pop('_uid'), '')
     stale.sort(key=lambda x: (x['days'] is not None, x['days'] if x['days'] is not None else 0),
                reverse=True)
     return {
@@ -735,6 +747,8 @@ def runtime_logs():
     if export_txt:
         # 导出：把筛选结果作为纯文本附件下发。文件名带时间戳与关键字标记，
         # 多个排障会话的导出文件不会互相覆盖；no-store 防中间层缓存旧日志。
+        # X-Log-Lines 带命中行数：前端导出后要提示「导出 N 行」，不再为显示这个
+        # 数字把整个 blob 读回内存 split。
         stamp = now_cst().strftime('%Y%m%d_%H%M%S')
         tag = re.sub(r'[^\w\u4e00-\u9fff]+', '_', keyword)[:32].strip('_') if keyword else 'all'
         rotated_tag = '_rotated' if include_rotated else ''
@@ -745,6 +759,7 @@ def runtime_logs():
         resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
         resp.headers['Content-Type'] = 'text/plain; charset=utf-8'
         resp.headers['Cache-Control'] = 'no-store'
+        resp.headers['X-Log-Lines'] = str(len(collected))
         return resp
 
     return success({'items': collected, 'tail': tail, 'q': keyword,

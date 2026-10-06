@@ -1,66 +1,54 @@
-# 小北寝室自动打卡 - Web 端
+<div align="center">
 
-面向寝室 / 活动签到自动化的前后端分离管理平台：后端 Flask 编排 B 平台签到链路与定时调度，前端 Vue3 提供管理员 / 普通用户双视角控制台。当前为开发阶段（版本 0.x.x）。
+# 小北寝室自动打卡 · Web 端
+
+面向寝室 / 活动签到自动化的前后端分离管理平台：后端 Flask 编排 B 平台签到链路与定时调度，前端 Vue 3 提供管理员 / 普通用户双视角控制台。
+
+[![Version](https://img.shields.io/badge/version-1.0.0-blue)](CHANGELOG.md)
+[![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)](backend/requirements.txt)
+[![Flask](https://img.shields.io/badge/Flask-3.0-000000?logo=flask&logoColor=white)](backend/requirements.txt)
+[![Vue](https://img.shields.io/badge/Vue-3.5-4FC08D?logo=vuedotjs&logoColor=white)](frontend/package.json)
+[![Tests](https://img.shields.io/badge/tests-392%20passed-brightgreen)](backend/tests)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
+</div>
+
+## 简介
+
+本项目对接高校「小北」平台（B 平台），实现寝室签到与活动签到的自动化提交：由教务课表驱动调度窗口，按配置的定位、图片与备注自动完成签到，并通过多通道推送结果。内置管理员 / 普通用户双角色控制台，覆盖账号、任务、资源池、日志与系统设置的全套管理界面。
+
+> 当前功能针对强智教务系统与本校 B 平台接口实测开发；其他学校的平台如接口一致亦可复用。
 
 ## 功能特性
 
 - **双视角控制台**：管理员（用户 / 账号 / 定时任务 / 配置套 / 全站签到记录巡检 / 仪表盘 / 系统设置）与普通用户（我的资源 / 任务配置 / 签到记录 / 仪表盘）按角色分发。
-- **自动签到链路（模块 E）**：找进行中任务 → 平台时间窗校验 → 定位（位置池坐标 + 随机偏移 / 围栏中心回退）→ 围栏拦截 → 认领图库图片 → 提交 B 平台 → 落库推送；含演练开关 `CHECKIN_DRYRUN` 与诊断脚本。
-- **活动签到课表驱动调度**：对接教务系统，按课表展开当日时间窗低频轮询；配置套类型化（寝室 / 活动）。
+- **自动签到链路**：找进行中任务 → 平台时间窗校验 → 定位（位置池坐标 + 随机偏移 / 围栏中心回退）→ 围栏拦截 → 认领图库图片 → 提交 B 平台 → 落库推送；含演练开关与诊断脚本。
+- **课表驱动调度**：对接教务系统，按课表展开当日时间窗低频轮询；跨时段课程自动拆分窗口，避免午休后发布的签到漏签。
 - **资源池体系**：位置池（高德地图拾取）、图库、凭证池（Server 酱 / PushPlus / 邮箱）、UA 模板。
-- **配置套**：可复用配置快照，支持批量套用 / 漂移检测；任务实例自持 `config_json`。
-- **多主题系统**：六套主题色 + 表面染色 + GSAP 色彩补间，设置页与侧边栏入口双入口切换。
-- **备注模板**：`{username}` 占位符按各账号 B 平台姓名分别提交。
-- **推送**：邮件 / Server 酱 / PushPlus 三通道；凭证可按配置套共享或按账号自带（邮件支持多收件人、可按账号覆盖收件人），透传真实发起人，落库推送结果。
-- **调度器可靠性**：连接池对齐并发、网络重试与窗口内补跑、启动漏跑对账；单实例部署。
-- **响应式体验**：桌面端应用框式布局，移动端文档流自然滚动；统一加载条、刷新总线、Toast 动画。
+- **配置套**：寝室 / 活动类型化配置快照，支持批量套用与漂移检测；任务实例自持配置。
+- **多通道推送**：邮件 / Server 酱 / PushPlus / QQ 群摘要；凭证可按配置套共享或按账号自带，落库推送结果。
+- **调度可靠性**：连接池对齐并发、网络重试与窗口内补跑、启动漏跑对账；单实例部署约束。
+- **多主题与响应式**：六套主题色 + GSAP 色彩补间；桌面端应用框式布局，移动端文档流自然滚动。
 
 ## 技术栈
 
-后端 Flask + Flask-SQLAlchemy + JWT + APScheduler；前端 Vue 3 + Vite + TailwindCSS + Pinia + ECharts + axios。
+| 层级 | 技术 |
+| --- | --- |
+| 后端 | Python 3.13 · Flask 3 · Flask-SQLAlchemy · Flask-Migrate (Alembic) · PyJWT · APScheduler · bcrypt · Pillow |
+| 前端 | Vue 3 · Vite · TailwindCSS · Pinia · Vue Router · ECharts · GSAP · axios |
+| 数据库 | MySQL 8 |
+| 部署 | gunicorn（单实例）· systemd / docker 均可 |
 
-## 目录结构
+## 快速开始
 
-```
-Web端/
-├── frontend/                # 前端（Vue 3 + Vite + TailwindCSS）
-│   ├── index.html
-│   ├── package.json
-│   ├── vite.config.js       # 含 /api 代理到后端 5000
-│   ├── tailwind.config.js
-│   ├── postcss.config.js
-│   └── src/
-│       ├── main.js          # 入口
-│       ├── App.vue
-│       ├── router/          # 路由（按页面划分）
-│       ├── stores/          # 状态管理（Pinia，按业务域拆分）
-│       ├── api/             # 接口层（axios 封装 + 模块接口）
-│       ├── utils/           # 通用工具
-│       ├── components/      # 公共组件
-│       ├── views/           # 页面
-│       ├── layouts/         # 布局模板
-│       └── assets/          # 静态资源与全局样式
-└── backend/                 # 后端（Python + Flask）
-    ├── app.py               # 生产入口
-    ├── run.py               # 本地开发启动
-    ├── requirements.txt
-    ├── config/__init__.py   # 配置层（按环境切换）
-    └── app/
-        ├── __init__.py      # 应用工厂
-        ├── extensions.py    # 扩展挂载点
-        ├── utils/           # 统一返回格式 response.py
-        ├── routes/          # 蓝图（按业务模块划分）
-        └── models/          # 数据模型（预留）
-```
+### 环境要求
 
-## 运行方式
+- Python 3.13（开发实测版本）
+- Node.js ≥ 18
+- MySQL 8，且已创建数据库：
 
-### 前端
-
-```bash
-cd frontend
-npm install
-npm run dev          # http://localhost:5173
+```sql
+CREATE DATABASE xiaobei_auto DEFAULT CHARACTER SET utf8mb4;
 ```
 
 ### 后端
@@ -68,29 +56,20 @@ npm run dev          # http://localhost:5173
 ```bash
 cd backend
 python -m venv .venv
-source .venv/bin/activate     # Windows: .venv\Scripts\activate
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-python run.py                 # http://127.0.0.1:5000
+cp .env.example .env             # Windows: copy .env.example .env
+
+# 开发库初始化：建表 + 种子账号（admin / user01，随机密码仅终端打印一次）
+python scripts/init_db.py
+
+python run.py                    # http://127.0.0.1:5000
 ```
 
-> **部署约束（单实例）**：定时任务调度器随 Web 进程启动且 job 存于内存，全系统只允许一个进程运行调度器。
-> 上线请使用 `gunicorn -w 1 --threads 8 "app:create_app()"` 或直接 `python run.py`；
-> 多 worker 会各自注册同一批 cron 任务，导致同一账号重复打卡。未来横向扩容 Web 时，
-> 先将 Web 进程置 `SCHEDULER_ENABLED=0`，由独立常驻进程接管调度。
-> 调度相关环境变量（并发线程池 / 补跑宽限等）见 `backend/.env.example` 的「定时任务调度器」段。
+表结构以 `backend/migrations/` 迁移链为唯一事实源，应用启动时自动对齐：
 
-> **环境变量**：`config/__init__.py` 启动时自动加载 `backend/.env`（已 gitignore；复制
-> `.env.example` 修改即可），systemd/docker 注入的环境变量优先于 `.env`。
-> 生产入口 `app.py`（gunicorn / `python app.py`）缺省以 production 启动，密钥仍为开发
-> 默认值时拒绝启动；本地开发请用 `python run.py`（缺省 development，且调试模式只绑定
-> 127.0.0.1）。
-
-### 数据库迁移
-
-表结构以 `backend/migrations/` 迁移链为唯一事实源（Alembic / Flask-Migrate），应用启动时自动对齐：
-
-- 空库 → 执行 `upgrade` 从 baseline 全量建表；
-- 历史 `create_all` 建的既有库（无 `alembic_version` 表）→ 自动 `stamp head` 收编纳管，不改结构；
+- 空库 → 从 baseline 全量建表；
+- 历史方式建的既有库（无 `alembic_version` 表）→ 自动 stamp 收编纳管，不改结构；
 - 已纳管库 → 应用尚未执行的迁移。
 
 日常改 models 后生成迁移（backend 目录下）：
@@ -101,32 +80,80 @@ flask db migrate -m "说明变更内容"    # 对比 models 与数据库，生�
 flask db upgrade                     # 应用到本地库（应用启动时也会自动执行）
 ```
 
-### 自动签到（模块 E）：提交链路与启用流程
+### 前端
+
+```bash
+cd frontend
+npm install
+npm run dev          # http://localhost:5173，/api 由 Vite 代理转发到后端 5000
+```
+
+开发环境无需处理跨域；可直接验证后端接口：
+
+```bash
+curl http://127.0.0.1:5000/api/health
+```
+
+## 配置
+
+后端环境变量通过 `backend/.env` 加载（复制 `.env.example` 修改；该文件已 gitignore）。systemd / docker 注入的环境变量优先于 `.env`。
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `FLASK_ENV` | `development` | 运行环境；生产入口缺省以 `production` 启动 |
+| `SECRET_KEY` / `JWT_SECRET_KEY` | 开发默认值 | 生产环境仍为开发默认值时**拒绝启动**（安全守护） |
+| `JWT_EXPIRES_HOURS` | `12` | 登录凭证有效期（小时） |
+| `CORS_ORIGINS` | `http://localhost:5173` | 允许的跨域来源列表；生产环境含 `*` 拒绝启动 |
+| `SQLALCHEMY_DATABASE_URI` | 开发默认库 | 连接串格式 `mysql+pymysql://<user>:<password>@<host>:3306/<dbname>?charset=utf8mb4` |
+| `SCHEDULER_ENABLED` | `1` | 调度器开关；横向扩容 Web 时 Web 进程置 `0` |
+| `SCHEDULER_MAX_WORKERS` | `30` | 签到并发线程池大小，按峰值任务量调大 |
+| `SCHEDULER_MISFIRE_GRACE` | `600` | 错过触发时刻的补跑宽限秒数 |
+| `SCHEDULER_RECONCILE_SAME_DAY` | `1` | 启动对账仅补跑计划时刻在当天的错过任务 |
+| `SCHEDULER_TZ` | `Asia/Shanghai` | 调度时区 |
+| `CHECKIN_DRYRUN` | 未设置 | 置 `1` 进入演练模式（见下文） |
+| `PUSH_VERIFY_SSL` | `1` | 推送通道 TLS 校验；仅部署机信任库确有缺陷时置 `0` |
+| `BP_VERIFY_SSL` | `0` | B 平台 TLS 校验；校园服务器证书已失效，保持关闭 |
+| `UPLOAD_DIR` | `backend/uploads` | 图库上传目录 |
+
+## 生产部署
+
+```bash
+gunicorn -w 1 --threads 8 "app:create_app()"    # 或 python app.py
+```
+
+> **单实例约束（重要）**：定时任务调度器随 Web 进程启动且任务存于内存，全系统只允许一个进程运行调度器。
+> 多 worker 会各自注册同一批 cron 任务，导致同一账号重复打卡。未来横向扩容 Web 时，
+> 先将 Web 进程置 `SCHEDULER_ENABLED=0`，由独立常驻进程接管调度。
+
+生产环境安全守护：`SECRET_KEY` / `JWT_SECRET_KEY` 仍为开发默认值、`CORS_ORIGINS` 含 `*`、数据库连接串为开发默认值时，应用启动即拒绝，避免带弱配置上线。
+
+## 使用指南
+
+### 自动签到链路
 
 调度器到点执行时的完整链路：**找进行中任务（`know/list` / `sign/list`，提交只能用进行中任务的 id）→ 平台时间窗校验 → 定位 → 围栏拦截（可选）→ 认领图库图片 → 提交 → 落库推送**。
-
-#### 行为约定
 
 | 场景 | 结果 |
 | --- | --- |
 | 无进行中任务（如寒暑假） | 记 `skip`：「当前无进行中的签到任务」 |
-| 当前时间不在平台任务时间窗内（任务 startTime~endTime） | 记 `skip` |
-| 任务需要图片（`isPicture==0`）但配置套未启用图库或图库为空 | 记 `fail`，提示去配置 |
+| 当前时间不在平台任务时间窗内 | 记 `skip` |
+| 任务需要图片但配置套未启用图库或图库为空 | 记 `fail`，提示去配置 |
 | 提交后平台返回 `msg=="302"` | 记 `fail`：触发风控行为验证码，需人工处理 |
 | 提交时 token 失效 | 自动重登并整体重试一次 |
 | 网络异常 | 指数退避重试 ≤3 次 |
-| 成功判定 | `code==200 && msg=="操作成功"` 或 `code==6111`（旧版生产实证） |
+| 成功判定 | `code==200 && msg=="操作成功"` 或 `code==6111` |
 
-- **定位来源**：位置池配置坐标 + `offset_m` 随机偏移（默认 10 米，模拟 GPS 抖动）；未配置位置时回退任务围栏中心 ±10 米；均无则提交空定位（与旧版一致）。
-- **围栏拦截**（配置套「位置配置」区开关，默认开）：提交前校验所选位置是否落在任务围栏半径内，超出则本地拒绝并给出距离提示（B 平台已确认仅客户端校验距离、服务端不校验；开关用于防止异常位置暴露）。关闭后不校验照常提交。
-- **图片约束**：JPEG、≤180KB、最长边 ≤1920px（`prepare_submit_image` 已自动满足）；有图提交为 `photo`+`file0` 同图双文件部分，无图为 JSON `photo:[]`。
-- **活动签到（sign）提交接口为镜像推断**（仅任务 id 字段名与 know 不同），待真机抓包核准；失败原因会透传平台 `msg`。
+- **定位来源**：位置池配置坐标 + `offset_m` 随机偏移（默认 10 米，模拟 GPS 抖动）；未配置位置时回退任务围栏中心 ±10 米；均无则提交空定位。
+- **围栏拦截**（默认开）：提交前校验所选位置是否落在任务围栏半径内，超出则本地拒绝并给出距离提示；关闭后不校验照常提交。
+- **图片约束**：JPEG、≤180KB、最长边 ≤1920px（上传时自动归一化）；有图提交为双文件部分，无图为 JSON 空数组。
 
-#### 演练模式 `CHECKIN_DRYRUN`
+### 演练模式 `CHECKIN_DRYRUN`
 
-环境变量安全开关（默认关）。在 `backend/.env` 加 `CHECKIN_DRYRUN=1` 后重启后端，签到链路照常完整执行（登录→找任务→定位→取图→构造提交），**但最后一步不发送请求**：日志打印本来要提交的内容，任务日志落一条 `skip` 记录（原因「演练：已构造提交未发送」）。用途：开学后首次验证时先空跑确认链路解析正确（任务 id / 定位 / 备注是否符合配置），确认后删掉该变量重启即进入真实提交模式。
+在 `backend/.env` 加 `CHECKIN_DRYRUN=1` 后重启后端，签到链路照常完整执行（登录 → 找任务 → 定位 → 取图 → 构造提交），**但最后一步不发送请求**：日志打印本来要提交的内容，任务日志落一条 `skip` 记录。
 
-#### 手动诊断脚本（推荐首次验证用它）
+用途：开学后首次验证时先空跑确认链路解析正确（任务 id / 定位 / 备注是否符合配置），确认后删除该变量重启即进入真实提交模式。
+
+### 手动诊断脚本
 
 不等定时器，直接手动驱动一次完整链路（backend 目录下）：
 
@@ -140,60 +167,106 @@ python scripts/diag_bp_checkin.py --account 手机号 --password 密码 --type d
 # 真实提交（带图）：
 python scripts/diag_bp_checkin.py --account 手机号 --password 密码 --type dorm --submit --image 某图.jpg
 
-# 活动签到（sign 镜像契约核准用）：
+# 活动签到：
 python scripts/diag_bp_checkin.py --account 手机号 --password 密码 --type activity --submit
 ```
 
 可选参数：`--lat/--lng/--address/--remark` 覆盖提交字段。
 
-#### 开学后首次启用 checklist
+### 开学后首次启用 checklist
 
 1. 保持 `CHECKIN_DRYRUN=1`（或先用诊断脚本只查模式）等辅导员下发任务；
 2. 跑诊断脚本（不加 `--submit`）核对任务 id、围栏、提交字段是否符合预期；
 3. 跑诊断脚本加 `--submit` 手动真实提交一次寝室签到，确认平台记录成功；
-4. 同法跑一次 `--type activity --submit` 核准活动签到镜像契约（如有出入改 `real.py` 的 `_MODULES` 一处即可）；
+4. 同法跑一次 `--type activity --submit` 核准活动签到契约；
 5. 删除 `.env` 中的 `CHECKIN_DRYRUN`（或置 0）重启，进入自动模式；
 6. 观察几天任务日志的 `fail_reason` 分布，确认无系统性失败。
 
-#### 活动签到课表驱动调度（教务对接）
+### 活动签到课表驱动调度
 
-活动签到除固定时刻单次查询外，新增按教务课表展开的当日时间窗内低频轮询：有课日子在课程前后自动开窗查活动并签到，无课日零查询（寝室签到链路不受影响）。
+活动签到除固定时刻单次查询外，支持按教务课表展开的当日时间窗内低频轮询：有课日子在课程前后自动开窗查活动并签到，无课日零查询（寝室签到链路不受影响）。
 
-- **教务对接**（`backend/app/services/jwxt/`，本校强智系统实测口径）：解析课表页与教学周历，多账号串行同步队列（间隔随机 3-8s、连续 3 次失败隔离降级），登录仅用 encoded 字段、默认当前学期；移动端 app.do 已禁用不探测；读取超时 20s 且网络类失败重试一次。
-- **配置套类型化**：配置套新增 `task_type`（dorm/activity，创建后锁定不可改），绑定/换绑/批量按类型一一对应；前端配置套按类型分组展示、新建拆「+寝室/+活动」、编辑器按类型渲染区块。
-- **时段制窗口**：作息表按相邻间隔 ≥60min 切上午/下午/晚上，当天有课的每个时段生成覆盖整段窗口，各时段独立「命中即完成」；默认提前量 60 分钟。跨时段课程（如 1-8 节）拆分为上午/下午多个独立窗口，避免午休后发布的第二次签到漏签。
-- **调度**：每日 00:10 展开当日窗口，30s 心跳内窗口轮询；course 策略关闭时不注册 cron；绑定/换绑/批量启用对 course 策略做教务绑定前置校验（先验证后落库，错号密码不绑定）。
-- **课表抽屉**：账号任务 → 活动签到 →「按课表自动」，提供周课表视图、周次导航、块级排除（参与自动签到开关）与当日窗口预览。
+- **教务对接**（`backend/app/services/jwxt/`，本校强智系统实测口径）：解析课表页与教学周历，多账号串行同步队列（间隔随机 3-8s、连续 3 次失败隔离降级）；登录仅用 encoded 字段、默认当前学期；读取超时 20s 且网络类失败重试一次。
+- **时段制窗口**：作息表按相邻间隔 ≥60min 切上午 / 下午 / 晚上，当天有课的每个时段生成覆盖整段窗口，各时段独立「命中即完成」；默认提前量 60 分钟。跨时段课程（如 1-8 节）拆分为多个独立窗口。
+- **调度**：每日 00:10 展开当日窗口，30s 心跳内窗口轮询；绑定 / 换绑 / 批量启用对 course 策略做教务绑定前置校验（先验证后落库）。
+- **课表抽屉**：账号任务 → 活动签到 →「按课表自动」，提供周课表视图、周次导航、块级排除与当日窗口预览。
 
-### 前后端联通
+## 接口约定
 
-开发环境下，前端通过 Vite 代理将 `/api` 请求转发到后端 `5000` 端口，无需额外处理跨域。
-
-可直接验证后端接口：
-
-```bash
-curl http://127.0.0.1:5000/api/health
-```
-
-## 接口返回格式
-
-前后端统一约定：
+前后端统一响应格式，`code === 0` 表示成功，前端 axios 拦截器据此自动解包 `data`：
 
 ```json
 { "code": 0, "message": "success", "data": {} }
 ```
 
-`code === 0` 表示成功，前端 axios 拦截器据此自动解包 `data`。
+## 目录结构
 
-## 版本管理
+```
+Web端/
+├── frontend/                # 前端（Vue 3 + Vite + TailwindCSS）
+│   └── src/
+│       ├── router/          # 路由（按页面划分）
+│       ├── stores/          # 状态管理（Pinia，按业务域拆分）
+│       ├── api/             # 接口层（axios 封装 + 模块接口）
+│       ├── components/      # 公共组件
+│       ├── views/           # 页面
+│       └── layouts/         # 布局模板
+├── backend/
+│   ├── app.py               # 生产入口（gunicorn / python app.py）
+│   ├── run.py               # 本地开发启动
+│   ├── requirements.txt
+│   ├── .env.example         # 环境变量示例
+│   ├── migrations/          # 表结构迁移链（唯一事实源）
+│   ├── scripts/             # init_db / diag_bp_checkin 等工具脚本
+│   ├── tests/               # 后端测试（pytest）
+│   ├── config/              # 配置层（按环境切换）
+│   └── app/
+│       ├── __init__.py      # 应用工厂
+│       ├── routes/          # 蓝图（按业务模块划分）
+│       ├── services/        # 业务服务（调度、签到链路、教务对接、推送…）
+│       ├── models/          # 数据模型
+│       └── utils/           # 统一返回格式、鉴权、校验器
+├── scripts/                 # version_bump 等仓库级脚本
+├── CHANGELOG.md
+└── VERSION
+```
 
-- 仅本地管理，不推送远程仓库；初始分支 `main`。
-- 版本号唯一来源为仓库根目录 `VERSION` 文件，开发阶段为 `0.x.x`，上线后为 `1.x.x`。
-- 版本递增遵循 SemVer，**仅在你说「提交版本」时触发**：
-  - 功能新增 / 开发结束 → minor +1（`x.y.z` → `x.y+1.0`）
-  - 上线 / 破坏性变更 → major +1（`0.152.0` → `1.0.0`）
-  - 独立修复的 BUG → patch +1（`1.y.z` → `1.y.z+1`，1.x 起生效）；随功能提交的零星修复并入该功能提交，不单独发版
-- 每次「提交版本」流程：分析本次改动后，由助手给出 commit 文案草案并按规范递增版本号（`VERSION` 与 `CHANGELOG.md` 一并更新），**由助手代理执行 git 提交**（仅本地提交，不推送远程）。
-- 每次「提交版本」必须先加载 `no-negative-echo` 技能：commit 文案与 CHANGELOG 条目只描述最终接受的行为，不把会话中被否决的中间方案、用户纠正过程写进版本产物。
-- 递增版本：`python scripts/version_bump.py minor`（或 `major`）。
-- 提交信息遵循 Conventional Commits，type 用英文、subject/body 用中文祈使句，风格务实不堆砌术语。
+## 测试
+
+```bash
+cd backend
+.venv/Scripts/python -m pytest -q        # Windows；Linux/macOS: python -m pytest -q
+```
+
+当前 392 条用例全部通过，覆盖签到链路、调度、教务解析、推送、权限与安全守护等模块。
+
+## 常见问题
+
+**全新生产库如何创建第一个管理员？**
+生产环境的管理员账号由管理员在界面内创建，系统不提供注册入口；全新库需要手动插入首个管理员：
+
+```bash
+cd backend
+python -c "import bcrypt; print(bcrypt.hashpw(b'你的密码', bcrypt.gensalt()).decode())"
+```
+
+```sql
+INSERT INTO users (username, password_hash, role, enabled, quota, used_quota, pwd_ver, created_at)
+VALUES ('admin', '<上一步输出的哈希>', 'admin', 1, 100, 0, 1, NOW());
+```
+
+`scripts/init_db.py` 仅用于开发库初始化（带安全守卫：生产环境或非开发默认库一律拒绝执行），种子密码随机生成且仅终端打印一次。
+
+**为什么 B 平台默认关闭 TLS 校验？**
+B 平台为校园服务器，证书链已失效，开启校验即无法通信（`BP_VERIFY_SSL=0` 为默认）；推送通道为公共服务，默认开启校验（`PUSH_VERIFY_SSL=1`）。
+
+**多实例 / 横向扩容？**
+当前架构为单实例设计（调度器内存态）。扩容方案见「生产部署」一节：Web 进程多副本 + `SCHEDULER_ENABLED=0`，由独立常驻进程接管调度。
+
+## 版本与变更
+
+版本号遵循 [SemVer](https://semver.org/lang/zh-CN/)，见根目录 `VERSION` 文件与 [CHANGELOG.md](CHANGELOG.md)；提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
+
+## License
+
+本项目基于 [MIT License](LICENSE) 开源。

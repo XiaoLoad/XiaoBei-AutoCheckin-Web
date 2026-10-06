@@ -5,6 +5,7 @@
 import json
 
 from flask import Blueprint, request
+from sqlalchemy import func
 
 from app.extensions import db
 from app.models import (BAccount, ImageGroup, PushGroup, PushGroupDigestLog, PushGroupMember)
@@ -18,6 +19,10 @@ bp = Blueprint('group_push', __name__, url_prefix='/api/group-push')
 
 def _today_status(group_id):
     log = PushGroupDigestLog.query.filter_by(group_id=group_id, date=now_cst().date()).first()
+    return _log_to_dict(log)
+
+
+def _log_to_dict(log):
     if not log:
         return None
     return {
@@ -29,11 +34,38 @@ def _today_status(group_id):
     }
 
 
+def _escape_like(s):
+    return s.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+
+
 def _member_count(g):
     if g.type == PushGroup.TYPE_CLASS:
+        # profile_json 是 JSON 文本，班级名拼接进 LIKE 需转义通配符（分组名含 %/_ 时防误匹配）
         return BAccount.query.filter_by(user_id=g.user_id, enabled=True).filter(
-            BAccount.profile_json.like(f'%"className": "{g.name}"%')).count()
+            BAccount.profile_json.like(f'%"className": "{_escape_like(g.name)}"%',
+                                       escape='\\')).count()
     return PushGroupMember.query.filter_by(group_id=g.id).count()
+
+
+def _batch_member_counts(group_ids):
+    """dorm 分组成员计数一次 GROUP BY 取回（列表页逐组 COUNT 的 2N+1 消除）。"""
+    if not group_ids:
+        return {}
+    rows = (db.session.query(PushGroupMember.group_id,
+                             func.count(PushGroupMember.id))
+            .filter(PushGroupMember.group_id.in_(group_ids))
+            .group_by(PushGroupMember.group_id).all())
+    return dict(rows)
+
+
+def _batch_today_status(group_ids):
+    """今日推送状态一次 IN 取回（同上，消 2N+1）。"""
+    if not group_ids:
+        return {}
+    logs = (PushGroupDigestLog.query.filter(PushGroupDigestLog.group_id.in_(group_ids),
+                                            PushGroupDigestLog.date == now_cst().date())
+            .all())
+    return {l.group_id: _log_to_dict(l) for l in logs}
 
 
 def _clean_image_group(uid, raw):
@@ -50,7 +82,7 @@ def _clean_image_group(uid, raw):
     return True, gid, ''
 
 
-def _dorm_to_dict(g):
+def _dorm_to_dict(g, member_count=None, today=None):
     return {
         'id': g.id,
         'type': g.type,
@@ -58,8 +90,8 @@ def _dorm_to_dict(g):
         'qqCode': g.qq_code or '',
         'bound': g.bound,
         'imageGroupId': g.image_group_id,
-        'memberCount': _member_count(g),
-        'today': _today_status(g.id),
+        'memberCount': member_count if member_count is not None else _member_count(g),
+        'today': today if today is not None else _today_status(g.id),
         'createdAt': g.created_at.strftime('%Y-%m-%d %H:%M') if g.created_at else '',
     }
 
@@ -100,10 +132,15 @@ def list_groups():
     uid = request.current_user.id
     if gtype == PushGroup.TYPE_CLASS:
         return success({'items': _class_groups_derived(uid), 'type': PushGroup.TYPE_CLASS})
-    # 默认 / dorm：显式建的行
+    # 默认 / dorm：显式建的行；成员数与今日状态各一次批量查询，避免逐组 2N+1
     groups = (PushGroup.query.filter_by(user_id=uid, type=PushGroup.TYPE_DORM)
               .order_by(PushGroup.id.desc()).all())
-    return success({'items': [_dorm_to_dict(g) for g in groups], 'type': PushGroup.TYPE_DORM})
+    gids = [g.id for g in groups]
+    counts = _batch_member_counts(gids)
+    todays = _batch_today_status(gids)
+    items = [_dorm_to_dict(g, member_count=counts.get(g.id, 0), today=todays.get(g.id))
+             for g in groups]
+    return success({'items': items, 'type': PushGroup.TYPE_DORM})
 
 
 @bp.route('/dorm-members', methods=['GET'])

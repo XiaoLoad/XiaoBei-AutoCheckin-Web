@@ -73,10 +73,9 @@ def _member_window_end_max(member_ids, date):
               .all())
     max_end = None
     for s in scheds:
-        _, _, weekdays = extract_schedule_time(s)
+        hour, minute, weekdays = extract_schedule_time(s)
         if weekday not in (weekdays or []):
             continue
-        hour, minute, _ = extract_schedule_time(s)
         if hour is None or minute is None:
             continue
         jitter = extract_jitter_minutes(s) or 0
@@ -160,14 +159,24 @@ def _resolve_open_token(user_id):
 
 
 def _member_records(member_ids, date):
-    """取每个成员当日 dorm 记录（success 优先，否则最新一条）；返回 [(account, rec|None)]。"""
+    """取每个成员当日 dorm 记录（success 优先，否则最新一条）；返回 [(account, rec|None)]。
+    一次 IN 查询取回全员当日记录后按账号分组（逐成员查询在 30~50 人的分组里是 N 次往返）。"""
     accs = {a.id: a for a in BAccount.query.filter(BAccount.id.in_(member_ids)).all()}
+    recs = (SignRecord.query
+            .filter(SignRecord.account_id.in_(member_ids),
+                    SignRecord.sign_date == date,
+                    SignRecord.task_type == 'dorm')
+            .order_by(SignRecord.id.asc()).all())
+    by_acc = {}
+    for r in recs:  # id 升序遍历，后写覆盖前写 → 每账号停在最新一条
+        by_acc[r.account_id] = r
+    picked = {}
+    for r in recs:  # success 优先：同账号有多条时以最新 success 为准（无 success 保持最新一条）
+        if r.status == 'success':
+            picked[r.account_id] = r
     out = []
     for aid in member_ids:
-        recs = (SignRecord.query
-                .filter_by(account_id=aid, sign_date=date, task_type='dorm')
-                .order_by(SignRecord.id.desc()).all())
-        rec = next((r for r in recs if r.status == 'success'), None) or (recs[0] if recs else None)
+        rec = picked.get(aid) or by_acc.get(aid)
         out.append((accs.get(aid), rec))
     return out
 

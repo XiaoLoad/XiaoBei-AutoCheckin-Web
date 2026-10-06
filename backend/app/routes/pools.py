@@ -160,9 +160,19 @@ def _cred_ref_count(config_sets, cred_id):
 
 def _acc_cred_ref_count(accounts, cred_id):
     """扫描账号级推送绑定引用计数（b_accounts.push_cred_json）。
-    账号自带凭证是配置套之外的第二种引用来源，漏统计会让删除后留下悬空绑定。"""
-    return sum(1 for a in accounts
-               if cred_id in {binding_cred_id(v) for v in (a.push_creds or {}).values()})
+    账号自带凭证是配置套之外的第二种引用来源，漏统计会让删除后留下悬空绑定。
+    accounts 为 (id, push_cred_json) 元组：只取统计所需列，避免整表加载密文大字段。"""
+    count = 0
+    for _, push_cred_json in accounts:
+        if not push_cred_json:
+            continue
+        try:
+            data = json.loads(push_cred_json)
+        except (ValueError, TypeError):
+            continue
+        if cred_id in {binding_cred_id(v) for v in data.values()}:
+            count += 1
+    return count
 
 
 @bp.route('/uas', methods=['POST'])
@@ -289,7 +299,8 @@ def delete_credential(cred_id):
     if not c:
         return error(message='凭证不存在', code=4040, status=404)
     refs = _cred_ref_count(_ref_index(), c.id)
-    acc_refs = _acc_cred_ref_count(BAccount.query.all(), c.id)
+    acc_refs = _acc_cred_ref_count(
+        db.session.query(BAccount.id, BAccount.push_cred_json).all(), c.id)
     used = []
     if refs:
         used.append(f'{refs} 个配置套')

@@ -1,15 +1,17 @@
 <template>
   <!--
-    布局分发：根据路由 meta.layout 选择布局组件。给布局加 :key="$route.path"，
-    同布局内切换路由（如 / → /tasks）时路径变化会强制重建布局实例，
-    其内部唯一的 <RouterView/> 随之重新渲染正确的路由组件，避免「地址变了但页面不切换」。
+    布局分发：根据路由 meta.layout 选择布局组件。布局实例跨路由保持稳定（不加 key），
+    路由组件由布局内部的 <RouterView/> 按 $route.fullPath 重新渲染（配合 route.fullPath
+    的 key 强制同路由不同参数时也重建页面），避免「地址变了但页面不切换」的同时，
+    不再像旧方案（布局层 :key="$route.path"）那样每次导航都销毁重建整个布局
+    （侧边栏/顶栏全重渲染、布局内本地状态丢失）。
     各布局（DashboardLayout / BlankLayout）自行持有 <RouterView/> 出口。
 
     渲染门控：首屏初始导航（含路由守卫鉴权/重定向）完成前不渲染任何布局，
     否则未登录直接访问受保护 URL 会先闪现 DashboardLayout 框架再被守卫跳走。
     等 router.isReady() 后，route 已是守卫处理后的最终目标（如登录页），直接渲染正确布局。
   -->
-  <component :is="layout" v-if="ready" :key="$route.path" />
+  <component :is="layout" v-if="ready" />
   <div v-else class="min-h-screen bg-surface" />
   <!-- 全局 Toast 宿主：独立于布局，路由守卫等任意位置均可触发提示 -->
   <ToastHost />

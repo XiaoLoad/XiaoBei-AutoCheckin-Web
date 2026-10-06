@@ -172,13 +172,14 @@
         </div>
       </header>
 
-      <!-- 内容：布局自行持有唯一 RouterView 出口；App 已按 $route.path 为布局加 key，
-           切换路由时布局重建、此处随之渲染正确的路由组件。 -->
+      <!-- 内容：布局自行持有唯一 RouterView 出口。key 取 fullPath：路由变化时仅重建
+           页面组件（旧方案在布局层加 key 会连侧边栏/顶栏一起销毁重建），同路由不同
+           query 也强制刷新；布局实例本身跨路由保持稳定，本地状态不丢失。 -->
       <!-- 内容滚动容器：保留 flex 列布局，使各页面根容器（flex-1）的高度分配与改动前一致，
            用户/账号管理等页的列表卡片固定高度与内部滚动不受影响。
            底部间距收归各页面根容器末尾的真实占位块（非滚动容器自身 padding，滚动时不被折叠），全站统一 24px。 -->
       <main class="flex flex-col p-4 sm:px-6 sm:pt-6 lg:flex-1 lg:overflow-y-auto">
-        <RouterView />
+        <RouterView :key="route.fullPath" />
       </main>
     </div>
   </div>

@@ -129,6 +129,34 @@ gunicorn -w 1 --threads 8 "app:create_app()"    # 或 python app.py
 
 **首次启动引导**：全新部署首次启动时（系统中无任何账号），应用自动创建管理员 `admin` 并生成随机密码，仅在启动日志（stderr 与 `backend/logs/app.log`）打印一次——请立即登录并修改密码。错过打印时，删除该账号记录后重启可重新引导，或使用 `scripts/create_admin.py` 手动创建。
 
+### Docker Compose 部署
+
+三个服务（nginx 前端 / backend 后端 / mysql 数据库）一键拉起，适合换机迁移：
+
+```bash
+git clone https://github.com/XiaoLoad/XiaoBei-AutoCheckin-Web.git
+cd XiaoBei-AutoCheckin-Web
+cp backend/.env.example backend/.env    # 按文件内 [Compose 必改] 注释逐项修改
+docker compose up -d --build
+docker compose logs backend | grep 首次启动引导    # 取 admin 初始密码（仅打印一次）
+```
+
+要点（均已内置于 compose 文件注释）：
+
+- **单实例铁律**：backend 服务 `replicas` 恒为 1，`gunicorn -w 1` 写死在镜像内——多实例会重复打卡；
+- **持久化卷**：`mysql-data`（数据库）、`app-uploads`（图库文件，在磁盘不在库里）、`app-logs`；重建容器不丢数据；
+- **健康检查与启动顺序**：MySQL 通过 healthcheck 后 backend 才启动（启动时自动执行数据库迁移）；
+- **时区**：三个容器均注入 `TZ=Asia/Shanghai`；
+- **`.env` 关键项**：`FLASK_ENV=production`、随机 `SECRET_KEY` / `JWT_SECRET_KEY`、连接串 host 写服务名 `mysql`、`CORS_ORIGINS` 为对外地址；
+- **HTTPS**：nginx 容器默认只监听 80，生产建议自行追加 443 监听与证书挂载，或在前置宿主机代理上终结 TLS。
+
+日常更新与回滚：
+
+```bash
+git fetch --tags && git checkout v1.0.2   # 建议按 tag 更新，不用 main
+docker compose up -d --build              # 更新前建议先 mysqldump 备份
+```
+
 ## 使用指南
 
 ### 自动签到链路

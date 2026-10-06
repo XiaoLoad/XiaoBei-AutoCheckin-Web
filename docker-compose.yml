@@ -1,0 +1,73 @@
+# 小北自动打卡 Web 端 · Docker Compose 部署
+#
+# 用法：
+#   cp backend/.env.example backend/.env   # 填写生产配置（必改项见 README「配置」）
+#   docker compose up -d --build
+#   docker compose logs backend | grep 首次启动引导   # 取 admin 初始密码（仅打印一次）
+#
+# [单实例铁律] 调度器随 Web 进程启动且 job 存于内存，backend 服务 replicas 恒为 1、
+# gunicorn -w 1 写死在镜像内——多实例会导致同一账号重复打卡。
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: xiaobei-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 backend/.env 或环境中设置 MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: xiaobei_auto
+      MYSQL_USER: xiaobei
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?请在 backend/.env 或环境中设置 MYSQL_PASSWORD}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+    # 不对宿主机暴露端口：仅 compose 内网可访问
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  backend:
+    build: ./backend
+    image: xiaobei-checkin-backend:latest
+    container_name: xiaobei-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    env_file:
+      - backend/.env
+    environment:
+      # compose 内固定注入：数据库主机为服务名，容器内时区必须为东八区
+      # （连接串用户/密码与上方 MYSQL_USER/MYSQL_PASSWORD 一致，在 backend/.env 中写全）
+      TZ: Asia/Shanghai
+    volumes:
+      - app-uploads:/app/uploads    # 图库文件在磁盘不在库里，必须持久化
+      - app-logs:/app/logs
+    expose:
+      - "5000"                      # 仅 compose 内网；对外统一走 nginx
+    # 单实例声明：生产 compose 不允许 scale backend
+    deploy:
+      replicas: 1
+
+  nginx:
+    build: ./frontend
+    image: xiaobei-checkin-frontend:latest
+    container_name: xiaobei-nginx
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"                     # HTTPS：自行追加 443 与证书挂载（见 README）
+    environment:
+      TZ: Asia/Shanghai
+
+volumes:
+  mysql-data:
+  app-uploads:
+  app-logs:

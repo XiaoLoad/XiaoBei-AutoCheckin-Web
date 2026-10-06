@@ -1,0 +1,16 @@
+# 构建上下文瘦身：依赖/数据/本地过程物一律不进镜像
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+instance/
+logs/
+uploads/
+.env
+.env.*
+!.env.example
+scripts/__pycache__/
+tests/
+Dockerfile
+.dockerignore

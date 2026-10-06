@@ -71,12 +71,15 @@ def _fail(key):
 
 
 def is_blacklisted(jti):
-    """校验 jti 是否已被吊销；出现异常（如黑名单表未创建）时降级为不拦截，避免误伤正常请求"""
+    """校验 jti 是否已被吊销；出现异常（如黑名单表未创建）时降级为不拦截，避免误伤正常请求。
+    降级必须留痕：fail-open 意味着 DB 抖动期间已登出的 token 短暂放行，静默会让排障无从下手。"""
     if not jti:
         return False
     try:
         return db.session.get(TokenBlacklist, jti) is not None
     except Exception:
+        current_app.logger.warning(
+            'JWT 黑名单查询失败，已登出 token 在本次请求中放行（fail-open）：jti=%s', jti[:8])
         return False
 
 

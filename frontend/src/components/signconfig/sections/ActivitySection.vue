@@ -73,6 +73,7 @@
               </button>
             </div>
             <p class="text-[11px] leading-relaxed text-ink-muted">密码仅用于服务端登录教务系统拉取课表，加密存储、不会出现在日志中。连续失败会触发教务验证码，请稍后再试。</p>
+            <p class="text-[11px] leading-relaxed text-warning">教务系统站点为明文 HTTP（学校未部署 HTTPS），密码在该链路上无法加密传输——建议使用与常用密码不同的独立密码。</p>
           </div>
 
           <!-- 已绑定：概览 + 立即同步 / 解绑 -->

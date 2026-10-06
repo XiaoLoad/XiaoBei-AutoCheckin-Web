@@ -8,11 +8,14 @@
 #     周次语法：`1-2(全部)`、`3,5(全部)`、可混合 `3,5-7(单)`；周类型 全部|单|双（部分部署
 #     显示 周/每周，等价"全部"，归一化处理）；小节列表是零填充枚举（- 为分隔符非范围）；
 #   - 教学周历 jxzl_query：每周一行，星期六/日单元格为 "MM月DD日"，据此换算第 1 周周一。
+import logging
 import re
 from datetime import date, timedelta
 from html.parser import HTMLParser
 
 from app.services.jwxt.base import JwxtError, TimetableEntry
+
+log = logging.getLogger(__name__)
 
 _VOID_TAGS = {'br', 'img', 'input', 'meta', 'link', 'hr', 'area', 'base', 'col', 'embed',
               'source', 'track', 'wbr'}
@@ -150,7 +153,8 @@ def _expand_weeks(expr):
 
 def _parse_sections(expr):
     """'[01-02-03-04节]' → [1,2,3,4]。枚举以 '-' 分隔（零填充）；若恰为两个非零填充
-    数字（如 '1-8'）则按区间展开，兼容个别部署的范围写法。"""
+    数字（如 '1-8'）则按区间展开，兼容个别部署的范围写法——该写法与枚举（'1-4'=
+    第 1、4 节）存在歧义且方向是扩窗，展开时记 WARNING 留痕。"""
     tokens = [t for t in re.split(r'-', expr or '') if t.strip()]
     nums = []
     for t in tokens:
@@ -159,6 +163,9 @@ def _parse_sections(expr):
         except ValueError:
             continue
     if len(nums) == 2 and not all(re.fullmatch(r'0\d', t.strip()) for t in tokens):
+        log.warning('课表小节列表使用了歧义的区间写法 %r，按范围展开为 %s'
+                    '（若原意是枚举第 %d、%d 节则窗口被扩大，请核对教务页面）',
+                    expr, list(range(nums[0], nums[1] + 1)), nums[0], nums[1])
         return list(range(nums[0], nums[1] + 1))
     return sorted({n for n in nums if n > 0})
 
@@ -235,7 +242,12 @@ def parse_timetable(html):
     for e in entries:
         key = (e.weekday, e.course, e.teacher, tuple(e.weeks), tuple(e.sections), e.room)
         dedup.setdefault(key, e)
-    return sorted(dedup.values(), key=lambda e: (e.weekday, min(e.sections), e.course))
+    result = sorted(dedup.values(), key=lambda e: (e.weekday, min(e.sections), e.course))
+    if not result:
+        # 表格存在但 0 条课程：正常学期不会整表无课，大概率页面结构变更静默错位，
+        # 抛错让同步侧 fail_count/needs_attention 感知，而不是落一份空课表
+        raise JwxtError('parse', '课表表格存在但未解析出任何课程，页面结构可能已变更')
+    return result
 
 
 _DATE_RE = re.compile(r'(\d{1,2})\s*月\s*(\d{1,2})\s*日')

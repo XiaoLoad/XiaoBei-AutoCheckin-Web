@@ -67,10 +67,6 @@ def load_update(payload):
             return False, None, f'{spec["label"]} 需在 {lo} ~ {hi} 之间', 4004
         data[key] = num
 
-    # 密码最小长度收紧时不低于 4 位，防止误配为 0/1 导致弱口令
-    if 'password_min_length' in data and data['password_min_length'] < DEFAULTS['password_min_length']['min']:
-        return False, None, '密码最小长度不能低于 4 位', 4004
-
     # 会话时长与当前生效值一致时也允许保存（幂等），但至少要有一项变更才值得写库
     return True, {'settings': data}, '', 0
 

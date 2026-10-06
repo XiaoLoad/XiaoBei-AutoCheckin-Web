@@ -56,7 +56,7 @@ DEFAULTS = {
     'password_min_length': {
         'value': 6,
         'type': 'int',
-        'min': 4,
+        'min': 6,
         'max': 64,
         'label': '密码最小长度',
         'desc': '设置密码与新建用户时校验的密码下限',

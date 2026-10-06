@@ -11,6 +11,7 @@ from app.services import login_guard
 from app.services.op_log import client_ip
 from app.utils.auth import blacklist_token, generate_token, token_required
 from app.utils.response import error, success
+from app.utils.validators import PASSWORD_MAX_BYTES, password_too_long
 from app.events import auth_logged_out, auth_login, auth_password_changed
 
 bp = Blueprint('auth', __name__, url_prefix='/api/auth')
@@ -106,6 +107,8 @@ def change_password():
     min_len = get_setting('password_min_length') or 6
     if len(new_password) < min_len:
         return error(message=f'新密码至少 {min_len} 位', code=4002, status=400)
+    if password_too_long(new_password):
+        return error(message=f'新密码过长（最多 {PASSWORD_MAX_BYTES} 字节）', code=4002, status=400)
     if new_password == old_password:
         return error(message='新密码不能与原密码相同', code=4002, status=400)
     if not u.check_password(old_password):

@@ -135,7 +135,7 @@ def test_update_accepts_numeric_string_for_int(app, admin_headers, restore_setti
     ({'settings': {'default_quota': 0}}, 4004),              # 低于下限
     ({'settings': {'default_quota': 1000000}}, 4004),        # 高于上限
     ({'settings': {'quota_warn_ratio': 100}}, 4004),         # 比例上限为 99
-    ({'settings': {'password_min_length': 3}}, 4004),        # 密码下限另有 4 位硬约束
+    ({'settings': {'password_min_length': 3}}, 4004),        # 密码下限硬约束为 6 位
 ])
 def test_update_rejects_bad_payloads_without_writing(app, admin_headers, restore_settings,
                                                      payload, code):

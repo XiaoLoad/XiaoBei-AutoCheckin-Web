@@ -7,6 +7,7 @@
 # 记录对象是「操作者」而非「被操作者」：管理员改了谁，那行日志的 user 列应是管理员本人，
 # 被改的人（目标）落在 summary 与 detail 里。故 user/username/role 三个列存的是操作者快照，
 # 无请求上下文（脚本/CLI 触发）时记 'system'，登录失败则留空（用户名在 summary 里）。
+import ipaddress
 import logging
 
 from flask import has_request_context, request
@@ -54,18 +55,42 @@ ACTION_SCHEDULE_DISABLE = 'schedule.disable'
 SECRET_VIEW_SUMMARY = '查看账号「{account}」的 B 平台密码'
 
 
+# 可信代理网段：显式列 RFC1918 而不用 ipaddress.is_private——后者把 TEST-NET 等
+# 保留段也归为私有且语义随 Python 版本漂移；本项目只需覆盖「同机/内网反代」两种形态
+_TRUSTED_NETS = [ipaddress.ip_network(n) for n in ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16')]
+
+
+def _is_trusted_peer(ip):
+    """直连对端是否为可信代理：回环或 RFC1918 内网地址。本项目为单机 nginx 反代部署
+    （remote_addr=127.0.0.1），公网直连的对端不可信。"""
+    if not ip:
+        return False
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    if addr.is_loopback:
+        return True
+    if isinstance(addr, ipaddress.IPv4Address):
+        return any(addr in net for net in _TRUSTED_NETS)
+    return addr.version == 6 and addr.is_private    # IPv6 唯一本地地址 fc00::/7
+
+
 def client_ip():
-    """客户端 IP。反代（nginx）下 remote_addr 恒为代理地址，故优先取转发头，
-    取 X-Forwarded-For 首段（最靠近真实客户端的一跳）。"""
+    """客户端 IP。仅当直连对端是可信代理（回环/内网）时才采信转发头——
+    X-Forwarded-For / X-Real-IP 客户端可随意伪造，无条件信任会让审计 IP 失真；
+    公网直连一律取 remote_addr（真实 TCP 对端）。"""
     if not has_request_context():
         return ''
-    xff = request.headers.get('X-Forwarded-For') or ''
-    if xff:
-        return xff.split(',')[0].strip()[:64]
-    real = (request.headers.get('X-Real-IP') or '').strip()
-    if real:
-        return real[:64]
-    return (request.remote_addr or '')[:64]
+    peer = (request.remote_addr or '')[:64]
+    if _is_trusted_peer(peer):
+        xff = request.headers.get('X-Forwarded-For') or ''
+        if xff:
+            return xff.split(',')[0].strip()[:64]
+        real = (request.headers.get('X-Real-IP') or '').strip()
+        if real:
+            return real[:64]
+    return peer
 
 
 def client_agent():

@@ -168,13 +168,11 @@ python scripts/diag_bp_checkin.py --account 手机号 --password 密码 --type a
 ### 前后端联通
 
 开发环境下，前端通过 Vite 代理将 `/api` 请求转发到后端 `5000` 端口，无需额外处理跨域。
-打开前端首页点击「调用示例接口」，即可看到来自后端 `/api/example` 的数据。
 
 可直接验证后端接口：
 
 ```bash
 curl http://127.0.0.1:5000/api/health
-curl http://127.0.0.1:5000/api/example
 ```
 
 ## 接口返回格式

@@ -11,7 +11,6 @@ from config import get_config
 from app.extensions import db
 from app.models import User, SystemConfig, BAccount, ConfigSet  # noqa: F401  确保模型被加载
 from app.utils.response import success, error
-from app.routes.example import bp as example_bp
 from app.routes.health import bp as health_bp
 from app.routes.auth import bp as auth_bp
 from app.routes.users import bp as users_bp
@@ -63,7 +62,6 @@ def create_app(env_name=None):
 
     # 注册蓝图（按模块划分）
     app.register_blueprint(health_bp)        # /api/health
-    app.register_blueprint(example_bp)       # /api/example
     app.register_blueprint(auth_bp)          # /api/auth
     app.register_blueprint(users_bp)         # /api/users
     app.register_blueprint(settings_bp)      # /api/settings
@@ -133,6 +131,10 @@ def _assert_production_secrets(app):
         problems.append('JWT_SECRET_KEY 仍为开发默认值')
     if app.config['SQLALCHEMY_DATABASE_URI'] == _DEV_DEFAULT_DB_URI:
         problems.append('数据库连接串仍为开发默认（root/123456）')
+    if '*' in app.config.get('CORS_ORIGINS', []):
+        # supports_credentials 恒开：CORS 配 '*' 等于反射任意来源并携带凭据，
+        # 生产环境必须配置明确的来源清单
+        problems.append('CORS_ORIGINS 含 "*"（与 credentials 同用会放行任意来源携带凭据）')
     if problems:
         raise RuntimeError(
             '生产环境启动被拒绝：' + '；'.join(problems)

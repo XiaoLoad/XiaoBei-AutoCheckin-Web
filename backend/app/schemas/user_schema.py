@@ -2,7 +2,8 @@
 # 设计目标：把散落在路由里的字段校验集中到此，统一错误信息与错误码；
 # 未来若引入 marshmallow / pydantic，可平滑替换为对应 Schema，接口形态不变。
 from app.models.system_config import get_setting
-from app.utils.validators import validate_role, validate_username
+from app.utils.validators import (PASSWORD_MAX_BYTES, password_too_long,
+                                  validate_role, validate_username)
 
 # 兜底下限：系统配置不可用时仍保证基本安全（正常取值来自设置页的 password_min_length）
 FALLBACK_PASSWORD_MIN = 6
@@ -29,6 +30,8 @@ def load_create(payload):
     pwd_min = _password_min()
     if not password or len(password) < pwd_min:
         return False, None, f'密码至少 {pwd_min} 位', 4002
+    if password_too_long(password):
+        return False, None, f'密码过长（最多 {PASSWORD_MAX_BYTES} 字节）', 4002
     enabled = bool(payload.get('enabled', True))
     # 未显式指定额度时取系统设置的默认额度（设置页可调）
     quota = _parse_quota(payload.get('quota', get_setting('default_quota')))
@@ -60,6 +63,8 @@ def load_update(payload):
         pwd_min = _password_min()
         if len(password) < pwd_min:
             return False, None, f'密码至少 {pwd_min} 位', 4002
+        if password_too_long(password):
+            return False, None, f'密码过长（最多 {PASSWORD_MAX_BYTES} 字节）', 4002
         data['password'] = password
     if 'enabled' in payload and payload['enabled'] is not None:
         data['enabled'] = bool(payload['enabled'])

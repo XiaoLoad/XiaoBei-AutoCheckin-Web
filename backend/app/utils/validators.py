@@ -30,6 +30,16 @@ def validate_role(raw, *, default='user'):
     return True, role, '', 0
 
 
+# bcrypt 只取前 72 字节做哈希：超长部分被静默丢弃，用户以为的密码与实际生效的
+# 密码不一致（他人用前 72 字节即可通过校验）。入口统一拒绝超长，不静默截断。
+PASSWORD_MAX_BYTES = 72
+
+
+def password_too_long(password):
+    """密码是否超过 bcrypt 有效长度（按 UTF-8 字节计）。"""
+    return len((password or '').encode('utf-8')) > PASSWORD_MAX_BYTES
+
+
 # 邮件收件人：一行里可写多个（逗号 / 分号 / 中英文标点 / 空白分隔）。
 # 凭证的默认收件人与账号级覆盖共用这一套解析，避免两处各切一次导致行为不一致。
 RECIPIENT_SEP_RE = re.compile(r'[,;，；\s]+')

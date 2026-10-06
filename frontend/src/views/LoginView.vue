@@ -359,8 +359,11 @@ async function handleLogin() {
       account: form.account.trim(),
       password: form.password
     })
-    const redirect = route.query.redirect
-    router.replace(typeof redirect === 'string' ? redirect : '/')
+    // redirect 只接受站内绝对路径（'/' 开头且非 '//'/'/\' 协议相对写法），
+    // 其余一律回首页——开放重定向可被用来把登录后的用户带到钓鱼站
+    const raw = route.query.redirect
+    const safe = typeof raw === 'string' && /^\/(?!\/|\\)/.test(raw)
+    router.replace(safe ? raw : '/')
   } catch (e) {
     // 后端已返回清晰错误（账号或密码错误 / 账号已被禁用 / 尝试过于频繁）
     formError.value = e.message || '登录失败，请稍后重试'

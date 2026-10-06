@@ -37,16 +37,18 @@ def load_location(payload):
     if not name:
         return False, None, '位置名称不能为空', 4300
 
-    def _f(key):
+    def _f(key, lo, hi):
         try:
             v = float(payload.get(key))
-            return v if -180.0 <= v <= 180.0 else None
+            return v if lo <= v <= hi else None
         except (TypeError, ValueError, OverflowError):
             return None
 
-    lat, lng = _f('lat'), _f('lng')
+    # 纬度 ±90 / 经度 ±180 各自约束（共用 ±180 会放过 lat=123 这类脏坐标进签到提交）
+    lat = _f('lat', -90.0, 90.0)
+    lng = _f('lng', -180.0, 180.0)
     if lat is None or lng is None:
-        return False, None, '经纬度须为有效数字', 4301
+        return False, None, '经纬度须为有效数字（纬度 ±90、经度 ±180）', 4301
     address = str(payload.get('address') or '').strip()[:255]
     if not address:
         return False, None, '地址号不能为空', 4302

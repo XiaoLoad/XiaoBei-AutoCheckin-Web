@@ -46,7 +46,8 @@ def _jwt_expires_hours():
 
 def generate_token(user):
     """生成 JWT：payload 携带 uid、role、签发时密码版本号、唯一 jti 与过期时间。
-    pwd_ver 用于修改密码后吊销存量 token（见 token_required 中的比对）。"""
+    pwd_ver 用于修改密码后吊销存量 token（见 token_required 中的比对）。
+    时区口径：JWT exp/iat 按 RFC 7519 为 UTC 数值时间戳，与展示无涉，勿改 now_cst。"""
     now = datetime.datetime.utcnow()
     payload = {
         'uid': user.id,

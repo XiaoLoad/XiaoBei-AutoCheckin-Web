@@ -342,7 +342,10 @@ def render(ctx, fmt):
 
 
 def send_email(fields, subject, body, subtype='plain'):
-    """通过 SMTP（STARTTLS，端口 587）发送邮件；subtype='html' 时按 text/html 发送。
+    """SMTP 发送；subtype='html' 时按 text/html 发送。
+    端口与加密方式自动适配：465 → SMTP_SSL（隐式 TLS），其余端口 → STARTTLS
+    （587 明文升级；25 等无 TLS 能力的服务器 starttls 失败时按明文继续，仅记 debug）。
+    timeout 放宽到 20s——大附件邮件服务器握手 + 投递 8s 常不够。
     收件人支持多个（emailTo 内以逗号/分号/空白分隔），一次连接投递给全部收件人。
     失败抛异常由调用方记录。"""
     import smtplib
@@ -356,8 +359,19 @@ def send_email(fields, subject, body, subtype='plain'):
     msg['Subject'] = subject
     msg['From'] = fields['emailFrom']
     msg['To'] = ', '.join(tos)
-    with smtplib.SMTP(fields['emailSmtp'], 587, timeout=8) as s:
-        s.starttls()
+    host = fields['emailSmtp']
+    port = int(fields.get('emailPort') or (465 if str(host).lower().endswith(('qq.com', '163.com', '126.com')) else 587))
+    if port == 465:
+        # 隐式 TLS：连接即加密（QQ/163 等国内邮箱的 SSL 通道）
+        with smtplib.SMTP_SSL(host, port, timeout=20) as s:
+            s.login(fields['emailFrom'], fields['emailPass'])
+            s.sendmail(fields['emailFrom'], tos, msg.as_string())
+        return
+    with smtplib.SMTP(host, port, timeout=20) as s:
+        try:
+            s.starttls()
+        except smtplib.SMTPNotSupportedError:
+            log.debug('SMTP %s:%s 不支持 STARTTLS，按明文连接继续', host, port)
         s.login(fields['emailFrom'], fields['emailPass'])
         s.sendmail(fields['emailFrom'], tos, msg.as_string())
 

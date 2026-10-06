@@ -16,6 +16,11 @@ from app.services.crypto import decrypt, encrypt
 
 bp = Blueprint('group_push', __name__, url_prefix='/api/group-push')
 
+# 与 push_groups 表列宽同源（name String(64)、qq_code String(32)）；
+# create/class-bind 与 update 同口径截断，超长不再依赖 DB 层报 500
+NAME_MAX = 64
+QQ_CODE_MAX = 32
+
 
 def _today_status(group_id):
     log = PushGroupDigestLog.query.filter_by(group_id=group_id, date=now_cst().date()).first()
@@ -162,7 +167,7 @@ def dorm_members():
 @token_required
 def create_dorm_group():
     payload = request.get_json(silent=True) or {}
-    name = str(payload.get('name') or '').strip()
+    name = str(payload.get('name') or '').strip()[:NAME_MAX]
     if not name:
         return error(message='分组名称不能为空', code=4400, status=400)
     uid = request.current_user.id
@@ -171,7 +176,7 @@ def create_dorm_group():
     ok, image_gid, message = _clean_image_group(uid, payload.get('imageGroupId'))
     if not ok:
         return error(message=message, code=4402, status=400)
-    qq_code = str(payload.get('qqCode') or '').strip() or None
+    qq_code = str(payload.get('qqCode') or '').strip()[:QQ_CODE_MAX] or None
     g = PushGroup(user_id=uid, type=PushGroup.TYPE_DORM, name=name, qq_code=qq_code,
                   image_group_id=image_gid)
     db.session.add(g)
@@ -188,14 +193,14 @@ def update_dorm_group(group_id):
         return error(message='分组不存在', code=4040, status=404)
     payload = request.get_json(silent=True) or {}
     if 'name' in payload and str(payload.get('name') or '').strip():
-        new_name = str(payload['name']).strip()[:64]
+        new_name = str(payload['name']).strip()[:NAME_MAX]
         dup = PushGroup.query.filter_by(user_id=request.current_user.id,
                                         type=PushGroup.TYPE_DORM, name=new_name).first()
         if dup and dup.id != g.id:
             return error(message='该寝室分组名称已存在', code=4401, status=409)
         g.name = new_name
     if 'qqCode' in payload:
-        g.qq_code = str(payload['qqCode'] or '').strip() or None
+        g.qq_code = str(payload['qqCode'] or '').strip()[:QQ_CODE_MAX] or None
     if 'imageGroupId' in payload:
         ok, image_gid, message = _clean_image_group(request.current_user.id,
                                                     payload.get('imageGroupId'))
@@ -296,7 +301,7 @@ def bind_class_group():
     qqCode 与 imageGroupId 各自独立、都可空，只传其一时另一个保持不变；
     两者皆空视为彻底解绑，删除该行（不留空壳，避免与派生的班级列表重名冲突）。"""
     payload = request.get_json(silent=True) or {}
-    name = str(payload.get('name') or '').strip()
+    name = str(payload.get('name') or '').strip()[:NAME_MAX]
     if not name:
         return error(message='班级名称不能为空', code=4400, status=400)
     uid = request.current_user.id
@@ -304,7 +309,7 @@ def bind_class_group():
     qq_code = g.qq_code if g else None
     image_gid = g.image_group_id if g else None
     if 'qqCode' in payload:
-        qq_code = str(payload.get('qqCode') or '').strip() or None
+        qq_code = str(payload.get('qqCode') or '').strip()[:QQ_CODE_MAX] or None
     if 'imageGroupId' in payload:
         ok, image_gid, message = _clean_image_group(uid, payload.get('imageGroupId'))
         if not ok:
@@ -351,5 +356,8 @@ def flush_now():
     try:
         flush_digest(g.id, now_cst().date(), force=True)
     except Exception as e:
-        return error(message=f'发送失败：{e}', code=4405, status=500)
+        # 异常原文可能含内部路径/库信息，不透前端；完整堆栈进日志供排查
+        import logging
+        logging.getLogger('app').exception('群推送手动发送失败 group=%s', g.id)
+        return error(message=f'发送失败：{type(e).__name__}', code=4405, status=500)
     return success({'today': _today_status(g.id)}, message='已触发发送')

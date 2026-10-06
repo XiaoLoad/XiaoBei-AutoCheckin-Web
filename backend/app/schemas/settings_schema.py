@@ -44,11 +44,15 @@ def load_update(payload):
             data[key] = raw
             continue
 
-        # str 类型：文本配置（如高德地图 Key），去首尾空白
+        # str 类型：文本配置（如高德地图 Key），去首尾空白；
+        # 长度对齐 system_configs.value 列宽 String(255)，超长在参数层拦截而非 DB 层报错
         if spec['type'] == 'str':
             if not isinstance(raw, str):
                 return False, None, f'{spec["label"]} 必须为文本', 4003
-            data[key] = raw.strip()
+            value = raw.strip()
+            if len(value) > 255:
+                return False, None, f'{spec["label"]} 长度不能超过 255 个字符', 4004
+            data[key] = value
             continue
 
         # int 类型：兼容前端把数字输入框值传成字符串的情况

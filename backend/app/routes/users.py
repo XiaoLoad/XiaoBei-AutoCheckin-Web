@@ -102,6 +102,15 @@ def update_user(user_id):
     if 'username' in data and data['username'] != user.username and User.query.filter_by(username=data['username']).first():
         return error(message='用户名已存在', code=4004, status=409)
 
+    # [安全] 与 set_status/delete 同源的防呆：编辑接口同样不得禁用或降级自己，
+    # 否则当场失去会话/管理权限（单管理员场景下系统将再无可用管理员）
+    current = request.current_user
+    if current.id == user.id:
+        if data.get('enabled') is False:
+            return error(message='不能禁用当前登录的账号', code=1006, status=403)
+        if user.role == 'admin' and data.get('role') not in (None, 'admin'):
+            return error(message='不能降低当前登录账号的角色', code=1006, status=403)
+
     # password 不能进 setattr 循环：模型列是 password_hash，setattr(user, 'password', 明文)
     # 只会挂一个瞬时属性并在 commit 后丢弃（密码看似保存实则未变），必须走 set_password 哈希
     password = data.pop('password', None)

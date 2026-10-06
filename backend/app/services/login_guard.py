@@ -5,6 +5,8 @@
 #     避免攻击者用少量失败恶意锁死他人账号（DoS）。
 #   IP 全局（最宽）——拦跨用户名喷洒；寝室场景大量用户共享出口 NAT，故放宽。
 # 时间一律 datetime.utcnow（与 token_blacklist 口径一致；锁只比时间差，不受展示口径影响）。
+# F4.3 归口说明：全站三处 utcnow（JWT exp/iat、token_blacklist 清理、登录失败计数窗口）
+# 均为「只比差值、不展示」的内部口径，与业务展示时间（now_cst，中国本地）互不混用，保持现状。
 from datetime import datetime, timedelta
 
 from app.extensions import db

@@ -5,9 +5,10 @@
     python scripts/version_bump.py [minor|major|patch]
 
 读取仓库根目录 VERSION，按类型递增并写回：
-    minor  0.y.z -> 0.(y+1).0   开发阶段功能新增 / 开发结束
-    major  0.y.z -> 1.0.0       上线 / 破坏性或不兼容变更
-    patch  0.y.z -> 0.y.(z+1)   保留项（按规范修复 BUG 不单独增版本）
+    minor  x.y.z -> x.(y+1).0   功能新增 / 开发结束
+    major  x.y.z -> (x+1).0.0   上线 / 破坏性或不兼容变更
+    patch  x.y.z -> x.y.(z+1)   独立 BUG 修复（1.x 起生效；随功能提交的
+                                零星修复并入该功能版本，不单独发版）
 
 注意：本脚本只修改版本号，不负责 git 提交；提交由"提交版本"流程统一处理。
 """

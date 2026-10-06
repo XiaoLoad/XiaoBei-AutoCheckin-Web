@@ -10,6 +10,26 @@ from app.utils.response import error, success
 
 bp = Blueprint('tasks', __name__, url_prefix='/api/tasks')
 
+# 大表分批删除的批大小：单事务删 N 万行会长时间持行锁并放大 undo 日志，
+# 每批 5000 条循环删（带 LIMIT 的子查询删除），锁窗口短、可中途让出
+BATCH_SIZE = 5000
+
+
+def _batched_delete(query, batch_size=BATCH_SIZE):
+    """按主键分批执行 DELETE，返回删除总数。
+    query 须是已带完整过滤条件的 Query（模型须有 id 主键）；每批只取本批 id
+    再按 id 删除，批间独立提交，避免巨型 IN(...) 单事务长时间持锁。"""
+    model = query.column_descriptions[0]['entity']
+    total = 0
+    while True:
+        ids = [row[0] for row in query.with_entities(model.id)
+               .order_by(model.id).limit(batch_size).all()]
+        if not ids:
+            break
+        total += model.query.filter(model.id.in_(ids)).delete(synchronize_session=False)
+        db.session.commit()
+    return total
+
 
 def _owned_accounts():
     """当前用户全部 B 平台账号（按 id 倒序）"""
@@ -203,10 +223,12 @@ def purge_task_logs():
     if status_filter in ('success', 'fail', 'skip'):
         q = q.filter(SignRecord.status == status_filter)
 
-    # 先按同一过滤条件取出日志 id，联动清理其推送结果，再删日志本体
-    rec_ids = [row[0] for row in q.with_entities(SignRecord.id).all()]
-    if rec_ids:
-        PushLog.query.filter(PushLog.sign_record_id.in_(rec_ids)).delete(synchronize_session=False)
-    deleted = q.delete(synchronize_session=False)
-    db.session.commit()
+    # 联动清理推送结果改子查询删除（不把日志 id 全量拉进内存），日志本体分批删：
+    # 数据量大时单事务巨型 IN(...) 会长时间持行锁，每批 5000 条批间提交
+    deleted = _batched_delete(q)
+    _batched_delete(PushLog.query.filter(
+        PushLog.sign_record_id.in_(
+            db.session.query(SignRecord.id).filter(
+                SignRecord.account_id.in_(owned_ids),
+                SignRecord.created_at < cutoff))))
     return success({'deleted': deleted})

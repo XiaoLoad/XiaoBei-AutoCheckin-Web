@@ -561,6 +561,26 @@ def _poll_activity_windows():
         _dispatch_run(s.id, w.course_name)
 
 
+# 大表分批删除的批大小：单事务删 N 万行会长时间持行锁并放大 undo 日志
+PRUNE_BATCH_SIZE = 5000
+
+
+def _batched_delete(query, batch_size=PRUNE_BATCH_SIZE):
+    """按主键分批执行 DELETE，返回删除总数。
+    query 须是已带完整过滤条件的 Query（模型须有 id 主键）；每批只取本批 id
+    再按 id 删除，批间独立提交，锁窗口短、可中途让出。"""
+    model = query.column_descriptions[0]['entity']
+    total = 0
+    while True:
+        ids = [row[0] for row in query.with_entities(model.id)
+               .order_by(model.id).limit(batch_size).all()]
+        if not ids:
+            break
+        total += model.query.filter(model.id.in_(ids)).delete(synchronize_session=False)
+        db.session.commit()
+    return total
+
+
 def _prune_old_sign_records():
     """按 sign_log_retention_days 清理超期执行日志（全局策略，不区分用户），
     并按 op_log_retention_days（默认 365 天，长于签到日志）清理超期操作审计日志。
@@ -573,12 +593,14 @@ def _prune_old_sign_records():
         try:
             days = get_setting('sign_log_retention_days') or 180
             cutoff = now_cst() - timedelta(days=int(days))
-            deleted = SignRecord.query.filter(SignRecord.created_at < cutoff).delete(synchronize_session=False)
+            # 分批删除（每批 5000 条批间提交）：数据量大时单事务一次性 DELETE
+            # 会长时间持行锁并放大 undo 日志，批间让出锁窗口
+            deleted = _batched_delete(SignRecord.query.filter(SignRecord.created_at < cutoff))
             # push_logs 随签到日志同周期清理（created_at 与执行记录同刻生成）
-            PushLog.query.filter(PushLog.created_at < cutoff).delete(synchronize_session=False)
+            _batched_delete(PushLog.query.filter(PushLog.created_at < cutoff))
             op_days = get_setting('op_log_retention_days') or 365
             op_cutoff = now_cst() - timedelta(days=int(op_days))
-            op_deleted = OpLog.query.filter(OpLog.created_at < op_cutoff).delete(synchronize_session=False)
+            op_deleted = _batched_delete(OpLog.query.filter(OpLog.created_at < op_cutoff))
             # 登录失败计数（防爆破）过期清理：锁定态最长 15 分钟，7 天前的记录必然失去意义
             from app.services.login_guard import purge_expired as purge_login_failures
             lf_deleted = purge_login_failures(days=7)
@@ -663,7 +685,14 @@ def _run(schedule_id, allow_retry=True, course_name=None):
         try:
             _commit_result(s, None, 'fail', f'执行异常：{e}', course_name=course_name)
         except Exception:
-            pass
+            # 兜底再失败（多为并发删任务导致 schedule 行消失，FK 落库被拦）：
+            # 执行结果无痕丢失就无从追查，至少留一条结构化日志带齐现场
+            db.session.rollback()
+            log.error(
+                '任务 %s 执行结果落库失败（执行异常：%s）——账号 %s 类型 %s，'
+                '本次执行无痕丢失，常见原因为执行期间任务被删除',
+                schedule_id, e, getattr(s, 'account_id', None),
+                getattr(s, 'task_type', None), exc_info=True)
 
 
 def _resolve(schedule):

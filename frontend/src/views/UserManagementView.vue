@@ -355,6 +355,7 @@ import UserFormModal from '@/components/UserFormModal.vue'
 import Icon from '@/components/Icon.vue'
 import { useUsersStore } from '@/stores/users'
 import { toast } from '@/utils/toast'
+import { highlightText } from '@/utils/text'
 import { storeToRefs } from 'pinia'
 
 // 领域状态下沉到 store：视图只做渲染、展示辅助与 toast 提示
@@ -437,20 +438,10 @@ function quotaTextClass(item) {
   return p >= 90 ? 'text-danger' : p >= 70 ? 'text-warning' : 'text-ink-muted'
 }
 
-// 关键词高亮：命中片段包一层 mark（与账号树页同一套做法）。
-// 用户名来自接口，转义后再拼接，避免 v-html 注入
-const ESCAPE_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
-function escapeHtml(s) {
-  return String(s ?? '').replace(/[&<>"']/g, (c) => ESCAPE_MAP[c])
-}
+// 关键词高亮：命中片段包一层 mark。escapeHtml/highlightText 是全站唯一出处
+// （utils/text.js，账号树页同一套）；用户名来自接口，转义后再拼接避免 v-html 注入
 function highlight(name) {
-  const text = String(name ?? '')
-  const kw = keyword.value.trim()
-  if (!kw) return escapeHtml(text)
-  const i = text.toLowerCase().indexOf(kw.toLowerCase())
-  if (i < 0) return escapeHtml(text)
-  const hit = escapeHtml(text.slice(i, i + kw.length))
-  return `${escapeHtml(text.slice(0, i))}<mark class="rounded bg-amber/30 px-0.5 text-ink">${hit}</mark>${escapeHtml(text.slice(i + kw.length))}`
+  return highlightText(name, keyword.value)
 }
 
 // 事件包装：调用 store action 并负责 toast 反馈

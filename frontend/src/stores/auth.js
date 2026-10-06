@@ -129,7 +129,8 @@ export const useAuthStore = defineStore('auth', () => {
 
 // 仅做本地解码读取 payload（用于校验 exp），不做签名验证（签名由后端负责）。
 // 解析失败返回 null，交由调用方按"无效"处理。
-function decodeJwt(raw) {
+// 供 router/index.js 复用（同一份实现，router 侧不再复制粘贴）。
+export function decodeJwt(raw) {
   try {
     const seg = raw.split('.')[1]
     if (!seg) return null

@@ -23,6 +23,7 @@ import { defineStore } from 'pinia'
 import { useRefreshBusStore } from '@/stores/refreshBus'
 import { ref, computed } from 'vue'
 import { fetchAccounts, fetchSignRecords, fetchTaskDetail, fetchActiveTasks } from '@/api/signRecords'
+import { useRacedRequest } from '@/utils/racedRequest'
 
 // 本地日期格式（避开 toISOString 的 UTC 时区偏移，否则 GMT+8 会差一天）
 function fmt(d) {
@@ -62,6 +63,20 @@ function eachDayInRange(start, end) {
 }
 
 const EMPTY_OVERVIEW = { total: 0, finished: 0, unsigned: 0, needPhoto: 0, rate: 0 }
+
+// 缓存容量上限：两个缓存都按「账号|筛选|年月 / 任务」无上限增长，长会话内存无界。
+// 超限时按插入序淘汰最旧条目（Map 保留插入序，FIFO 足够——缓存价值随时间递减）。
+const MONTH_CACHE_MAX = 48
+const LOGS_CACHE_MAX = 100
+
+// 容量受控的写入：条目已存在则先删再写（刷新其插入序），超限删最旧
+function cacheSet(map, key, value, max) {
+  if (Object.prototype.hasOwnProperty.call(map, key)) delete map[key]
+  const next = { ...map, [key]: value }
+  const keys = Object.keys(next)
+  if (keys.length > max) delete next[keys[0]]
+  return next
+}
 
 export const useSignRecordsStore = defineStore('signRecords', () => {
   const refreshBus = useRefreshBusStore()
@@ -231,7 +246,7 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
   // 拉取「进行中」任务（寝/活合并，仅本人未完成）。仅随账号变化调用，与历史筛选无关。
   // silent=true（后台自动刷新）时保留旧数据原地换新，避免卡片闪骨架。
   // background=true（周期轮询/回前台补拉）额外豁免全局顶部加载条，避免长期噪音。
-  let activeSeq = 0
+  const activeRace = useRacedRequest()
   async function loadActiveTasks({ silent = false, background = false } = {}) {
     if (!selectedAccountId.value) {
       activeTasks.value = []
@@ -239,7 +254,7 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
       activeLoaded.value = false
       return
     }
-    const seq = ++activeSeq
+    const seq = activeRace.begin()
     const silentLoad = silent && activeLoaded.value
     if (silentLoad) {
       refreshingActive.value = true
@@ -252,16 +267,16 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     }
     try {
       const res = await fetchActiveTasks(selectedAccountId.value, { skipLoadingBar: background })
-      if (seq !== activeSeq) return // 竞态守卫：快速切账号只采纳最新结果
+      if (!activeRace.isLatest(seq)) return // 竞态守卫：快速切账号只采纳最新结果
       activeTasks.value = res.items
       activeError.value = ''
       activeLoaded.value = true
       activeUpdatedAt.value = Date.now()
     } catch (e) {
-      if (seq !== activeSeq) return
+      if (!activeRace.isLatest(seq)) return
       activeError.value = e?.message || '获取进行中任务失败'
     } finally {
-      if (seq === activeSeq) {
+      if (activeRace.isLatest(seq)) {
         loadingActive.value = false
         refreshingActive.value = false
       }
@@ -269,7 +284,7 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
   }
 
   // 拉取列表页（服务端分页）。dayFilter 点选时窗口收窄为当天，统计卡仍为全历史口径
-  let listSeq = 0
+  const listRace = useRacedRequest()
   async function loadList() {
     if (!selectedAccountId.value) {
       tasks.value = []
@@ -278,7 +293,7 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
       dataLatest.value = null
       return
     }
-    const seq = ++listSeq
+    const seq = listRace.begin()
     const day = dayFilter.value
     const silentList = listLoaded.value
     if (silentList) {
@@ -296,7 +311,7 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
         dateFrom: day || undefined,
         dateTo: day || undefined,
       })
-      if (seq !== listSeq) return // 竞态守卫：仅采纳最新请求
+      if (!listRace.isLatest(seq)) return // 竞态守卫：仅采纳最新请求
       tasks.value = res.items
       total.value = res.total
       if (res.overview) overview.value = res.overview
@@ -304,7 +319,7 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
       listLoaded.value = true
     } finally {
       if (silentList) refreshBus.end()
-      if (seq === listSeq) {
+      if (listRace.isLatest(seq)) {
         loadingRecords.value = false
         refreshingRecords.value = false
       }
@@ -312,12 +327,12 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
   }
 
   // 拉取日历 42 格网格窗口的任务并聚合着色（按 账号|类型|状态|年月 缓存）
-  let monthSeq = 0
+  const monthRace = useRacedRequest()
   async function loadMonth() {
     if (!selectedAccountId.value) return
     const key = monthKey.value
     if (monthCache.value[key]) return
-    const seq = ++monthSeq
+    const seq = monthRace.begin()
     const y = calendarYear.value
     const m = calendarMonth.value
     const lead = new Date(y, m - 1, 1).getDay() // 周日=0
@@ -340,7 +355,7 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
         dateFrom: fmt(first),
         dateTo: fmt(last),
       })
-      if (seq !== monthSeq || key !== monthKey.value) return // 切月竞态守卫
+      if (!monthRace.isLatest(seq) || key !== monthKey.value) return // 切月竞态守卫
       const acc = {}
       for (const t of res.items) {
         for (const d of eachDayInRange(t.startDate, t.endDate)) {
@@ -349,11 +364,11 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
           else s.unsigned += 1
         }
       }
-      monthCache.value = { ...monthCache.value, [key]: acc }
+      monthCache.value = cacheSet(monthCache.value, key, acc, MONTH_CACHE_MAX)
       calendarLoaded.value = true
     } finally {
       if (silentCal) refreshBus.end()
-      if (seq === monthSeq) {
+      if (monthRace.isLatest(seq)) {
         loadingCalendar.value = false
         refreshingCalendar.value = false
       }
@@ -440,7 +455,10 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
     void loadList()
   }
 
-  // 展开 / 收起：优先用预拉缓存，否则懒加载地理围栏 + 签到记录
+  // 展开 / 收起：优先用预拉缓存，否则懒加载地理围栏 + 签到记录。
+  // 竞态守卫：请求发出后若用户切换账号（selectedAccountId 变化），旧账号的响应
+  // 不得写回新账号的详情面板（此前缺守卫，切账号可污染新账号详情）。
+  const detailRace = useRacedRequest()
   async function toggleExpand(task) {
     const id = task.id
     const cur = details.value[id]
@@ -456,15 +474,19 @@ export const useSignRecordsStore = defineStore('signRecords', () => {
       }
       return
     }
+    const seq = detailRace.begin()
+    const accountId = selectedAccountId.value
     details.value = { ...details.value, [id]: { loading: true, open: true, geoFence: [], logs: [], error: '' } }
     try {
-      const res = await fetchTaskDetail(selectedAccountId.value, id, task.kind)
-      logsCache.value = { ...logsCache.value, [id]: { logs: res.logs, geoFence: res.geoFence } }
+      const res = await fetchTaskDetail(accountId, id, task.kind)
+      if (!detailRace.isLatest(seq)) return // 竞态守卫：仅采纳最新一次详情请求
+      logsCache.value = cacheSet(logsCache.value, id, { logs: res.logs, geoFence: res.geoFence }, LOGS_CACHE_MAX)
       details.value = {
         ...details.value,
         [id]: { loading: false, open: true, geoFence: res.geoFence, logs: res.logs, error: '' },
       }
     } catch (e) {
+      if (!detailRace.isLatest(seq)) return
       details.value = {
         ...details.value,
         [id]: { loading: false, open: true, geoFence: [], logs: [], error: e.message || '加载详情失败' },

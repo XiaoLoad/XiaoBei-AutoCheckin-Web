@@ -4,7 +4,7 @@
 // 普通用户根本不会拥有管理员路由的实例，而非仅靠守卫拦截。
 import { createRouter, createWebHistory } from 'vue-router'
 import { ref } from 'vue'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore, decodeJwt } from '@/stores/auth'
 import { toast } from '@/utils/toast'
 
 // ============ 动态路由：均需要鉴权，并按 meta.roles 做角色过滤 ============
@@ -167,21 +167,8 @@ function resolveRole() {
   const auth = useAuthStore()
   if (auth.role) return auth.role
   try {
-    const raw = auth.token
-    if (raw) {
-      const seg = raw.split('.')[1]
-      if (seg) {
-        const json = JSON.parse(
-          decodeURIComponent(
-            atob(seg.replace(/-/g, '+').replace(/_/g, '/'))
-              .split('')
-              .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-              .join('')
-          )
-        )
-        if (json.role) return json.role
-      }
-    }
+    const json = auth.token ? decodeJwt(auth.token) : null
+    if (json?.role) return json.role
   } catch {
     /* 解析失败忽略，回落到空角色 */
   }

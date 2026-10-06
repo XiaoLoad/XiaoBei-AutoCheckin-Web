@@ -148,6 +148,7 @@ import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useSiteRecordsStore } from '@/stores/siteRecords'
 import { accountTypeMeta } from '@/utils/accountType'
+import { highlightText } from '@/utils/text'
 import Icon from '@/components/Icon.vue'
 
 const store = useSiteRecordsStore()
@@ -196,19 +197,10 @@ function lastText(a) {
 }
 
 // 搜索命中高亮：先 HTML 转义再拼接 mark —— 用户名/账号均可由用户侧决定，
-// 直接 v-html 原文等于开注入口子（与 UserManagementView 同一套做法）
-const ESCAPE_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
-function escapeHtml(s) {
-  return String(s ?? '').replace(/[&<>"']/g, (c) => ESCAPE_MAP[c])
-}
+// 直接 v-html 原文等于开注入口子。escapeHtml/highlightText 唯一出处 utils/text.js
+// （与 UserManagementView 同一套）。mark 样式保持本页原样（无 text-ink）。
 function highlight(text, hit) {
-  const raw = String(text ?? '')
-  const q = keyword.value.trim()
-  if (!hit || !q) return escapeHtml(raw)
-  const idx = raw.toLowerCase().indexOf(q.toLowerCase())
-  if (idx < 0) return escapeHtml(raw)
-  const hitText = raw.slice(idx, idx + q.length)
-  return `${escapeHtml(raw.slice(0, idx))}<mark class="rounded bg-amber/30 px-0.5">${escapeHtml(hitText)}</mark>${escapeHtml(raw.slice(idx + q.length))}`
+  return highlightText(text, hit ? keyword.value : '', 'rounded bg-amber/30 px-0.5')
 }
 </script>
 

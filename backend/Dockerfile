@@ -1,4 +1,5 @@
 # 后端镜像：Flask + Gunicorn 单实例（调度器内存态，多 worker 会重复打卡，见 docker-compose.yml）
+# 构建上下文为仓库根（compose 中 context: .），因此 COPY 路径均带 backend/ 前缀
 FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -8,13 +9,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # 先装依赖再拷代码，代码变更不触发 pip 重装
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt gunicorn
 
 # 非 root 运行；-m 确保 home 目录存在且属主正确（gunicorn 26 control server 会在
 # 用户 home 下落控制 socket，目录缺失/属主不对会让 worker 加载失败）
-COPY . .
-# VERSION 供 /api/system/info 展示（仓库根文件，构建上下文为仓库根时由 COPY 打入）
+COPY backend/ .
+# VERSION 供 /api/system/info 展示（位于仓库根，构建上下文为仓库根）
 COPY VERSION /app/VERSION
 RUN groupadd -r appuser \
     && useradd -r -g appuser -m -d /home/appuser appuser \

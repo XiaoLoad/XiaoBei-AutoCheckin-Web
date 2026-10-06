@@ -16,19 +16,26 @@ bp = Blueprint('system', __name__, url_prefix='/api/system')
 # 进程级启动时间：模块首次导入时刻，用于计算运行时长（近似应用启动时间）
 STARTED_AT = now_cst()
 
-# VERSION 文件位于仓库根目录：system.py 位于 <root>/backend/app/routes/，向上四级即根目录
-_VERSION_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), 'VERSION'
-)
+# VERSION 文件位置候选（按序尝试）。system.py 位于 <root>/backend/app/routes/system.py：
+#   here（routes 目录）向上三级 = 仓库根（本地开发；实测 routes→app→backend→Web端）
+#   here 向上两级 = backend/（Docker 镜像内 WORKDIR /app，VERSION 由 Dockerfile 打入）
+def _version_candidates():
+    here = os.path.dirname(os.path.abspath(__file__))
+    up = lambda n: os.path.normpath(os.path.join(here, *(['..'] * n)))
+    return [os.path.join(up(3), 'VERSION'), os.path.join(up(2), 'VERSION')]
 
 
 def _read_version():
-    """读取仓库根目录 VERSION 文件；缺失时回退 unknown"""
-    try:
-        with open(_VERSION_FILE, 'r', encoding='utf-8') as f:
-            return f.read().strip() or 'unknown'
-    except Exception:
-        return 'unknown'
+    """按候选路径读取 VERSION；缺失时回退 unknown"""
+    for path in _version_candidates():
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+                if content:
+                    return content
+        except Exception:
+            continue
+    return 'unknown'
 
 
 @bp.route('/info', methods=['GET'])

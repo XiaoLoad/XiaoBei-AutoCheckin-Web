@@ -14,6 +14,8 @@ RUN pip install --no-cache-dir -r requirements.txt gunicorn
 # 非 root 运行；-m 确保 home 目录存在且属主正确（gunicorn 26 control server 会在
 # 用户 home 下落控制 socket，目录缺失/属主不对会让 worker 加载失败）
 COPY . .
+# VERSION 供 /api/system/info 展示（仓库根文件，构建上下文为仓库根时由 COPY 打入）
+COPY VERSION /app/VERSION
 RUN groupadd -r appuser \
     && useradd -r -g appuser -m -d /home/appuser appuser \
     && chown appuser:appuser /home/appuser \

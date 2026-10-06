@@ -1,0 +1,28 @@
+# 仓库根构建上下文瘦身（backend/Dockerfile 以仓库根为 context）
+# 只保留部署所需：backend 源码 + VERSION；其余一律排除
+**/.venv/
+**/venv/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/node_modules/
+**/dist/
+**/dist_build_check/
+**/.vite/
+**/.env
+**/.env.*
+!**/.env.example
+backend/logs/
+backend/uploads/
+docs/
+老旧版本/
+outputs/
+.deploy-ssh/
+.git/
+.claude/
+.workbuddy/
+.dsh/
+.idea/
+*.log
+CHANGELOG.md
+README.md

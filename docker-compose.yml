@@ -33,7 +33,9 @@ services:
       start_period: 30s
 
   backend:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile   # 上下文为仓库根：VERSION 等根级文件可打入镜像
     image: xiaobei-checkin-backend:latest
     container_name: xiaobei-backend
     restart: unless-stopped

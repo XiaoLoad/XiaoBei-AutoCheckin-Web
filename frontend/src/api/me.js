@@ -14,6 +14,16 @@ export async function fetchOverview() {
     typeDist: data.typeDist || { dorm: 0, activity: 0 },
     taskSummary: data.taskSummary || { success: 0, fail: 0, skip: 0 },
     recentLogs: data.recentLogs || [],
+    scheduler: data.scheduler || {
+      running: false, jobCount: 0, unregistered: 0,
+      taskTypes: { dorm: 0, activity: 0 },
+      lastRunAt: '', lastRunAgo: '', nextRunIn: null, nextRuns: [],
+    },
+    pushHealth: data.pushHealth || {
+      days: 7,
+      summary: { sent: 0, ok: 0, fail: 0, skipped: 0, rate: null, channels: 0 },
+      byChannel: [], signOkPushFail: { total: 0, list: [] },
+    },
   }
 }
 

@@ -1,11 +1,12 @@
 # 个人中心聚合蓝图：当前登录用户视角的概览数据（仪表盘数据源）。
 # 前缀 /api/me；全部聚合严格按 user_id 隔离，杜绝越权。
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from flask import Blueprint, request
+from sqlalchemy import case, func
 
 from app.extensions import db
-from app.models import BAccount, Schedule, SignRecord, User
+from app.models import BAccount, PushLog, Schedule, SignRecord, User
 from app.models.user import now_cst
 from app.utils.auth import token_required
 from app.utils.response import success
@@ -25,6 +26,20 @@ def _today_local():
 
 def _status_pill(status):
     return {'success': 'success', 'fail': 'fail', 'skip': 'skip'}.get(status, 'skip')
+
+
+def _ago_text(dt):
+    """距今多久的粗粒度中文描述（None → 空串）。与 routes/admin.py 同口径。"""
+    if dt is None:
+        return ''
+    mins = int((now_cst() - dt).total_seconds() // 60)
+    if mins < 1:
+        return '刚刚'
+    if mins < 60:
+        return f'{mins} 分钟前'
+    if mins < 1440:
+        return f'{mins // 60} 小时前'
+    return f'{mins // 1440} 天前'
 
 
 @bp.route('/account-info', methods=['GET'])
@@ -48,10 +63,142 @@ def me_account_info():
     )
 
 
+def _my_scheduler_info(uid):
+    """调度器视角的「我的任务」状态（对齐 routes/admin.py::_scheduler_info 的字段口径，
+    但数据范围严格限本人：jobCount/nextRuns/lastRun 只统计本人 schedule 的 job）。
+
+    与管理员侧的差异：调度器是全站单例，「running」是服务级状态（调度器线程活着），
+    对普通用户同样有意义（它决定我的任务会不会被执行），故保留展示；任务计数、
+    即将执行的窗口与最近执行时刻则一律过滤出本人任务，他人任务不可见。"""
+    from app.services.scheduler import get_scheduler
+
+    my_ids = {s.id for s in Schedule.query.filter_by(user_id=uid).all()}
+    sched = get_scheduler()
+    jobs = sorted((j for j in sched.get_jobs() if str(j.id).startswith('sched_')),
+                  key=lambda j: j.next_run_time or None)
+
+    # 即将执行的窗口：只取本人任务的 job，按 next_run_time 升序最多 5 条。
+    # 附带账号与任务类型——普通用户多账号时，只看时刻无法知道要签哪个号。
+    next_runs = []
+    for j in jobs:
+        if len(next_runs) >= 5:
+            break
+        try:
+            sid = int(str(j.id).split('_', 1)[1])
+        except ValueError:
+            continue
+        if sid not in my_ids:
+            continue
+        s = db.session.get(Schedule, sid)
+        acc = db.session.get(BAccount, s.account_id)
+        nrt = j.next_run_time.astimezone() if j.next_run_time else None
+        # 距执行的分钟数：按请求时刻现算，前端按 <1h / <24h / ≥24h 分档展示
+        in_minutes = max(0, int((nrt - datetime.now(nrt.tzinfo)).total_seconds() // 60)) if nrt else None
+        next_runs.append({
+            'account': acc.account if acc else '',
+            'studentName': ((acc.profile or {}).get('name') or '') if acc else '',
+            'taskLabel': '寝室签到' if s.task_type == 'dorm' else '活动签到',
+            'time': nrt.strftime('%m-%d %H:%M') if nrt else '',
+            'inMinutes': in_minutes,
+        })
+
+    my_jobs = [j for j in jobs
+               if str(j.id).startswith('sched_')
+               and str(j.id).split('_', 1)[-1].isdigit()
+               and int(str(j.id).split('_', 1)[1]) in my_ids]
+    my_enabled = Schedule.query.filter_by(user_id=uid, enabled=True).all()
+    type_counts = {}
+    for s in my_enabled:
+        type_counts[s.task_type] = type_counts.get(s.task_type, 0) + 1
+    # 未注册 cron 的启用任务 = 活动 course 策略且关闭每日兜底（执行完全由课表窗口轮询
+    # 接管，不注册 job）。判定走 resolve_activity_cfg 权威口径，与调度器注册逻辑同源。
+    from app.utils.schedule_utils import resolve_activity_cfg
+    unregistered = sum(1 for s in my_enabled
+                       if resolve_activity_cfg(s) is not None
+                       and not resolve_activity_cfg(s)['fallbackEnabled'])
+
+    last_run = (db.session.query(func.max(SignRecord.created_at))
+                .filter(SignRecord.user_id == uid).scalar())
+    next_in = None
+    if my_jobs and my_jobs[0].next_run_time:
+        nrt = my_jobs[0].next_run_time
+        next_in = max(0, int((nrt - datetime.now(nrt.tzinfo)).total_seconds() // 60))
+
+    return {
+        'running': bool(sched.running),
+        'jobCount': len(my_jobs),
+        'unregistered': unregistered,
+        'taskTypes': {'dorm': type_counts.get('dorm', 0),
+                      'activity': type_counts.get('activity', 0)},
+        # 累计执行次数：本人全部任务的 run_count 求和（含停用任务的历史贡献）
+        'runTotal': int(db.session.query(func.coalesce(func.sum(Schedule.run_count), 0))
+                        .filter(Schedule.user_id == uid).scalar() or 0),
+        'lastRunAt': last_run.strftime('%m-%d %H:%M') if last_run else '',
+        'lastRunAgo': _ago_text(last_run),
+        'nextRunIn': next_in,
+        'nextRuns': next_runs,
+    }
+
+
+def _my_push_health(uid, days=7):
+    """本人推送送达统计（近 N 天）：口径对齐 routes/admin.py::_push_health——
+    成功率分母只含真实发送（attempts>0），未发送（未配凭证等）单列不计入分母。"""
+    start = now_cst() - timedelta(days=days)
+    sent_sum = func.sum(case((PushLog.attempts > 0, 1), else_=0))
+    ok_sum = func.sum(case((PushLog.ok.is_(True), 1), else_=0))
+    skip_sum = func.sum(case((PushLog.attempts == 0, 1), else_=0))
+    rows = (db.session.query(PushLog.channel, sent_sum, ok_sum, skip_sum)
+            .filter(PushLog.user_id == uid, PushLog.created_at >= start)
+            .group_by(PushLog.channel).all())
+    by_channel = []
+    tot = {'sent': 0, 'ok': 0, 'skipped': 0}
+    for ch, sent, ok, skipped in rows:
+        sent, ok, skipped = int(sent or 0), int(ok or 0), int(skipped or 0)
+        by_channel.append({
+            'channel': ch, 'sent': sent, 'ok': ok, 'fail': sent - ok, 'skipped': skipped,
+            'rate': round(ok / sent * 100) if sent else None,
+        })
+        tot['sent'] += sent
+        tot['ok'] += ok
+        tot['skipped'] += skipped
+    # 真实失败多的在前（与管理员侧同排序语义）
+    by_channel.sort(key=lambda x: (-x['fail'], -x['sent']))
+
+    # 签到成功但通知未送达的最近明细（最多 5 条）：这是普通用户最该关心的异常。
+    cross = (db.session.query(PushLog)
+             .join(SignRecord, PushLog.sign_record_id == SignRecord.id)
+             .filter(PushLog.user_id == uid, PushLog.created_at >= start,
+                     PushLog.ok.is_(False), SignRecord.status == 'success')
+             .order_by(PushLog.attempts.desc(), PushLog.created_at.desc(),
+                       PushLog.id.desc())
+             .limit(5).all())
+    acc_ids = {p.account_id for p in cross if p.account_id}
+    accs = ({a.id: a for a in BAccount.query.filter(BAccount.id.in_(acc_ids)).all()}
+            if acc_ids else {})
+    cross_items = [{
+        'account': (accs.get(p.account_id).account if accs.get(p.account_id) else ''),
+        'channel': p.channel,
+        'error': (p.error or '')[:120],
+        'skipped': int(p.attempts or 0) == 0,
+        'time': p.created_at.strftime('%m-%d %H:%M') if p.created_at else '',
+    } for p in cross]
+
+    return {
+        'days': days,
+        'summary': {'sent': tot['sent'], 'ok': tot['ok'], 'fail': tot['sent'] - tot['ok'],
+                    'skipped': tot['skipped'],
+                    'rate': round(tot['ok'] / tot['sent'] * 100) if tot['sent'] else None,
+                    'channels': len([c for c in by_channel if c['sent'] > 0])},
+        'byChannel': by_channel,
+        'signOkPushFail': {'total': len(cross_items), 'list': cross_items},
+    }
+
+
 @bp.route('/overview', methods=['GET'])
 @token_required
 def me_overview():
-    """普通用户仪表盘聚合：配额 / 账号 / 任务 / 今日 / 趋势 / 类型分布 / 完成情况 / 最近日志。
+    """普通用户仪表盘聚合：配额 / 账号 / 任务 / 今日 / 趋势 / 类型分布 / 完成情况 /
+    最近日志 / 我的调度状态 / 我的推送送达。
     所有查询均以 request.current_user.id 为作用域，与任务日志页口径一致（user 隔离）。"""
     uid = request.current_user.id
     today = _today_local()
@@ -247,4 +394,6 @@ def me_overview():
         'typeDist': type_dist,
         'taskSummary': task_summary,
         'recentLogs': log_items,
+        'scheduler': _my_scheduler_info(uid),
+        'pushHealth': _my_push_health(uid, 7),
     })

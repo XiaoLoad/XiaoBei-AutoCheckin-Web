@@ -84,8 +84,190 @@
       </section>
     </div>
 
-    <!-- 两卡保持默认 stretch 等高：曾用 lg:items-start 让它们各按自身高度落位，结果是
-         底边参差最多 204px。留白改由「谁的内容能长」来吸收——图表容器 flex-1、账号空态居中。 -->
+    <!-- 我的调度状态 + 即将执行：左卡回望过去（最近执行时间轴），右卡展望未来（队列），
+         两卡分工避免信息重复。任务计数/时间轴/推送统计全部仅限本人数据 -->
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+      <!-- 我的调度运行状态（过去视角） -->
+      <section class="dash-card p-5 lg:col-span-2 v-reveal delay-3 flex flex-col">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-semibold text-ink">我的调度状态</h3>
+          <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium" :class="me.scheduler.running ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'">
+            <span class="h-1.5 w-1.5 rounded-full" :class="me.scheduler.running ? 'bg-success animate-pulse' : 'bg-danger'"></span>
+            {{ me.scheduler.running ? '运行中' : '已暂停' }}
+          </span>
+        </div>
+        <p class="text-xs text-ink-muted mb-3">最近执行结果 · 最多 4 条</p>
+        <!-- 执行结果时间轴：状态点着色（成功绿/失败红/跳过琥珀），复用 recentLogs 前 4 条 -->
+        <ul v-if="timelineItems.length" class="relative ml-1 pl-5 space-y-1">
+          <span class="absolute left-[5px] top-2 bottom-2 w-0.5 rounded-full bg-ink/10"></span>
+          <li v-for="(t, i) in timelineItems" :key="t.id || i" class="relative flex items-start gap-3 py-1.5">
+            <span class="absolute -left-5 top-[1.15em] h-3 w-3 rounded-full border-2 bg-elevated" :class="timelineDot(t.result)"></span>
+            <span class="w-[72px] shrink-0 pt-0.5 text-xs text-ink-muted tabular-nums">{{ t.timelineTime }}</span>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <span class="min-w-0 flex-1 truncate text-sm font-medium text-ink">{{ t.name || t.account || '—' }}</span>
+                <span class="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium" :class="statusMeta[t.result].cls">
+                  <span class="h-1.5 w-1.5 rounded-full" :class="dotCls(t.result)"></span>{{ statusMeta[t.result].label }}
+                </span>
+              </div>
+              <p class="mt-0.5 truncate text-xs text-ink-muted" :title="`${t.type} · ${t.note || '—'}`">{{ t.type }} · {{ t.note || '—' }}</p>
+            </div>
+          </li>
+        </ul>
+        <p v-else class="rounded-xl bg-cloud/60 px-3 py-4 text-center text-sm text-ink-muted">暂无执行记录</p>
+        <!-- 调度质量统计：类型分列展示启用任务；近 30 天成功率/累计执行补足留白 -->
+        <div class="mt-auto grid grid-cols-4 gap-3 border-t border-ink/5 pt-4">
+          <div>
+            <p class="font-semibold text-ink tabular-nums">{{ me.tasks.active }}<span class="ml-0.5 text-xs font-normal text-ink-muted">个</span></p>
+            <p class="mt-0.5 text-xs text-ink-muted">启用任务</p>
+            <p class="text-[11px] text-ink-muted/80">寝 {{ me.scheduler.taskTypes.dorm }} · 活 {{ me.scheduler.taskTypes.activity }}</p>
+          </div>
+          <div>
+            <p class="font-semibold text-ink tabular-nums">{{ me.scheduler.jobCount }}<span class="ml-0.5 text-xs font-normal text-ink-muted">个</span></p>
+            <p class="mt-0.5 text-xs text-ink-muted">已注册定时</p>
+            <p v-if="me.scheduler.unregistered" class="text-[11px] text-amber">课表接管 {{ me.scheduler.unregistered }}</p>
+            <p v-else class="text-[11px] text-ink-muted/80">&nbsp;</p>
+          </div>
+          <div>
+            <p class="font-semibold tabular-nums" :class="rateTextCls(successRate)">{{ successRate }}<span class="ml-0.5 text-xs font-normal text-ink-muted">%</span></p>
+            <p class="mt-0.5 text-xs text-ink-muted">近 30 天成功率</p>
+            <p class="text-[11px] text-ink-muted/80">&nbsp;</p>
+          </div>
+          <div>
+            <p class="font-semibold text-ink tabular-nums">{{ me.scheduler.runTotal ?? 0 }}<span class="ml-0.5 text-xs font-normal text-ink-muted">次</span></p>
+            <p class="mt-0.5 text-xs text-ink-muted">累计执行</p>
+            <p class="text-[11px] text-ink-muted/80">&nbsp;</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 即将执行（未来视角，仅本人任务，最多 5 条；带 x 小时/天后执行口径） -->
+      <section class="dash-card p-5 lg:col-span-3 v-reveal delay-3">
+        <h3 class="font-semibold text-ink mb-4">即将执行的任务</h3>
+        <ul class="space-y-2">
+          <li v-for="(n, i) in me.scheduler.nextRuns" :key="i" class="flex items-start gap-3 rounded-xl border border-ink/5 bg-ink/[0.02] px-3 py-2.5 text-sm">
+            <span class="inline-flex shrink-0 items-center rounded-full bg-brand/10 px-2.5 py-0.5 text-xs font-medium text-brand">{{ n.taskLabel }}</span>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <span class="min-w-0 flex-1 truncate font-medium text-ink">{{ n.account }}</span>
+                <span class="shrink-0 text-xs text-ink-muted tabular-nums">{{ n.time }}</span>
+                <span v-if="inText(n)" class="shrink-0 rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-medium text-brand">{{ inText(n) }}</span>
+              </div>
+              <p v-if="n.studentName" class="mt-0.5 truncate text-xs text-ink-muted">姓名 {{ n.studentName }}</p>
+            </div>
+          </li>
+          <li v-if="!me.scheduler.nextRuns.length" class="rounded-xl bg-cloud/60 px-3 py-4 text-center text-sm text-ink-muted">
+            暂无排队中的执行计划
+          </li>
+        </ul>
+        <p class="mt-3 text-xs text-ink-muted">
+          寝室签到按配置时间触发；活动签到按间隔轮询自动发现并提交（发现后随机延迟，防"秒签"暴露）。
+        </p>
+      </section>
+    </div>
+
+    <!-- 我的推送送达（近 7 天）：口径与管理员侧一致——送达率分母只含真实发出的推送，
+         未发送（没配凭证等）单列不计入分母，避免把「没配」误读成「通道坏了」 -->
+    <section class="dash-card p-5 v-reveal delay-3">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+        <div>
+          <h3 class="font-semibold text-ink">我的推送送达</h3>
+          <p class="mt-0.5 text-xs text-ink-muted">
+            近 {{ me.pushHealth.days }} 天 · 送达率只统计真实发出的推送，未发送单列、不计入分母
+          </p>
+        </div>
+        <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium" :class="PUSH_TONE[pushTone].cls">
+          <span class="h-1.5 w-1.5 rounded-full" :class="PUSH_TONE[pushTone].dot"></span>
+          {{ pushBadge }}
+        </span>
+      </div>
+
+      <p v-if="pushEmpty" class="rounded-xl bg-cloud/60 px-3 py-6 text-center text-sm text-ink-muted">
+        近 {{ me.pushHealth.days }} 天没有推送记录
+      </p>
+
+      <template v-else>
+        <div class="flex flex-wrap items-baseline gap-x-6 gap-y-2">
+          <div>
+            <span class="text-2xl font-bold tabular-nums text-ink">{{ me.pushHealth.summary.sent }}</span>
+            <span class="ml-1 text-xs text-ink-muted">次真实发送</span>
+          </div>
+          <div>
+            <span class="text-2xl font-bold tabular-nums" :class="rateTextCls(me.pushHealth.summary.rate)">
+              {{ me.pushHealth.summary.rate === null ? '—' : me.pushHealth.summary.rate }}<span
+                v-if="me.pushHealth.summary.rate !== null" class="text-base">%</span>
+            </span>
+            <span class="ml-1 text-xs text-ink-muted">送达率</span>
+          </div>
+          <div class="text-xs text-ink-muted">
+            成功 <span class="font-medium tabular-nums text-success">{{ me.pushHealth.summary.ok }}</span>
+            · 失败 <span class="font-medium tabular-nums text-danger">{{ me.pushHealth.summary.fail }}</span>
+            · 未发送 <span class="font-medium tabular-nums text-amber">{{ me.pushHealth.summary.skipped }}</span>
+          </div>
+        </div>
+
+        <div class="mt-5 grid gap-6 lg:grid-cols-2">
+          <!-- 左：按通道 -->
+          <div class="min-w-0">
+            <div class="mb-2 flex items-center justify-between gap-2">
+              <p class="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">按通道</p>
+              <span class="text-[11px] text-ink-muted">{{ me.pushHealth.summary.channels }} 个通道有发送</span>
+            </div>
+            <ul class="space-y-1.5">
+              <li v-for="c in me.pushHealth.byChannel" :key="'ch' + c.channel"
+                  class="flex items-center gap-2.5 rounded-lg bg-cloud/70 px-2.5 py-2 text-xs">
+                <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="channelDot(c.channel)"></span>
+                <span class="w-16 shrink-0 truncate font-medium text-ink">{{ channelLabel(c.channel) }}</span>
+                <span class="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-ink/10">
+                  <span class="block h-full rounded-full" :class="rateBarCls(c.rate)" :style="{ width: (c.rate || 0) + '%' }"></span>
+                </span>
+                <span class="w-9 shrink-0 text-right tabular-nums" :class="rateTextCls(c.rate)">
+                  {{ c.rate === null ? '—' : c.rate + '%' }}
+                </span>
+                <span class="w-24 shrink-0 text-right text-[11px] text-ink-muted tabular-nums">
+                  {{ c.sent }} 发<span v-if="c.fail"> · <span class="text-danger">{{ c.fail }} 失败</span></span><span v-if="c.skipped"> · {{ c.skipped }} 未发</span>
+                </span>
+              </li>
+              <li v-if="!me.pushHealth.byChannel.length" class="rounded-lg bg-cloud/60 px-2.5 py-2 text-xs text-ink-muted">
+                没有通道产生过发送
+              </li>
+            </ul>
+          </div>
+
+          <!-- 右：签到成功但通知未送达（本人视角的推送异常清单） -->
+          <div class="min-w-0">
+            <div class="mb-2 flex items-center justify-between gap-2">
+              <p class="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">签到成功但通知未送达</p>
+              <span v-if="me.pushHealth.signOkPushFail.total > me.pushHealth.signOkPushFail.list.length" class="text-[11px] text-ink-muted">
+                共 {{ me.pushHealth.signOkPushFail.total }} 条
+              </span>
+            </div>
+            <ul class="space-y-1.5">
+              <li v-for="x in me.pushHealth.signOkPushFail.list" :key="'pf' + x.time + x.channel"
+                  class="rounded-lg px-2.5 py-2 text-xs" :class="x.skipped ? 'bg-amber/[0.08]' : 'bg-danger/[0.06]'">
+                <div class="flex items-center gap-2">
+                  <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="x.skipped ? 'bg-amber' : 'bg-danger'"></span>
+                  <span class="min-w-0 flex-1 truncate font-medium text-ink">
+                    {{ x.account || '未知账号' }}
+                  </span>
+                  <span class="shrink-0 text-[11px] text-ink-muted tabular-nums">{{ x.time }}</span>
+                </div>
+                <p class="mt-1 truncate pl-3.5 text-[11px] text-ink-muted" :title="x.error">
+                  <span class="font-medium" :class="x.skipped ? 'text-amber' : 'text-danger'">{{ x.skipped ? '未发送' : '发送失败' }}</span>
+                  · {{ channelLabel(x.channel) }}<template v-if="x.error"> · {{ x.error }}</template>
+                </p>
+              </li>
+              <li v-if="!me.pushHealth.signOkPushFail.list.length" class="rounded-lg bg-success/10 px-2.5 py-2 text-xs text-success">
+                签到成功的通知全部送达
+              </li>
+            </ul>
+          </div>
+        </div>
+      </template>
+    </section>
+
+    <!-- 两卡保持默认 stretch 等高：曾用 lg:items-start 让它们各按自身高度落位，结果是
+         底边参差最多 204px。留白改由「谁的内容能长」来吸收——图表容器 flex-1、账号空态居中。 -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <!-- 任务完成情况 -->
       <section class="dash-card p-5 v-reveal delay-3 flex flex-col">
@@ -224,9 +406,10 @@ import StatCard from '@/components/StatCard.vue'
 import Icon from '@/components/Icon.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import BaseChart from '@/components/BaseChart.vue'
-import { useDashboardStore } from '@/stores/dashboard'
-import { useThemeStore, lineSeries, overlapZOrder, withAlpha } from '@/stores/theme'
-import { accountTypeMetaByCode, taskTypeMeta } from '@/utils/accountType'
+import { useDashboardStore } from '@/stores/dashboard'
+import { useThemeStore, lineSeries, overlapZOrder, withAlpha } from '@/stores/theme'
+import { accountTypeMetaByCode, taskTypeMeta } from '@/utils/accountType'
+import { channelDot, channelLabel } from '@/utils/pushChannels'
 
 const store = useDashboardStore()
 const themeStore = useThemeStore()
@@ -269,9 +452,50 @@ const successRate = computed(() => {
   return s + f > 0 ? Math.round((s / (s + f)) * 100) : 0
 })
 
-const filteredLogs = computed(() =>
-  (me.value.recentLogs || []).filter((r) => fType.value === 'all' || r.taskType === fType.value)
-)
+const filteredLogs = computed(() =>
+  (me.value.recentLogs || []).filter((r) => fType.value === 'all' || r.taskType === fType.value)
+)
+
+// ===== 我的调度状态（口径对齐管理员侧：running 为调度器服务级状态，任务数据仅限本人）=====
+// 时间轴：复用 recentLogs 前 4 条（过去视角），右卡队列负责未来，两卡分工不重复
+const timelineItems = computed(() => (me.value.recentLogs || []).slice(0, 4).map((r) => ({
+  ...r,
+  // recentLogs.time 是 "YYYY-MM-DD HH:MM"，时间轴收窄为 "MM-DD HH:MM"
+  timelineTime: (r.time || '').replace(/^\d{4}-/, ''),
+})))
+const timelineDot = (result) => ({ success: 'border-success', fail: 'border-danger', skip: 'border-amber' }[result] || 'border-ink/30')
+
+// 执行口径统一：<60min → "x 分钟后执行"；<24h → "x 小时后执行"；≥24h → "x 天后执行"
+const inText = (n) => {
+  const mins = n?.inMinutes
+  if (mins === null || mins === undefined) return ''
+  if (mins < 60) return `${Math.max(1, mins)} 分钟后执行`
+  if (mins < 1440) return `${Math.floor(mins / 60)} 小时后执行`
+  return `${Math.floor(mins / 1440)} 天后执行`
+}
+
+// ===== 我的推送送达（口径对齐管理员侧：分母只含真实发送，未发送单列）=====
+const PUSH_TONE = {
+  success: { cls: 'bg-success/10 text-success', dot: 'bg-success' },
+  amber: { cls: 'bg-amber/10 text-amber', dot: 'bg-amber' },
+  danger: { cls: 'bg-danger/10 text-danger', dot: 'bg-danger animate-pulse' },
+}
+const pushUndelivered = computed(() => (me.value.pushHealth?.summary?.fail || 0) + (me.value.pushHealth?.summary?.skipped || 0))
+const pushEmpty = computed(() => !(me.value.pushHealth?.summary?.sent || 0) && !(me.value.pushHealth?.summary?.skipped || 0))
+// 有真失败才算 danger；清一色「没发出去」是配置问题不是通道故障，用 amber 区分严重度
+const pushTone = computed(() => {
+  if ((me.value.pushHealth?.summary?.fail || 0) > 0) return 'danger'
+  if (pushUndelivered.value > 0) return 'amber'
+  return 'success'
+})
+const pushBadge = computed(() => {
+  const n = pushUndelivered.value
+  if (!n) return '全部送达'
+  return pushTone.value === 'danger' ? `${n} 条未送达` : `${n} 条未发送`
+})
+// 送达率分档：≥95 正常 / ≥80 留意 / 更低告警（无发送记录时不表态）
+const rateTextCls = (r) => (r === null ? 'text-ink-muted' : r >= 95 ? 'text-success' : r >= 80 ? 'text-amber' : 'text-danger')
+const rateBarCls = (r) => (r === null ? 'bg-ink/20' : r >= 95 ? 'bg-success' : r >= 80 ? 'bg-amber' : 'bg-danger')
 
 // ===== 账号卡片：默认只展示前 N 个，超出可展开（避免拉伸/显示不全）=====
 const ACCOUNT_LIMIT = 6

@@ -78,7 +78,8 @@ def create_user():
     if User.query.filter_by(username=data['username']).first():
         return error(message='用户名已存在', code=4004, status=409)
 
-    user = User(username=data['username'], role=data['role'], enabled=data['enabled'], quota=data['quota'])
+    user = User(username=data['username'], role=data['role'], enabled=data['enabled'],
+                quota=data['quota'], remark=data.get('remark', ''))
     user.set_password(data['password'])
     db.session.add(user)
     db.session.commit()

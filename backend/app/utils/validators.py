@@ -2,7 +2,7 @@
 # 避免用户名正则、角色白名单等规则散落在多个路由中、易漂移。
 import re
 
-USERNAME_RE = re.compile(r'^[A-Za-z0-9_.\-\u4e00-\u9fa5]+$')
+USERNAME_RE = re.compile(r'^[A-Za-z0-9_.\-]+$')
 USERNAME_MAX = 64
 VALID_ROLES = ('admin', 'user')
 
@@ -18,7 +18,7 @@ def validate_username(raw, *, required=True):
     if len(username) > USERNAME_MAX:
         return False, username, f'用户名过长（最多 {USERNAME_MAX} 字符）', 4001
     if not USERNAME_RE.match(username):
-        return False, username, '用户名仅支持字母、数字、下划线、连字符、点及中文', 4001
+        return False, username, '用户名仅支持字母、数字、下划线、连字符、点', 4001
     return True, username, '', 0
 
 

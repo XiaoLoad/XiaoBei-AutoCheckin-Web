@@ -159,7 +159,10 @@
                   <span class="grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-semibold ring-1 ring-inset ring-ink/5" :class="avatarClass(item.username)">
                     {{ initial(item.username) }}
                   </span>
-                  <span class="truncate font-medium text-ink" v-html="highlight(item.username)"></span>
+                  <div class="min-w-0">
+                    <span class="block truncate font-medium text-ink" v-html="highlight(item.username)"></span>
+                    <span v-if="item.remark" class="block truncate text-xs text-ink-muted" :title="item.remark">{{ item.remark }}</span>
+                  </div>
                 </div>
               </td>
               <!-- 角色 -->
@@ -248,7 +251,10 @@
               <span class="grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-semibold ring-1 ring-inset ring-ink/5" :class="avatarClass(item.username)">
                 {{ initial(item.username) }}
               </span>
-              <span class="min-w-0 flex-1 truncate font-medium text-ink" v-html="highlight(item.username)"></span>
+              <div class="min-w-0 flex-1">
+                <span class="block truncate font-medium text-ink" v-html="highlight(item.username)"></span>
+                <span v-if="item.remark" class="block truncate text-xs text-ink-muted" :title="item.remark">{{ item.remark }}</span>
+              </div>
               <span class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[13px] font-medium" :class="item.enabled ? 'text-success' : 'text-danger'">
                 <span class="h-1.5 w-1.5 rounded-full" :class="item.enabled ? 'bg-success' : 'bg-danger'" />
                 {{ item.enabled ? '启用' : '禁用' }}

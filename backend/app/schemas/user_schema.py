@@ -7,6 +7,16 @@ from app.utils.validators import (PASSWORD_MAX_BYTES, password_too_long,
 
 # 兜底下限：系统配置不可用时仍保证基本安全（正常取值来自设置页的 password_min_length）
 FALLBACK_PASSWORD_MIN = 6
+# 备注：可选，最长 128 字符，超出拒绝（与模型列宽一致）
+REMARK_MAX = 128
+
+
+def _validate_remark(raw):
+    """备注非空时做长度校验。返回 (value, message, code)。"""
+    remark = str(raw or '').strip()
+    if len(remark) > REMARK_MAX:
+        return None, f'备注过长（最多 {REMARK_MAX} 字符）', 4001
+    return remark, '', 0
 
 
 def _password_min():
@@ -35,12 +45,16 @@ def load_create(payload):
     enabled = bool(payload.get('enabled', True))
     # 未显式指定额度时取系统设置的默认额度（设置页可调）
     quota = _parse_quota(payload.get('quota', get_setting('default_quota')))
+    remark, msg, code = _validate_remark(payload.get('remark'))
+    if msg:
+        return False, None, msg, code
     return True, {
         'username': username,
         'password': password,
         'role': role,
         'enabled': enabled,
         'quota': quota,
+        'remark': remark,
     }, '', 0
 
 
@@ -73,6 +87,11 @@ def load_update(payload):
         if err:
             return False, None, err, 4005
         data['quota'] = quota
+    if payload.get('remark') is not None:
+        remark, msg, code = _validate_remark(payload.get('remark'))
+        if msg:
+            return False, None, msg, code
+        data['remark'] = remark
     return True, data, '', 0
 
 

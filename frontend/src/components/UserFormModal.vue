@@ -15,12 +15,29 @@
           v-model.trim="form.username"
           type="text"
           maxlength="64"
-          placeholder="字母、数字、下划线、连字符、点及中文"
+          placeholder="仅字母、数字、下划线、连字符、点"
           class="login-input"
           :class="errors.username && 'border-danger focus:border-danger focus:ring-danger/10'"
           @input="onUsernameInput"
         />
         <p v-if="errors.username" class="mt-1 text-xs text-danger">{{ errors.username }}</p>
+      </div>
+
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-ink-soft">
+          备注
+          <span class="font-normal text-ink-muted">（可选，如真实姓名、寝室号）</span>
+        </label>
+        <input
+          v-model.trim="form.remark"
+          type="text"
+          maxlength="128"
+          placeholder="便于区分用户，可留空"
+          class="login-input"
+          :class="errors.remark && 'border-danger focus:border-danger focus:ring-danger/10'"
+          @input="errors.remark = ''"
+        />
+        <p v-if="errors.remark" class="mt-1 text-xs text-danger">{{ errors.remark }}</p>
       </div>
 
       <div>
@@ -122,13 +139,13 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'submit', 'cancel'])
 
-const form = reactive({ username: '', password: '', role: 'user', enabled: true, quota: 100 })
-const errors = reactive({ username: '', password: '', quota: '' })
+const form = reactive({ username: '', remark: '', password: '', role: 'user', enabled: true, quota: 100 })
+const errors = reactive({ username: '', remark: '', password: '', quota: '' })
 
 // 账号/密码特殊字符规则：
-// 用户名仅允许 字母/数字/下划线/连字符/点/中文；密码禁止控制字符与 HTML/SQL 危险元字符，
+// 用户名仅允许 字母/数字/下划线/连字符/点；密码禁止控制字符与 HTML/SQL 危险元字符，
 // 其余可见字符放行以保证口令强度。输入即过滤（限制非法字符），提交再校验提示。
-const USERNAME_RE = /^[A-Za-z0-9_.\-\u4e00-\u9fa5]+$/
+const USERNAME_RE = /^[A-Za-z0-9_.\-]+$/
 function sanitizeUsername(v) {
   return (v || '').split('').filter((ch) => USERNAME_RE.test(ch)).join('')
 }
@@ -157,16 +174,19 @@ function onPasswordInput() {
 
 function resetForm() {
   errors.username = ''
+  errors.remark = ''
   errors.password = ''
   errors.quota = ''
   if (props.mode === 'edit' && props.user) {
     form.username = props.user.username || ''
+    form.remark = props.user.remark || ''
     form.password = ''
     form.role = props.user.role || 'user'
     form.enabled = !!props.user.enabled
     form.quota = props.user.quota ?? 100
   } else {
     form.username = ''
+    form.remark = ''
     form.password = ''
     form.role = 'user'
     form.enabled = true
@@ -185,6 +205,7 @@ watch(
 
 function validate() {
   errors.username = ''
+  errors.remark = ''
   errors.password = ''
   errors.quota = ''
   let ok = true
@@ -195,7 +216,11 @@ function validate() {
     errors.username = '用户名不能为空'
     ok = false
   } else if (!USERNAME_RE.test(form.username)) {
-    errors.username = '用户名仅支持字母、数字、下划线、连字符、点及中文'
+    errors.username = '用户名仅支持字母、数字、下划线、连字符、点'
+    ok = false
+  }
+  if ((form.remark || '').length > 128) {
+    errors.remark = '备注最长 128 字符'
     ok = false
   }
   if (props.mode === 'add' && (!form.password || form.password.length < 6)) {
@@ -217,6 +242,7 @@ function onSubmit() {
   if (!validate()) return
   const payload = {
     username: form.username,
+    remark: form.remark || '',
     role: form.role,
     enabled: form.enabled,
     quota: Number(form.quota)

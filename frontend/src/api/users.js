@@ -8,12 +8,12 @@ export function getUsers(params) {
   return request({ url: '/users', method: 'get', params })
 }
 
-// 新增用户：{ username, password, role, enabled, quota }
+// 新增用户：{ username, password, role, enabled, quota, remark? }
 export function createUser(data) {
   return request({ url: '/users', method: 'post', data })
 }
 
-// 编辑用户：{ username?, password?, role?, enabled?, quota? }
+// 编辑用户：{ username?, password?, role?, enabled?, quota?, remark? }
 export function updateUser(id, data) {
   return request({ url: `/users/${id}`, method: 'put', data })
 }

@@ -32,6 +32,8 @@ class User(db.Model):
     # 密码版本号：每次密码变更（本人改密/管理员重置）自增。JWT 携带签发时的
     # pwd_ver，鉴权时与库值比对——不等即吊销，使改密后所有存量 token 立即失效。
     pwd_ver = db.Column(db.Integer, nullable=False, default=1, server_default='1')
+    # 备注：管理员创建/编辑用户时填写，便于标识用户身份（如真实姓名、寝室号）
+    remark = db.Column(db.String(128), nullable=False, default='', server_default='')
     created_at = db.Column(db.DateTime, default=now_cst)
     last_login = db.Column(db.DateTime)
 
@@ -58,6 +60,7 @@ class User(db.Model):
         return {
             'user_id': self.id,
             'username': self.username,
+            'remark': self.remark or '',
             'role': self.role,
             'enabled': self.enabled,
             'quota': self.quota,

@@ -35,6 +35,7 @@
  * @typedef {Object} UserListItem
  * @property {number} user_id
  * @property {string} username
+ * @property {string} remark        备注（管理员填写，可为空串）
  * @property {('admin'|'user')} role
  * @property {boolean} enabled
  * @property {number} quota          额度上限

@@ -249,6 +249,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     // 读深层字段时渲染崩溃（与配置套 mapSetIn 同款防护）。快照同步垫平，isDirty 比对一致。
     if (src) {
       src = { ...api.makeConfig(), ...src }
+      api.ensureTimeConfig(src.time)
       api.ensureActivityConfig(src.activity)
       api.ensureImageConfig(src.image)
     }

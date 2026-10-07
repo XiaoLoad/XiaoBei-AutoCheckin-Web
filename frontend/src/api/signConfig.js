@@ -15,7 +15,10 @@ export function makeConfig() {
       endHour: 22, // 每日签到结束小时
       weekdays: [1, 2, 3, 4, 5, 6, 7], // 触发星期（1=周一 … 7=周日）多选
       randomDelayMax: 5, // 随机延时上限（分钟）
-      mode: 'normal' // 签到模式：normal 普通 / holiday 节假日（运行时按年拉取第三方节假日接口）
+      mode: 'normal', // 签到模式：normal 普通 / holiday 节假日（法定假期段跳过，双休不算）
+      holiday: {
+        lastDaySign: false // 节假日模式专属：假期末日照常签到（学校查寝场景），默认关闭
+      }
     },
     locationId: null, // 引用型：所选位置 pool id（位置实体在位置池）
     fence: {
@@ -78,6 +81,17 @@ export function ensureActivityConfig(activity) {
   return activity
 }
 
+// time 块骨架兜底：holiday 子块是节假日模式后加的键，历史配置套与任务快照里都没有；
+// 缺键会让 TimeSection 的末日开关 v-model 读 config.time.holiday.lastDaySign 时渲染崩溃。
+// 与 ensureActivityConfig 同理就地补齐，返回同一引用（保持响应式）。
+export function ensureTimeConfig(time) {
+  if (!time || typeof time !== 'object') return time
+  const full = makeConfig().time
+  const holiday = time.holiday && typeof time.holiday === 'object' ? time.holiday : {}
+  time.holiday = { ...full.holiday, ...holiday }
+  return time
+}
+
 // image 块骨架兜底：mode/groupKind 是后加的键，历史配置套与任务快照里都没有；
 // 缺键会让取图方式下拉显示空白、并让 configsEqual 把历史快照误判为「已偏离配置套」。
 // 与 ensureActivityConfig 同理就地补齐，返回同一引用（保持响应式）。
@@ -119,6 +133,7 @@ export async function fetchConfigMeta() {
 // 寝室套编辑器不含活动调度卡片；绑定/批量应用按类型一一对应
 const mapSetIn = (s) => {
   const config = { ...makeConfig(), ...(s.config || {}) }
+  ensureTimeConfig(config.time)
   ensureActivityConfig(config.activity)
   ensureImageConfig(config.image)
   return {

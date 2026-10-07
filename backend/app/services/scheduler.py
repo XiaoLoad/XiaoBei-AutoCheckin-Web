@@ -28,6 +28,7 @@ from app.models.pools import ImageGroup, PoolCredential, PoolLocation, PoolUa
 from app.models.system_config import get_setting
 from app.models.user import now_cst
 from app.services import geo
+from app.services.holiday import holiday_skip_reason
 from app.services.b_platform import get_adapter
 from app.services.b_platform.base import BPlatformError
 from app.services.b_platform.real import generate_image_filename
@@ -535,6 +536,15 @@ def _poll_activity_windows():
             w.done = True
             db.session.commit()
             continue
+        # 节假日模式：course 轮询同样受配置 time.mode 约束——法定假期不开窗
+        # 轮询（skip 落库一次，窗口完结，避免整天重复落 skip 刷屏）
+        act_holiday = _resolve(s)
+        holiday_reason = holiday_skip_reason(act_holiday) if act_holiday is not None else None
+        if holiday_reason:
+            w.done = True
+            rec = _commit_result(s, acc, 'skip', holiday_reason, resolved=act_holiday)
+            _push_outcome(s, acc, act_holiday, 'skip', holiday_reason, rec)
+            continue
         last = w.last_polled_at or w.start_at
         if (now - last).total_seconds() < act['poll']:
             continue
@@ -976,6 +986,17 @@ def _execute(schedule, allow_retry=True, course_name=None):
     if acc is None or not acc.enabled:
         log.info('任务 %s 跳过：账号不存在或已禁用', schedule.id)
         return  # 禁用态不写记录，避免刷屏
+
+    # 节假日模式前置判定（先行于凭据校验，避免假期里还去平台登录产生拟真破绽）：
+    # 配置缺失时随下方 _resolve 的既有分支照常 skip，不在此重复处理
+    resolved_holiday = _resolve(schedule)
+    if resolved_holiday is not None:
+        skip_reason = holiday_skip_reason(resolved_holiday)
+        if skip_reason:
+            rec = _commit_result(schedule, acc, 'skip', skip_reason,
+                                 resolved=resolved_holiday, course_name=course_name)
+            _push_outcome(schedule, acc, resolved_holiday, 'skip', skip_reason, rec)
+            return
 
     outcome = None
     reason = ''

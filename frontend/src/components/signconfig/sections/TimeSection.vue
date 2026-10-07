@@ -77,8 +77,12 @@
           </button>
         </div>
         <p v-if="config.time.mode === 'holiday'" class="mt-2 rounded-lg bg-info/10 px-3 py-2 text-xs text-info">
-          节假日模式：法定节假日跳过、工作日执行。运行时按年调用第三方节假日接口（如 api.apisbo.com/holidays）自动适配校历，无需管理员维护。
+          节假日模式：触发星期、签到时刻等设置照常生效，执行时遇到法定节假日（元旦/春节/清明/劳动/端午/中秋/国庆）自动跳过并记录。双休日不算节假日、照常执行；调休补班日照常执行。
         </p>
+        <div v-if="config.time.mode === 'holiday'" class="mt-2">
+          <BaseCheckbox v-model="config.time.holiday.lastDaySign" label="假期末日照常签到" />
+          <p class="mt-1 text-xs text-ink-muted">学校常在法定假期最后一天查寝签到，开启后假期末日在触发星期内则照常执行；默认关闭（末日也跳过）。</p>
+        </div>
       </div>
     </div>
   </ConfigSection>
@@ -88,6 +92,7 @@
 import { computed } from 'vue'
 import ConfigSection from '@/components/signconfig/ConfigSection.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
+import BaseCheckbox from '@/components/BaseCheckbox.vue'
 
 const props = defineProps({
   config: { type: Object, required: true },

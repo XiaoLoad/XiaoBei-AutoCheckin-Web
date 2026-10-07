@@ -14,6 +14,8 @@ requests==2.32.3
 Pillow==11.3.0
 # 定时任务调度主链路（模块 D：cron 注册 + 执行 + 对账兜底）
 APScheduler==3.11.3
+# 节假日模式判定（法定假期段数据，双休/调休补班不算假）
+chinesecalendar==1.11.0
 # 数据库结构迁移（表结构以 migrations/ 链为唯一事实源）
 Flask-Migrate==4.1.0
 alembic==1.19.1

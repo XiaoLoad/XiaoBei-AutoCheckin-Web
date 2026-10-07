@@ -370,7 +370,10 @@
 
              实测 368 宽下 260px 画布 = 198px 圆环、118px 画布只有 90px，低于下限圆环会缩水。 -->
 
-        <BaseChart class="flex-1 min-h-[260px]" :option="taskOption" />
+        <!-- contain:size 掐掉画布内在高对本行 auto 轨道尺寸的贡献：ECharts 画布是行内替换元素、
+             宽高被写成像素，若参与轨道计算会把本行高度钉在「上次画布大小」上，形成不动点——
+             同排账号卡展开一次后，收起时整行也收不回去。掐掉后本行高度只由卡片自身内容决定。 -->
+        <BaseChart class="flex-1 min-h-[260px]" :style="{ contain: 'size' }" :option="taskOption" />
 
         <p v-if="!loading && taskSummaryTotal === 0" class="mt-2 text-center text-xs text-ink-muted">近 30 天暂无执行记录</p>
 
@@ -422,7 +425,7 @@
 
                只在桌面生效，移动端沿用文档流自然滚动（同 5bf19f1） -->
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:max-h-[426px] lg:overflow-y-auto lg:pr-1">
+          <div ref="accountsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:max-h-[426px] lg:overflow-y-auto lg:pr-1">
 
             <div v-for="a in visibleAccounts" :key="a.id"
 
@@ -466,7 +469,7 @@
 
           </div>
 
-          <button v-if="me.accounts.items.length > ACCOUNT_LIMIT" @click="accountsExpanded = !accountsExpanded"
+          <button v-if="me.accounts.items.length > ACCOUNT_LIMIT" @click="toggleAccounts"
 
                   class="mt-3 mx-auto flex items-center gap-1 text-sm font-medium text-brand hover:underline">
 
@@ -616,11 +619,13 @@
 
 <script setup>
 
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 
 import { RouterLink } from 'vue-router'
 
 import { storeToRefs } from 'pinia'
+
+import { gsap } from 'gsap'
 
 import StatCard from '@/components/StatCard.vue'
 
@@ -779,6 +784,53 @@ const visibleAccounts = computed(() => {
   return accountsExpanded.value ? items : items.slice(0, ACCOUNT_LIMIT)
 
 })
+
+// 展开 / 收起：按「当前高度 → 换条数后的自然高」补间，卡片高度平滑增长或回落。
+// 高度不能交给 CSS 过渡（终值是 auto/受 max-h 约束的自然高，无法用 CSS 表达），故用 GSAP 补间像素值，
+// 到位后 clearProps 交还 lg:max-h 与内容自身的高度，后续自适应（改窗口宽度、账号增减）不受内联值干扰。
+const accountsGrid = ref(null)
+
+let accountsTween = null
+
+const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+async function toggleAccounts() {
+
+  const el = accountsGrid.value
+
+  const from = el ? el.getBoundingClientRect().height : 0
+
+  accountsExpanded.value = !accountsExpanded.value
+
+  await nextTick()
+
+  if (!el) return
+
+  const to = el.getBoundingClientRect().height
+
+  if (accountsTween) { accountsTween.kill(); accountsTween = null }
+
+  if (prefersReduced || from === to) return
+
+  accountsTween = gsap.fromTo(el, { height: from }, {
+
+    height: to,
+
+    duration: 0.32,
+
+    ease: 'power2.out',
+
+    onComplete: () => {
+
+      gsap.set(el, { clearProps: 'height' })
+
+      accountsTween = null
+
+    }
+
+  })
+
+}
 
 // 头像首字：优先姓名，缺失回退登录账号
 

@@ -6,7 +6,7 @@
 
 前后端分离的自动签到管理平台：后端 Flask 编排小北学生平台签到链路与课表驱动调度，前端 Vue 3 提供管理员 / 普通用户双视角控制台。
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)](backend/requirements.txt)
 [![Flask](https://img.shields.io/badge/Flask-3.0-000000?logo=flask&logoColor=white)](backend/requirements.txt)
 [![Vue](https://img.shields.io/badge/Vue-3.5-4FC08D?logo=vuedotjs&logoColor=white)](frontend/package.json)
@@ -153,7 +153,7 @@ docker compose logs backend | grep 首次启动引导    # 取 admin 初始密�
 日常更新与回滚：
 
 ```bash
-git fetch --tags && git checkout v1.0.2   # 建议按 tag 更新，不用 main
+git fetch --tags && git checkout v1.1.0   # 建议按 tag 更新，不用 main
 docker compose up -d --build              # 更新前建议先 mysqldump 备份
 ```
 

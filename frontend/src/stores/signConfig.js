@@ -1037,6 +1037,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
   return {
     loading,
     refreshing,
+    loaded,
     saving,
     formErrors,
     accounts,

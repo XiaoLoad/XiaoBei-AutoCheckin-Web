@@ -244,11 +244,15 @@ function staggerIn() {
 }
 
 onMounted(async () => {
-  await store.load()
-  // 配置套元信息（关联配置名/位置/时段）供卡片与抽屉预览使用；未加载则按需拉取一次
-  if (!signConfigStore.accounts.length && !signConfigStore.loading) {
-    await signConfigStore.load()
-  }
+  // 配置套元信息（关联配置名/位置/时段）供卡片与抽屉预览使用；未加载则按需拉取一次。
+  // 判据必须是 loaded（真正加载过）而非 loading：loading 初值为 true，
+  // 直接落在本页刷新时该 store 从未加载，用 !loading 判断会永不拉取，
+  // 绑定与配置套读不到 → 卡片配置来源恒显示「自定义」、抽屉报「未配置配置套」。
+  // 与任务列表并行拉取，避免卡片先渲染出错误值再跳变。
+  await Promise.all([
+    store.load(),
+    signConfigStore.loaded ? Promise.resolve() : signConfigStore.load()
+  ])
   await nextTick()
   staggerIn()
 })

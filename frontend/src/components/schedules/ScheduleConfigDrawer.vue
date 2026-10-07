@@ -207,7 +207,9 @@ const bindHint = computed(() => {
 
 // 打开抽屉即把 signConfigStore 指向该任务，复用其编辑副本与关联逻辑（单一真相源，与签到配置页同步）
 onMounted(async () => {
-  if (!signConfigStore.userConfigSets.length && !signConfigStore.loading) {
+  // 判据用 loaded（真正加载过）而非 loading：loading 初值为 true，
+  // 直接落在定时任务页刷新时该 store 从未加载，用 !loading 判断会永不拉取
+  if (!signConfigStore.loaded) {
     syncing.value = true
     try {
       await refreshBus.run(() => signConfigStore.load())

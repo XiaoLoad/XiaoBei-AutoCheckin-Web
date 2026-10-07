@@ -6,14 +6,14 @@
 
 前后端分离的自动签到管理平台：后端 Flask 编排小北学生平台签到链路与课表驱动调度，前端 Vue 3 提供管理员 / 普通用户双视角控制台。
 
-[![Version](https://img.shields.io/badge/version-1.1.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.1.1-blue)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)](backend/requirements.txt)
 [![Flask](https://img.shields.io/badge/Flask-3.0-000000?logo=flask&logoColor=white)](backend/requirements.txt)
 [![Vue](https://img.shields.io/badge/Vue-3.5-4FC08D?logo=vuedotjs&logoColor=white)](frontend/package.json)
-[![Tests](https://img.shields.io/badge/tests-399%20passed-brightgreen)](backend/tests)
+[![Tests](https://img.shields.io/badge/tests-436%20passed-brightgreen)](backend/tests)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-[功能特性](#功能特性) · [快速开始](#快速开始) · [配置](#配置) · [生产部署](#生产部署) · [使用指南](#使用指南) · [常见问题](#常见问题)
+[功能特性](#功能特性) · [界面预览](#界面预览) · [快速开始](#快速开始) · [配置](#配置) · [生产部署](#生产部署) · [使用指南](#使用指南) · [常见问题](#常见问题)
 
 </div>
 
@@ -29,6 +29,60 @@
 * **多通道推送** —— 邮件 / Server 酱 / PushPlus / QQ 群摘要；凭证可按配置套共享或按账号自带，落库推送结果。
 * **调度可靠性** —— 连接池对齐并发、网络重试与窗口内补跑、启动漏跑对账；单实例部署约束。
 * **多主题与响应式** —— 六套主题色 + GSAP 色彩补间；桌面端应用框式布局，移动端文档流自然滚动。
+
+## 界面预览
+
+截图取自本地实例，界面中的账号、姓名、学号与位置信息已作打码处理。全部页面共用同一套侧边栏，菜单按登录角色分发：普通用户为「概览 / 账号管理 / 签到记录 / 签到配置 / 定时任务 / 任务日志 / 分组」，管理员在此基础上多出「用户管理 / 全站签到记录 / 用户日志 / 平台资源池 / 运行日志 / 系统设置」。
+
+### 登录
+
+**登录** —— 账号密码登录，含注册入口、记住密码与产品说明区。
+
+![登录页面](assets/screenshots/login.png)
+
+### 普通用户视角
+
+**概览** —— 额度占用、我的账号、运行中定时任务、今日打卡四个指标卡，下接签到趋势与打卡类型分布。
+
+![普通用户仪表盘页面](assets/screenshots/user-dashboard.png)
+
+**账号管理** —— 关键词与类型 / 状态筛选、批量分组；账号卡片展示学号、院系班级、寝室分组、签到类型、上次签到与推送凭证。
+
+![普通用户账号管理页面](assets/screenshots/user-accounts.png)
+
+**签到配置** —— 左侧配置套列表，右侧编辑区含批量应用 / 清空填写 / 保存；时间配置（每日时段、定时时刻、随机延时）与位置配置（位置池、围栏拦截）。
+
+![普通用户签到配置页面](assets/screenshots/user-sign-config.png)
+
+**签到记录** —— 进行中任务与四项统计，列表 / 日历双视图，记录带签到类型、需拍照标签与签到状态。
+
+![普通用户签到记录页面](assets/screenshots/user-sign-records.png)
+
+**定时任务** —— 运行中 / 任务总数 / 类型计数，任务卡含开关、下一次执行时间（含随机延时）、上次跳过原因与配置入口。
+
+![普通用户定时任务页面](assets/screenshots/user-schedules.png)
+
+**任务日志** —— 总执行 / 成功 / 失败 / 跳过四项统计，日志含触发方式、配置套快照、各推送通道结果与提交参数。
+
+![普通用户任务日志页面](assets/screenshots/user-task-logs.png)
+
+**分组** —— 分组列表与成员数、去绑定 QQ 群、取图与推送、图库归属的逐级解析。
+
+![普通用户分组页面](assets/screenshots/user-groups.png)
+
+### 管理员视角
+
+**用户日志** —— 今日登录 / 登录失败 / 额度变更 / 进行中会话四项统计，异常登录告警、动作流水与会话视图、导出 CSV。
+
+![管理员日志页面](assets/screenshots/admin-user-logs.png)
+
+**平台资源池** —— 位置池与 UA 模板分区管理；UA 模板表格含机型名称与 User-Agent，支持编辑、派生变体扩池与删除。
+
+![管理员资源池页面](assets/screenshots/admin-resource-pool.png)
+
+**系统设置** —— 目录式设置：账户与密码、主题色与明暗、运行状态、注册与额度、账号安全、数据治理、地图服务。
+
+![管理员系统设置页面](assets/screenshots/admin-system-settings.png)
 
 ## 技术栈
 
@@ -153,7 +207,7 @@ docker compose logs backend | grep 首次启动引导    # 取 admin 初始密�
 日常更新与回滚：
 
 ```bash
-git fetch --tags && git checkout v1.1.0   # 建议按 tag 更新，不用 main
+git fetch --tags && git checkout "$(git describe --tags --abbrev=0)"   # 自动切到最新 tag，不用 main
 docker compose up -d --build              # 更新前建议先 mysqldump 备份
 ```
 
@@ -268,7 +322,7 @@ cd backend
 .venv/Scripts/python -m pytest -q        # Windows；Linux/macOS: python -m pytest -q
 ```
 
-当前 399 条用例全部通过，覆盖签到链路、调度、教务解析、推送、权限与安全守护等模块。
+当前 436 条用例全部通过，覆盖签到链路、调度、教务解析、推送、权限与安全守护等模块。
 
 ## 常见问题
 

@@ -977,6 +977,17 @@ export const useSignConfigStore = defineStore('signConfig', () => {
       saving.value = false
     }
   }
+  // 批量派生 UA 变体（管理员）：返回 { added, skipped } 供提示
+  async function deriveUaVariants(id, count) {
+    saving.value = true
+    try {
+      const res = await api.deriveUaVariants(id, count)
+      uaTemplates.value = res.templates
+      return { added: res.added, skipped: res.skipped }
+    } finally {
+      saving.value = false
+    }
+  }
 
   // ── UI 切换 ──
   function setActiveTab(tab) {
@@ -1098,6 +1109,7 @@ export const useSignConfigStore = defineStore('signConfig', () => {
     saveUaTemplate,
     deleteUaTemplate,
     deleteUaTemplates,
+    deriveUaVariants,
     setActiveTab,
     setResourceSubTab,
     gotoResource,

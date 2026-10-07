@@ -43,8 +43,8 @@ export function makeConfig() {
       template: 'html' // 推送模板：html（默认，优雅卡片）/ txt（纯文本）/ markdown
     },
     advanced: {
-      uaTemplateId: null, // 引用型：所选 UA 模板 id（系统级资源池）
-      customUa: '' // 自定义 UA（自由文本）
+      uaPoolEnabled: false, // true=机型池分配（按账号确定性散开）；false=自定义 UA 全员统一
+      customUa: '' // 自定义 UA（自由文本），uaPoolEnabled=false 且非空时使用
     },
     activity: {
       // 活动签到专属（寝室签到任务不消费此块）：fixed=沿用上方时间配置每天一次查询；
@@ -178,7 +178,8 @@ export async function fetchPools() {
     imageGroups: (p.imageGroups || []).map((g) => ({ ...g })),
     credentials: (p.credentials || []).map((c) => ({ ...c, type: c.channel })),
     uaTemplates: (p.uas || []).map((u) => ({
-      id: String(u.id), name: u.remark || '', ua: u.content, isSystem: !!u.isSystem
+      id: String(u.id), name: u.remark || '', ua: u.content, isSystem: !!u.isSystem,
+      enabled: u.enabled !== false
     }))
   }
   return pools
@@ -254,6 +255,12 @@ export async function deleteUaTemplate(id) {
 export async function deleteUaTemplates(ids) {
   await request({ url: '/pools/uas/bulk-delete', method: 'post', data: { ids } })
   return (await refreshPools()).uaTemplates
+}
+// 批量派生 UA 变体（管理员）：从一条模板生成同机型不同系统/WebView 版本的变体
+export async function deriveUaVariants(id, count) {
+  const data = await request({ url: `/pools/uas/${id}/derive`, method: 'post', data: { count } })
+  const templates = (await refreshPools()).uaTemplates
+  return { templates, added: data.added?.length || 0, skipped: data.skipped || 0 }
 }
 
 // 我的凭证（密文占位 •••• 原样回传，后端视为未修改保持旧值）

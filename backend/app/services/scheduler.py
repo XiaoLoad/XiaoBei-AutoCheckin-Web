@@ -156,13 +156,22 @@ def build_config_view(schedule, resolved, uid, acc=None):
 
     adv_cfg = cfg.get('advanced') or {}
     ua_name = ''
-    ua_id = _snap_to_int(adv_cfg.get('uaTemplateId'))
-    if ua_id:
-        ua = db.session.get(PoolUa, ua_id)
-        if ua is not None:
-            ua_name = (ua.remark or '').strip() or (ua.content or '').strip()[:24]
+    ua_mode = 'pool' if adv_cfg.get('uaPoolEnabled') else 'custom'
+    if ua_mode == 'pool':
+        # 机型池分配模式：快照记录「本账号实际命中的模板」，与 _resolve_ua 同一散列口径；
+        # acc 缺席（配置页预览）时展示池规模概要
+        pool = (PoolUa.query.filter_by(user_id=uid, enabled=True)
+                .order_by(PoolUa.id.asc()).all())
+        if pool and acc is not None and getattr(acc, 'id', None) is not None:
+            actual = pool[acc.id % len(pool)]
+            ua_name = (actual.remark or '').strip() or (actual.content or '').strip()[:24]
+        elif pool:
+            ua_name = f'机型池分配（{len(pool)} 台）'
+    else:
+        custom = (adv_cfg.get('customUa') or '').strip()
+        ua_name = '自定义 UA' if custom else ''
     advanced_view = {
-        'uaTemplateId': ua_id,
+        'uaMode': ua_mode,
         'uaTemplateName': ua_name,
         'customUa': adv_cfg.get('customUa') or '',
     }
@@ -535,7 +544,7 @@ def _poll_activity_windows():
             'token': acc.get_token(),
             'account': acc.account,
             'profile': acc.profile,
-            'ua': _resolve_ua(resolved),
+            'ua': _resolve_ua(resolved, acc.id, s.user_id),
         }
         try:
             ctx = adapter.find_active_task(session, 'activity') or {}
@@ -703,21 +712,28 @@ def _resolve(schedule):
     return resolve_config(schedule)
 
 
-def _resolve_ua(resolved):
-    """UA 解析：advanced.customUa 非空优先，其次 uaTemplateId → UA 模板池内容，否则 None（适配器默认 UA）"""
+def _resolve_ua(resolved, account_id=None, user_id=None):
+    """UA 解析（开关式两种模式）：
+
+    - advanced.uaPoolEnabled 真值 = 机型池分配：取该用户启用中的全部模板按 account_id
+      取模确定性选一，同账号恒定同一条 UA（设备身份不漂移），同配置套的多账号自然
+      散开到不同机型；池为空（无启用模板）回退 None（适配器默认 UA）。
+    - 否则走 customUa：非空即全员统一使用（显式覆盖），为空回退 None。
+    旧数据的 uaTemplateId（无 uaPoolEnabled）按关闭处理——历史配置语义为「固定模板」，
+    升级后不自动改变行为，用户在配置页打开开关即进入分配模式。"""
     adv = (resolved or {}).get('advanced') or {}
     custom = (adv.get('customUa') or '').strip()
     if custom:
         return custom
-    ua_id = adv.get('uaTemplateId')
-    if ua_id:
-        try:
-            ua = db.session.get(PoolUa, int(ua_id))
-            if ua is not None and (ua.content or '').strip():
-                return ua.content.strip()
-        except (TypeError, ValueError):
-            pass
-    return None
+    if not adv.get('uaPoolEnabled'):
+        return None
+    pool = (PoolUa.query.filter_by(user_id=user_id, enabled=True)
+            .order_by(PoolUa.id.asc()).all())
+    if not pool:
+        return None
+    if account_id is None:
+        return pool[0].content.strip()
+    return pool[account_id % len(pool)].content.strip()
 
 
 def _load_location(resolved):
@@ -965,6 +981,7 @@ def _execute(schedule, allow_retry=True, course_name=None):
     reason = ''
     extra = {}
     resolved = None
+    ua = None
     try:
         # 凭据解密单独前置校验：密钥轮换/数据损坏时 Fernet 抛 InvalidToken（str 为空，
         # 落进通用 Exception 分支只会得到一条「执行异常：」的无因失败）。此处就地给出
@@ -982,9 +999,18 @@ def _execute(schedule, allow_retry=True, course_name=None):
             _push_outcome(schedule, acc, resolved, 'fail', rec.fail_reason, rec)
             return
 
+        resolved = _resolve(schedule)
+        if resolved is None:
+            _commit_result(schedule, acc, 'skip', '配置缺失（配置套未绑定或已删除）',
+                           resolved=resolved, course_name=course_name)
+            return
+        # UA 先于登录解析：登录/读/提交全链路共用同一设备身份，避免
+        # 「签到用分配的机型 UA、登录却落回默认 UA」的拟真性裂缝
+        ua = _resolve_ua(resolved, acc.id, acc.user_id)
+
         if acc.verify_status != 'ok':
             try:
-                res = get_adapter().verify_and_fetch(acc.account, acc.get_password())
+                res = get_adapter().verify_and_fetch(acc.account, acc.get_password(), ua)
             except BPlatformError as e:
                 log.warning('任务 %s 账号校验失败：%s', schedule.id, e.message)
                 rec = _commit_result(schedule, acc, 'fail', f'账号校验失败：{e.message}',
@@ -998,11 +1024,6 @@ def _execute(schedule, allow_retry=True, course_name=None):
             acc.verified_at = now_cst()
             db.session.flush()
 
-        resolved = _resolve(schedule)
-        if resolved is None:
-            _commit_result(schedule, acc, 'skip', '配置缺失（配置套未绑定或已删除）',
-                           resolved=resolved, course_name=course_name)
-            return
         # 本次实际提交的单条备注：多条随机选一、单条即用该条、无则占位；
         # 模板占位符（{username}=B 平台账号姓名）在此一次性渲染，提交与推送共用同一结果，
         # 保证「提交什么就推送什么」。
@@ -1011,7 +1032,7 @@ def _execute(schedule, allow_retry=True, course_name=None):
             'token': acc.get_token(),
             'account': acc.account,
             'profile': acc.profile,
-            'ua': _resolve_ua(resolved),
+            'ua': ua,
         }
         try:
             outcome, reason, extra = _checkin_flow(schedule, acc, session, resolved, submitted_remark)
@@ -1020,7 +1041,7 @@ def _execute(schedule, allow_retry=True, course_name=None):
                 raise
             # 登录态失效：重登刷新后整体重试一次（图片认领已在流程内回滚，重试重新认领）
             log.info('任务 %s 提交遇登录态失效，重登后重试', schedule.id)
-            res = get_adapter().verify_and_fetch(acc.account, acc.get_password())
+            res = get_adapter().verify_and_fetch(acc.account, acc.get_password(), ua)
             acc.set_token(res.token)
             acc.set_profile(res.profile)
             acc.bp_uid = res.bp_uid

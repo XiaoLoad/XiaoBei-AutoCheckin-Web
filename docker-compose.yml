@@ -65,7 +65,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "80:80"                     # HTTPS：自行追加 443 与证书挂载（见 README）
+      - "127.0.0.1:8080:80"         # 仅绑回环：TLS 由宿主 nginx 443 终结后反代到 127.0.0.1:8080，外网无法直连
     environment:
       TZ: Asia/Shanghai
 

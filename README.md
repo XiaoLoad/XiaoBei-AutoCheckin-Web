@@ -148,7 +148,7 @@ docker compose logs backend | grep 首次启动引导    # 取 admin 初始密�
 - **健康检查与启动顺序**：MySQL 通过 healthcheck 后 backend 才启动（启动时自动执行数据库迁移）；
 - **时区**：三个容器均注入 `TZ=Asia/Shanghai`；
 - **`.env` 关键项**：`FLASK_ENV=production`、随机 `SECRET_KEY` / `JWT_SECRET_KEY`、连接串 host 写服务名 `mysql`、`CORS_ORIGINS` 为对外地址；
-- **HTTPS**：nginx 容器默认只监听 80，生产建议自行追加 443 监听与证书挂载，或在前置宿主机代理上终结 TLS。
+- **HTTPS**：nginx 容器端口仅绑定宿主机回环（`127.0.0.1:8080:80`），生产由宿主 nginx 监听 443 终结 TLS 后反代到 `127.0.0.1:8080`——证书签发与续期可用 acme.sh（支持 Let's Encrypt 纯 IP 证书，shortlived 档自动续期）或自有域名证书；外网无法直连 8080 明文入口。
 
 日常更新与回滚：
 

@@ -86,6 +86,7 @@
             </td>
             <td v-if="isAdmin" class="px-3 py-2 text-right">
               <button class="text-xs text-brand hover:underline" @click="openEdit(u)">编辑</button>
+              <button class="ml-3 text-xs text-brand hover:underline" @click="openDerive(u)">派生</button>
               <button class="ml-3 text-xs text-danger hover:underline" @click="del(u)">删除</button>
             </td>
           </tr>
@@ -143,6 +144,45 @@
         </button>
       </template>
     </BaseModal>
+
+    <!-- 批量派生模态框：同机型不同系统/WebView 版本，扩充机型池规模 -->
+    <BaseModal v-model="showDeriveModal" title="批量派生 UA 变体">
+      <div class="space-y-3">
+        <p class="text-xs leading-relaxed text-ink-muted">
+          以「{{ deriveTarget?.name || '' }}」为基准，生成同机型、不同
+          Android/iOS 系统版本与 WebView 版本的变体（机型型号保持不变）。
+          变体自动启用并加入机型池，用于机型池分配模式下扩充池规模、
+          让更多账号各得一台"设备"。生成确定性：同一模板重复派生结果一致，已存在的变体自动跳过。
+        </p>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-ink-soft">派生数量（1~12）</label>
+          <input
+            v-model.number="deriveCount"
+            type="number"
+            min="1"
+            max="12"
+            class="w-32 rounded-xl border border-ink/10 bg-elevated px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
+          />
+        </div>
+      </div>
+      <template #footer>
+        <button
+          type="button"
+          class="flex-1 rounded-xl border border-ink/10 px-4 py-2.5 text-sm font-medium text-ink-soft transition hover:bg-cloud"
+          @click="showDeriveModal = false"
+        >
+          取消
+        </button>
+        <button
+          type="button"
+          class="flex-1 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand/25 transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+          :disabled="saving || !(deriveCount >= 1 && deriveCount <= 12)"
+          @click="doDerive"
+        >
+          {{ saving ? '派生中…' : '开始派生' }}
+        </button>
+      </template>
+    </BaseModal>
   </div>
 </template>
 
@@ -153,6 +193,7 @@ import BasePagination from '@/components/BasePagination.vue'
 import BaseModal from '@/components/BaseModal.vue'
 import { useSignConfigStore } from '@/stores/signConfig'
 import { useAuthStore } from '@/stores/auth'
+import { toast } from '@/utils/toast'
 
 const store = useSignConfigStore()
 const auth = useAuthStore()
@@ -244,5 +285,27 @@ async function save() {
 }
 function del(u) {
   store.deleteUaTemplate(u.id)
+}
+
+// 批量派生：以选中模板为基准生成同机型变体
+const showDeriveModal = ref(false)
+const deriveTarget = ref(null)
+const deriveCount = ref(6)
+function openDerive(u) {
+  deriveTarget.value = u
+  deriveCount.value = 6
+  showDeriveModal.value = true
+}
+async function doDerive() {
+  if (!deriveTarget.value) return
+  saving.value = true
+  try {
+    const { added, skipped } = await store.deriveUaVariants(deriveTarget.value.id, deriveCount.value)
+    showDeriveModal.value = false
+    if (added) toast(`派生完成：新增 ${added} 条变体` + (skipped ? `，跳过重复 ${skipped} 条` : ''), 'success')
+    else toast('没有新增变体（全部与池内已有条目重复）', 'info')
+  } finally {
+    saving.value = false
+  }
 }
 </script>

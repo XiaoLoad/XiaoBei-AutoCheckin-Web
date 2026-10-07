@@ -241,6 +241,49 @@ def bulk_delete_uas():
     return success(message=f'已删除 {len(rows)} 条')
 
 
+@bp.route('/uas/<int:ua_id>/derive', methods=['POST'])
+@admin_required
+def derive_ua_variants(ua_id):
+    """从一条 UA 模板批量派生同机型变体（Android 换系统/Build/Chrome 版本，iOS 换系统版本）。
+
+    目的：机型池分配模式需要池规模 ≥ 账号数才接近「一人一机」；手录机型难以凑够，
+    而版本组合维度可枚举，派生是最省事的扩池手段。生成确定性（同模板结果恒定），
+    与池内已有条目 content 去重，变体自动启用；remark = 原机型名 + 版本序号。"""
+    ua = db.session.get(PoolUa, ua_id)
+    if not ua:
+        return error(message='UA 模板不存在', code=4040, status=404)
+    payload = request.get_json(silent=True) or {}
+    try:
+        count = max(1, min(int(payload.get('count') or 8), 12))
+    except (TypeError, ValueError):
+        count = 8
+
+    from app.services.ua_variants import derive_variants
+    variants = derive_variants(ua.content or '', count)
+    if not variants:
+        return error(message='未能识别该模板的 UA 形态（仅支持 Android/iOS uni-app 格式），无法派生',
+                     code=4312, status=400)
+
+    existing = {r.content for r in PoolUa.query.with_entities(PoolUa.content).all()}
+    base_name = (ua.remark or '').strip() or '未命名机型'
+    added, skipped = [], 0
+    for i, content in enumerate(variants, start=1):
+        if content in existing:
+            skipped += 1
+            continue
+        row = PoolUa(user_id=request.current_user.id, is_system=True,
+                     content=content, remark=f'{base_name} 变体{i}', enabled=True)
+        db.session.add(row)
+        existing.add(content)
+        added.append(row)
+    db.session.commit()
+    return success({
+        'added': [r.to_dict() for r in added],
+        'skipped': skipped,
+        'message': f'派生完成：新增 {len(added)} 条' + (f'，跳过重复 {skipped} 条' if skipped else ''),
+    }, message='派生完成')
+
+
 # ---------------- 推送凭证池（Fernet 加密落库 / 脱敏回显 / 占位更新） ----------------
 
 @bp.route('/credentials', methods=['POST'])

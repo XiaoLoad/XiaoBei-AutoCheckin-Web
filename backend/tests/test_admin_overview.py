@@ -103,10 +103,12 @@ def test_push_reason_classification():
 
 
 def _channel_row(by_channel, channel):
+    """通道行缺失时（干净库 before 无任何推送）返回零值行，口径与后端一致：
+    sent/ok/fail/skipped 为 0、rate 为 None（无数据而非 0%）。"""
     for row in by_channel:
         if row['channel'] == channel:
             return row
-    return None
+    return {'channel': channel, 'sent': 0, 'ok': 0, 'fail': 0, 'skipped': 0, 'rate': None}
 
 
 def _cnt(items, name):

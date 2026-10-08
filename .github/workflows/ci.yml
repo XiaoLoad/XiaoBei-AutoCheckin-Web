@@ -1,0 +1,80 @@
+# CI 守门：push main / PR 时跑版本一致性校验、后端全量测试、前端 lint + 构建。
+# 版本三方（VERSION / CHANGELOG 顶部条目 / README 徽标）必须在发版提交里同步修改，
+# 本工作流在漏改时直接红，拦在 merge / 发版之前。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  version-check:
+    name: 版本一致性校验
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: 校验 VERSION == CHANGELOG 顶部 == README 徽标
+        run: python scripts/check_version.py
+
+  backend-test:
+    name: 后端测试（pytest）
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: xiaobei_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      SQLALCHEMY_DATABASE_URI: mysql+pymysql://root:root@127.0.0.1:3306/xiaobei_test?charset=utf8mb4
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: 安装依赖（requirements + pytest）
+        run: pip install -r requirements.txt pytest
+      - name: 全量测试
+        run: pytest -q
+
+  frontend-check:
+    name: 前端 lint + 构建
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: ESLint
+        run: npm run lint
+      - name: 构建
+        run: npm run build

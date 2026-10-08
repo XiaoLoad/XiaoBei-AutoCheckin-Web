@@ -149,7 +149,12 @@ def test_push_health_splits_skips_from_success_rate(app, admin_headers):
     clear_agg_cache()  # 基线那次请求已把当时的投影写进缓存
 
     after = c.get('/api/admin/overview', headers=admin_headers).get_json()['data']['pushHealth']
-    delta = {k: after['summary'][k] - before['summary'][k] for k in before['summary']}
+    # rate 在无真实发送时语义为 None（「无数据」，与 by_channel 行口径一致），不做增量；
+    # 干净库基线（sent=0）下本用例新增 2 发 1 成，rate 应恰为 50
+    delta = {k: after['summary'][k] - before['summary'][k]
+             for k in before['summary'] if before['summary'][k] is not None}
+    if before['summary']['rate'] is None:
+        assert after['summary']['rate'] == 50
     assert delta['sent'] == 2      # 3 行里只有 2 行真发出去了
     assert delta['ok'] == 1
     assert delta['fail'] == 1      # 跳过不算失败

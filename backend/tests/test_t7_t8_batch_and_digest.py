@@ -12,7 +12,7 @@ import os
 os.environ['USE_STUB_BPLATFORM'] = '1'
 
 import uuid
-from datetime import date, timedelta
+from datetime import timedelta
 
 from app.extensions import db
 from app.models import (BAccount, PushGroup, PushGroupDigestLog, PushGroupDigestPending,
@@ -22,7 +22,9 @@ from app.services import group_digest as gd
 from app.services.crypto import encrypt
 from app.models.pools import PoolCredential
 
-D = date(2026, 10, 5)
+# 汇总日期取「昨天」：reconcile 会清理 date 早于前天的陈旧 pending（防堆积），
+# 硬编码日期会随时间推移撞进清理线——未到点的 pending 被对账顺手删掉，用例翻车。
+D = now_cst().date() - timedelta(days=1)
 
 
 # ───────────────────────── 工具 ─────────────────────────

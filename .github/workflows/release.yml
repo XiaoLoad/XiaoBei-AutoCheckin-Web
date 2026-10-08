@@ -1,0 +1,87 @@
+# 发版自动化：推送 v* tag 即触发。流程：校验版本四方一致（tag/VERSION/CHANGELOG/README）
+# → 后端全量测试 → 前端构建 → git archive 打包源码 → 从 CHANGELOG 顶部条目生成 Release
+# 说明 → 创建 Release 并上传 zip/tar.gz 附件。全部用内置 GITHUB_TOKEN，无需 PAT。
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: 校验 → 测试 → 打包 → 发版
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: xiaobei_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      SQLALCHEMY_DATABASE_URI: mysql+pymysql://root:root@127.0.0.1:3306/xiaobei_test?charset=utf8mb4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # 完整历史与全部 tag：取上一版 tag 生成对比链接
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 校验版本一致性（tag == VERSION == CHANGELOG == README 徽标）
+        run: python scripts/check_version.py --expect-tag "$GITHUB_REF_NAME"
+
+      - name: 安装后端依赖
+        run: pip install -r requirements.txt pytest
+        working-directory: backend
+
+      - name: 后端全量测试
+        run: pytest -q
+        working-directory: backend
+
+      - name: 前端构建
+        run: |
+          npm ci
+          npm run build
+        working-directory: frontend
+
+      - name: 打包源码（基于 tag 指向的源码树）
+        run: |
+          VERSION=$(cat VERSION)
+          NAME="XiaoBei-AutoCheckin-Web-${VERSION}"
+          git archive --format=zip --prefix="${NAME}/" -o "${NAME}.zip" HEAD
+          git archive --format=tar.gz --prefix="${NAME}/" -o "${NAME}.tar.gz" HEAD
+          ls -l "${NAME}".zip "${NAME}".tar.gz
+
+      - name: 生成 Release 说明
+        run: |
+          PREV=$(git tag --sort=-creatordate --list 'v*' | sed -n '2p')
+          python scripts/release_notes.py --tag "$GITHUB_REF_NAME" --prev "$PREV" > release_body.md
+          cat release_body.md
+
+      - name: 创建 Release 并上传附件
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file release_body.md \
+            XiaoBei-AutoCheckin-Web-*.zip XiaoBei-AutoCheckin-Web-*.tar.gz
